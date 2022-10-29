@@ -19,11 +19,11 @@ fn main() -> Result<(), Error> {
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     if contents.is_empty() {
-        writeln!(file, "# {}\n", now.format("%B %d, %Y: %A"))?;
+        writeln!(file, "# {}", now.format("%B %d, %Y: %A"))?;
+        writeln!(file, "\n## {}\n\n", now.format("%H:%M:%S"))?;
+    } else {
+        writeln!(file, "\n\n## {}\n\n", now.format("%H:%M:%S"))?;
     }
-
-    // Append the current timestamp as a subheader
-    writeln!(file, "## {}\n\n", now.format("%H:%M:%S"))?;
 
     // Shadow filename to get around issue with using filename after moving it to file
     let filename = format!("{}/rubberducks/{}.md", std::env::var("HOME").unwrap(), now.format("%Y%m%d"));
