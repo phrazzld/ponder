@@ -8,26 +8,8 @@ use chrono;
 
 fn main() -> Result<(), Error> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
-    // let now = chrono::Local::now();
-
-    // let filename = format!("{}/rubberducks/{}.md", std::env::var("HOME").unwrap(), now.format("%Y%m%d"));
-    // let mut file = OpenOptions::new()
-    //     .read(true)
-    //     .write(true)
-    //     .create(true)
-    //     .append(true)
-    //     .open(filename)?;
     let mut file = create_or_open_file().unwrap();
 
-    // If file is empty, append today's date in YYYY MMM, DD format as the header
-    // let mut contents = String::new();
-    // file.read_to_string(&mut contents)?;
-    // if contents.is_empty() {
-    //     writeln!(file, "# {}", now.format("%B %d, %Y: %A"))?;
-    //     writeln!(file, "\n## {}\n\n", now.format("%H:%M:%S"))?;
-    // } else {
-    //     writeln!(file, "\n\n## {}\n\n", now.format("%H:%M:%S"))?;
-    // }
     append_date_time(&mut file).unwrap();
 
     // Shadow filename to get around issue with using filename after moving it to file
