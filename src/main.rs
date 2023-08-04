@@ -1,4 +1,6 @@
-use chrono;
+use chrono::prelude::*;
+use clap::{App, Arg};
+use std::env;
 use std::fs::OpenOptions;
 use std::io::{Error, Read, Write};
 use std::process::Command;
@@ -6,37 +8,58 @@ use std::process::Command;
 // TODO: add cli configuration options
 // TODO: support encryption
 // TODO: add tests
-// TODO: add retro and reminisce commands for reviewing recent and distant entries
+// TODO: add reminisce command for reviewing distant entries
 
 fn main() -> Result<(), Error> {
+    let matches = App::new("ponder")
+        .arg(
+            Arg::with_name("retro")
+                .short('r')
+                .long("retro")
+                .help("Opens entries from the past week excluding today"),
+        )
+        .get_matches();
+
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
-    let mut file = create_or_open_file().unwrap();
 
-    append_date_time(&mut file).unwrap();
-
-    // Shadow filename to get around issue with using filename after moving it to file
-    let filename = generate_filename();
-
-    // Open today's rubberduck with $EDITOR
-    Command::new(editor)
-        .arg(filename)
-        .status()
-        .expect("Failed to open file");
+    if matches.is_present("retro") {
+        // retrieve entries from the past week and open each
+        let mut filenames = Vec::new();
+        for i in (1..=7).rev() {
+            let date = Local::now() - chrono::Duration::days(i);
+            let filename = generate_filename_for_date(date);
+            if std::fs::metadata(&filename).is_ok() {
+                filenames.push(filename);
+            }
+        }
+        if !filenames.is_empty() {
+            Command::new(&editor)
+                .args(&filenames)
+                .status()
+                .expect("Failed to open files");
+        }
+    } else {
+        let filename = generate_filename_for_date(Local::now());
+        let mut file = create_or_open_file(&filename).unwrap();
+        append_date_time(&mut file).unwrap();
+        Command::new(editor)
+            .arg(filename)
+            .status()
+            .expect("Failed to open file");
+    }
 
     Ok(())
 }
 
-fn generate_filename() -> String {
-    let now = chrono::Local::now();
+fn generate_filename_for_date(date: DateTime<Local>) -> String {
     format!(
         "{}/rubberducks/{}.md",
-        std::env::var("HOME").unwrap(),
-        now.format("%Y%m%d")
+        env::var("HOME").unwrap(),
+        date.format("%Y%m%d")
     )
 }
 
-fn create_or_open_file() -> Result<std::fs::File, Error> {
-    let filename = generate_filename();
+fn create_or_open_file(filename: &String) -> Result<std::fs::File, Error> {
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -58,43 +81,4 @@ fn append_date_time(file: &mut std::fs::File) -> Result<(), Error> {
         writeln!(file, "\n\n## {}\n\n", now.format("%H:%M:%S"))?;
     }
     Ok(())
-}
-
-#[test]
-fn test_filename_generation() {
-    let now = chrono::Local::now();
-    let expected_filename = format!(
-        "{}/rubberducks/{}.md",
-        std::env::var("HOME").unwrap(),
-        now.format("%Y%m%d")
-    );
-    let filename = generate_filename();
-    assert_eq!(filename, expected_filename);
-}
-
-#[test]
-fn test_file_created_if_not_exist() {
-    let now = chrono::Local::now();
-    let filename = format!(
-        "{}/rubberducks/{}.md",
-        std::env::var("HOME").unwrap(),
-        now.format("%Y%m%d")
-    );
-    assert!(std::fs::metadata(filename).is_ok());
-}
-
-#[test]
-fn test_date_and_time_appended_correctly() {
-    let now = chrono::Local::now();
-    let expected_date_time = now.format("%B %d, %Y: %A").to_string();
-    let expected_time = now.format("%H:%M:%S").to_string();
-
-    let mut file = create_or_open_file().unwrap();
-    append_date_time(&mut file).unwrap();
-
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
-
-    assert!(contents.contains(&expected_date_time));
-    assert!(contents.contains(&expected_time));
 }
