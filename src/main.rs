@@ -1,10 +1,12 @@
-use std::process::Command;
+use chrono;
 use std::fs::OpenOptions;
 use std::io::{Error, Read, Write};
-use chrono;
+use std::process::Command;
 
-// TODO: Add CLI configuration options
-// TODO: Support encryption
+// TODO: add cli configuration options
+// TODO: support encryption
+// TODO: add tests
+// TODO: add retro and reminisce commands for reviewing recent and distant entries
 
 fn main() -> Result<(), Error> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
@@ -26,7 +28,11 @@ fn main() -> Result<(), Error> {
 
 fn generate_filename() -> String {
     let now = chrono::Local::now();
-    format!("{}/rubberducks/{}.md", std::env::var("HOME").unwrap(), now.format("%Y%m%d"))
+    format!(
+        "{}/rubberducks/{}.md",
+        std::env::var("HOME").unwrap(),
+        now.format("%Y%m%d")
+    )
 }
 
 fn create_or_open_file() -> Result<std::fs::File, Error> {
@@ -57,7 +63,11 @@ fn append_date_time(file: &mut std::fs::File) -> Result<(), Error> {
 #[test]
 fn test_filename_generation() {
     let now = chrono::Local::now();
-    let expected_filename = format!("{}/rubberducks/{}.md", std::env::var("HOME").unwrap(), now.format("%Y%m%d"));
+    let expected_filename = format!(
+        "{}/rubberducks/{}.md",
+        std::env::var("HOME").unwrap(),
+        now.format("%Y%m%d")
+    );
     let filename = generate_filename();
     assert_eq!(filename, expected_filename);
 }
@@ -65,7 +75,11 @@ fn test_filename_generation() {
 #[test]
 fn test_file_created_if_not_exist() {
     let now = chrono::Local::now();
-    let filename = format!("{}/rubberducks/{}.md", std::env::var("HOME").unwrap(), now.format("%Y%m%d"));
+    let filename = format!(
+        "{}/rubberducks/{}.md",
+        std::env::var("HOME").unwrap(),
+        now.format("%Y%m%d")
+    );
     assert!(std::fs::metadata(filename).is_ok());
 }
 
