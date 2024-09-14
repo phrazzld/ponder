@@ -53,7 +53,7 @@ fn main() -> Result<(), Error> {
 
 fn generate_filename_for_date(date: DateTime<Local>) -> String {
     format!(
-        "{}/rubberducks/{}.md",
+        "{}/Documents/rubberducks/{}.md",
         env::var("HOME").unwrap(),
         date.format("%Y%m%d")
     )
@@ -74,11 +74,20 @@ fn append_date_time(file: &mut std::fs::File) -> Result<(), Error> {
     // If file is empty, append today's date in YYYY MMM, DD format as the header
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
+
     if contents.is_empty() {
         writeln!(file, "# {}", now.format("%B %d, %Y: %A"))?;
+        writeln!(
+            file,
+            "\n#journal [[{} {}]] [[year {}]]",
+            now.format("%B").to_string().to_lowercase(),
+            now.format("%Y"),
+            now.format("%Y")
+        )?;
         writeln!(file, "\n## {}\n\n", now.format("%H:%M:%S"))?;
     } else {
         writeln!(file, "\n\n## {}\n\n", now.format("%H:%M:%S"))?;
     }
+
     Ok(())
 }
