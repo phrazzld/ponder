@@ -1,14 +1,10 @@
 use chrono::prelude::*;
+use chrono::Months;
 use clap::{App, Arg};
 use std::env;
 use std::fs::OpenOptions;
 use std::io::{Error, Read, Write};
 use std::process::Command;
-
-// TODO: add cli configuration options
-// TODO: support encryption
-// TODO: add tests
-// TODO: add reminisce command for reviewing distant entries
 
 fn main() -> Result<(), Error> {
     let matches = App::new("ponder")
@@ -18,12 +14,65 @@ fn main() -> Result<(), Error> {
                 .long("retro")
                 .help("Opens entries from the past week excluding today"),
         )
+        .arg(
+            Arg::with_name("reminisce")
+                .short('m')
+                .long("reminisce")
+                .help("Opens entries from significant past intervals"),
+        )
         .get_matches();
 
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
 
-    if matches.is_present("retro") {
-        // retrieve entries from the past week and open each
+    if matches.is_present("reminisce") {
+        let mut filenames = Vec::new();
+        let now = Local::now();
+        let today = now.naive_local().date();
+
+        let mut dates = Vec::new();
+
+        // Add specific month intervals
+        if let Some(date) = today.checked_sub_months(Months::new(1)) {
+            dates.push(date);
+        }
+        if let Some(date) = today.checked_sub_months(Months::new(3)) {
+            dates.push(date);
+        }
+        if let Some(date) = today.checked_sub_months(Months::new(6)) {
+            dates.push(date);
+        }
+
+        // Add every year ago for the past hundred years
+        for year in 1..=100 {
+            if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
+                dates.push(date);
+            }
+        }
+
+        // Remove duplicates and sort the dates
+        dates.sort();
+        dates.dedup();
+
+        // Collect filenames for existing entries
+        for date in dates {
+            let filename = generate_filename_for_naivedate(date);
+            if std::fs::metadata(&filename).is_ok() {
+                filenames.push(filename);
+            }
+        }
+
+        filenames.reverse();
+
+        if !filenames.is_empty() {
+            Command::new(&editor)
+                .args(&filenames)
+                .status()
+                .expect("Failed to open files");
+        } else {
+            eprintln!("No entries found for reminisce intervals");
+        }
+    } else if matches.is_present("retro") {
+        // Retrieve entries from the past week and open each
         let mut filenames = Vec::new();
         for i in (1..=7).rev() {
             let date = Local::now() - chrono::Duration::days(i);
@@ -56,6 +105,16 @@ fn generate_filename_for_date(date: DateTime<Local>) -> String {
         "{}/Documents/rubberducks/{}.md",
         env::var("HOME").unwrap(),
         date.format("%Y%m%d")
+    )
+}
+
+fn generate_filename_for_naivedate(date: NaiveDate) -> String {
+    format!(
+        "{}/Documents/rubberducks/{:04}{:02}{:02}.md",
+        env::var("HOME").unwrap(),
+        date.year(),
+        date.month(),
+        date.day()
     )
 }
 
