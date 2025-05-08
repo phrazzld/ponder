@@ -52,13 +52,13 @@ use std::path::PathBuf;
 pub enum DateSpecifier {
     /// Represents today's journal entry.
     Today,
-    
+
     /// Represents entries from the past week (excluding today).
     ///
     /// When this variant is used, the journal service will attempt to
     /// open all existing entries from the 7 days before today.
     Retro,
-    
+
     /// Represents entries from significant past intervals.
     ///
     /// This includes entries from:
@@ -67,7 +67,7 @@ pub enum DateSpecifier {
     /// - 6 months ago
     /// - Yearly anniversaries (1 year ago, 2 years ago, etc.)
     Reminisce,
-    
+
     /// Represents a specific date's journal entry.
     ///
     /// This variant holds a `NaiveDate` value representing the specific
@@ -128,7 +128,7 @@ impl DateSpecifier {
                 .map(DateSpecifier::Specific)
                 .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)));
         }
-        
+
         // Otherwise, use flags
         if reminisce {
             Ok(DateSpecifier::Reminisce)
@@ -138,29 +138,29 @@ impl DateSpecifier {
             Ok(DateSpecifier::Today)
         }
     }
-    
+
     /// Parse a date string in YYYY-MM-DD or YYYYMMDD format
     fn parse_date_string(date_str: &str) -> Result<NaiveDate, chrono::ParseError> {
         // Try parsing in YYYY-MM-DD format first
         NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
             .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y%m%d"))
     }
-    
+
     /// Gets the relevant dates for this date specifier
     pub fn get_dates(&self) -> Vec<NaiveDate> {
         match self {
             DateSpecifier::Today => {
                 vec![Local::now().naive_local().date()]
-            },
+            }
             DateSpecifier::Retro => {
                 let now = Local::now().naive_local().date();
                 (1..=7).map(|days| now - Duration::days(days)).collect()
-            },
+            }
             DateSpecifier::Reminisce => {
                 let now = Local::now();
                 let today = now.naive_local().date();
                 let mut dates = Vec::new();
-                
+
                 // Add specific month intervals
                 if let Some(date) = today.checked_sub_months(Months::new(1)) {
                     dates.push(date);
@@ -171,21 +171,21 @@ impl DateSpecifier {
                 if let Some(date) = today.checked_sub_months(Months::new(6)) {
                     dates.push(date);
                 }
-                
+
                 // Add every year ago for the past hundred years
                 for year in 1..=100 {
                     if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
                         dates.push(date);
                     }
                 }
-                
+
                 // Remove duplicates and sort the dates
                 dates.sort();
                 dates.dedup();
                 dates.reverse();
-                
+
                 dates
-            },
+            }
             DateSpecifier::Specific(date) => {
                 vec![*date]
             }
@@ -230,10 +230,10 @@ impl DateSpecifier {
 pub struct JournalService {
     /// Configuration settings for the journal service
     config: Config,
-    
+
     /// I/O abstraction for file operations
     io: Box<dyn JournalIO>,
-    
+
     /// Editor abstraction for opening files
     editor: Box<dyn Editor>,
 }
@@ -278,13 +278,9 @@ impl JournalService {
     /// let journal_service = JournalService::new(config, io, editor);
     /// ```
     pub fn new(config: Config, io: Box<dyn JournalIO>, editor: Box<dyn Editor>) -> Self {
-        JournalService {
-            config,
-            io,
-            editor,
-        }
+        JournalService { config, io, editor }
     }
-    
+
     /// Gets the editor command from the configuration.
     ///
     /// # Returns
@@ -293,7 +289,7 @@ impl JournalService {
     pub fn get_editor_cmd(&self) -> &str {
         &self.config.editor
     }
-    
+
     /// Gets the journal directory from the configuration.
     ///
     /// # Returns
@@ -302,7 +298,7 @@ impl JournalService {
     pub fn get_journal_dir(&self) -> &PathBuf {
         &self.config.journal_dir
     }
-    
+
     /// Appends a date/time header to the specified journal file.
     ///
     /// This method appends a formatted header to a journal file. If the file is empty,
@@ -355,9 +351,9 @@ impl JournalService {
     pub fn append_date_time(&self, path: &str) -> AppResult<()> {
         let mut file = self.io.create_or_open_file(path)?;
         let now = Local::now();
-        
+
         let content = self.io.read_file_content(path)?;
-        
+
         let entry = if content.is_empty() {
             format!(
                 "# {}\n\n## {}\n\n",
@@ -367,7 +363,7 @@ impl JournalService {
         } else {
             format!("\n\n## {}\n\n", now.format("%H:%M:%S"))
         };
-        
+
         self.io.append_to_file(&mut file, &entry)?;
         Ok(())
     }
@@ -463,16 +459,16 @@ impl JournalService {
     /// ```
     pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
         let mut paths = Vec::new();
-        
+
         for i in (1..=7).rev() {
             let date = Local::now() - Duration::days(i);
             let path = self.io.generate_path_for_date(date)?;
-            
+
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
         }
-        
+
         Ok(paths)
     }
 
@@ -525,7 +521,7 @@ impl JournalService {
                 let path = self.get_todays_entry_path()?;
                 self.append_date_time(&path)?;
                 self.editor.open_files(&[path])
-            },
+            }
             DateSpecifier::Retro => {
                 let paths = self.get_retro_entries()?;
                 if paths.is_empty() {
@@ -533,7 +529,7 @@ impl JournalService {
                     return Ok(());
                 }
                 self.editor.open_files(&paths)
-            },
+            }
             DateSpecifier::Reminisce => {
                 let paths = self.get_reminisce_entries()?;
                 if paths.is_empty() {
@@ -541,7 +537,7 @@ impl JournalService {
                     return Ok(());
                 }
                 self.editor.open_files(&paths)
-            },
+            }
             DateSpecifier::Specific(date) => {
                 let path = self.io.generate_path_for_naive_date(*date)?;
                 if !self.io.file_exists(&path) {
@@ -552,22 +548,22 @@ impl JournalService {
             }
         }
     }
-    
+
     /// Opens today's journal entry, creating it if it doesn't exist
     pub fn open_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Today)
     }
-    
+
     /// Opens entries from the past week (excluding today)
     pub fn open_retro_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Retro)
     }
-    
+
     /// Opens entries from significant past dates (1 month ago, 3 months ago, yearly anniversaries)
     pub fn open_reminisce_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Reminisce)
     }
-    
+
     /// Opens a journal entry for a specific date
     pub fn open_specific_entry(&self, date: NaiveDate) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Specific(date))
@@ -587,9 +583,9 @@ impl<T: JournalIO> Journal<T> {
     pub fn append_date_time(&self, path: &str) -> AppResult<()> {
         let mut file = self.io.create_or_open_file(path)?;
         let now = Local::now();
-        
+
         let content = self.io.read_file_content(path)?;
-        
+
         let entry = if content.is_empty() {
             format!(
                 "# {}\n\n## {}\n\n",
@@ -599,7 +595,7 @@ impl<T: JournalIO> Journal<T> {
         } else {
             format!("\n\n## {}\n\n", now.format("%H:%M:%S"))
         };
-        
+
         self.io.append_to_file(&mut file, &entry)?;
         Ok(())
     }
@@ -611,16 +607,16 @@ impl<T: JournalIO> Journal<T> {
 
     pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
         let mut paths = Vec::new();
-        
+
         for i in (1..=7).rev() {
             let date = Local::now() - Duration::days(i);
             let path = self.io.generate_path_for_date(date)?;
-            
+
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
         }
-        
+
         Ok(paths)
     }
 

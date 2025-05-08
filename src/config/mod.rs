@@ -1,6 +1,6 @@
 //! Configuration management for the ponder application.
 //!
-//! This module handles loading and validating configuration settings from environment 
+//! This module handles loading and validating configuration settings from environment
 //! variables, with sensible defaults. It supports configuring the journal directory
 //! and the editor command used to open journal files.
 //!
@@ -13,8 +13,8 @@
 
 use crate::errors::{AppError, AppResult};
 use std::env;
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 /// Configuration for the ponder application.
 ///
@@ -56,7 +56,7 @@ pub struct Config {
     /// 2. EDITOR
     /// 3. Defaults to "vim" if neither is set
     pub editor: String,
-    
+
     /// Directory where journal entries are stored.
     ///
     /// This is loaded from the PONDER_DIR environment variable with a fallback
@@ -88,7 +88,7 @@ impl Config {
             journal_dir: PathBuf::from(""),
         }
     }
-    
+
     /// Loads configuration from environment variables with sensible defaults.
     ///
     /// This method reads configuration from environment variables, with fallbacks
@@ -124,32 +124,34 @@ impl Config {
         let editor = env::var("PONDER_EDITOR")
             .or_else(|_| env::var("EDITOR"))
             .unwrap_or_else(|_| "vim".to_string());
-        
+
         // Get journal directory from PONDER_DIR env var, fallback to ~/Documents/rubberducks
         let journal_dir_str = env::var("PONDER_DIR").unwrap_or_else(|_| {
             let home = env::var("HOME").unwrap_or_else(|_| "".to_string());
             format!("{}/Documents/rubberducks", home)
         });
-        
+
         // Expand the path (handles ~ and environment variables)
         let expanded_path = shellexpand::full(&journal_dir_str)
             .map_err(|e| AppError::Config(format!("Failed to expand path: {}", e)))?;
-        
+
         let journal_dir = PathBuf::from(expanded_path.into_owned());
-        
+
         // Validate the configuration
         if journal_dir.as_os_str().is_empty() {
-            return Err(AppError::Config("Journal directory path is empty".to_string()));
+            return Err(AppError::Config(
+                "Journal directory path is empty".to_string(),
+            ));
         }
-        
+
         let config = Config {
             editor,
             journal_dir,
         };
-        
+
         Ok(config)
     }
-    
+
     /// Ensures the journal directory exists, creating it if necessary.
     ///
     /// This method checks if the configured journal directory exists and creates it
@@ -181,15 +183,14 @@ impl Config {
     /// ```
     pub fn ensure_journal_dir(&self) -> AppResult<()> {
         if !self.journal_dir.exists() {
-            fs::create_dir_all(&self.journal_dir)
-                .map_err(|e| AppError::Config(
-                    format!("Failed to create journal directory: {}", e)
-                ))?;
+            fs::create_dir_all(&self.journal_dir).map_err(|e| {
+                AppError::Config(format!("Failed to create journal directory: {}", e))
+            })?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Validates that the configuration is usable.
     ///
     /// This method checks if the configuration meets the minimum requirements:
@@ -232,19 +233,23 @@ impl Config {
     pub fn validate(&self) -> AppResult<()> {
         // Check that journal_dir is valid
         if self.journal_dir.as_os_str().is_empty() {
-            return Err(AppError::Config("Journal directory path is empty".to_string()));
+            return Err(AppError::Config(
+                "Journal directory path is empty".to_string(),
+            ));
         }
-        
+
         // Check that editor is not empty
         if self.editor.is_empty() {
             return Err(AppError::Config("Editor command is empty".to_string()));
         }
-        
+
         // Journal directory must be absolute
         if !self.journal_dir.is_absolute() {
-            return Err(AppError::Config("Journal directory must be an absolute path".to_string()));
+            return Err(AppError::Config(
+                "Journal directory must be an absolute path".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 }
@@ -272,11 +277,11 @@ mod tests {
     #[test]
     fn test_load_with_default_editor() {
         setup();
-        
+
         // Make sure EDITOR is not set from previous tests
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
-        
+
         // Neither PONDER_EDITOR nor EDITOR is set
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "vim");
@@ -288,17 +293,17 @@ mod tests {
         env::remove_var("PONDER_EDITOR");
         env::remove_var("EDITOR");
         env::remove_var("PONDER_DIR");
-        
+
         // Set EDITOR
         env::set_var("EDITOR", "nano");
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "nano");
-        
+
         // PONDER_EDITOR should take precedence
         env::set_var("PONDER_EDITOR", "code");
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "code");
-        
+
         // Clean up environment variables
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
@@ -307,30 +312,30 @@ mod tests {
     #[test]
     fn test_load_with_custom_dir() {
         setup();
-        
+
         // Create a temp directory to use as journal dir
         let temp_dir = tempdir().unwrap();
         let dir_path = temp_dir.path().to_string_lossy().to_string();
-        
+
         env::set_var("PONDER_DIR", &dir_path);
         let config = Config::load().unwrap();
-        
+
         assert_eq!(config.journal_dir, PathBuf::from(dir_path));
     }
 
     #[test]
     fn test_validate_valid_config() {
         setup();
-        
+
         // Create a temp directory to use as journal dir
         let temp_dir = tempdir().unwrap();
         let dir_path = temp_dir.path().to_string_lossy().to_string();
-        
+
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from(dir_path),
         };
-        
+
         assert!(config.validate().is_ok());
     }
 
@@ -340,13 +345,13 @@ mod tests {
             editor: "".to_string(),
             journal_dir: PathBuf::from("/some/path"),
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         match result {
             Err(AppError::Config(message)) => {
                 assert!(message.contains("Editor command is empty"));
-            },
+            }
             _ => panic!("Expected Config error about empty editor"),
         }
     }
@@ -357,13 +362,13 @@ mod tests {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from(""),
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         match result {
             Err(AppError::Config(message)) => {
                 assert!(message.contains("Journal directory path is empty"));
-            },
+            }
             _ => panic!("Expected Config error about empty journal directory"),
         }
     }
@@ -374,13 +379,13 @@ mod tests {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from("relative/path"),
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         match result {
             Err(AppError::Config(message)) => {
                 assert!(message.contains("must be an absolute path"));
-            },
+            }
             _ => panic!("Expected Config error about relative path"),
         }
     }
@@ -390,18 +395,18 @@ mod tests {
         // Create a temp directory
         let temp_dir = tempdir().unwrap();
         let dir_path = temp_dir.path().join("journal");
-        
+
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: dir_path.clone(),
         };
-        
+
         // Directory shouldn't exist yet
         assert!(!dir_path.exists());
-        
+
         // Should create the directory
         config.ensure_journal_dir().unwrap();
-        
+
         // Now it should exist
         assert!(dir_path.exists());
     }

@@ -57,7 +57,7 @@ pub trait JournalIO {
     /// A Result that is Ok(()) if the directory exists or was successfully created,
     /// or an AppError if directory creation failed.
     fn ensure_journal_dir(&self) -> AppResult<()>;
-    
+
     /// Generates a file path for a journal entry on the specified date.
     ///
     /// # Parameters
@@ -69,7 +69,7 @@ pub trait JournalIO {
     /// A Result containing either the generated path as a String
     /// or an AppError if path generation failed.
     fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<String>;
-    
+
     /// Generates a file path for a journal entry from a NaiveDate.
     ///
     /// # Parameters
@@ -81,7 +81,7 @@ pub trait JournalIO {
     /// A Result containing either the generated path as a String
     /// or an AppError if path generation failed.
     fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String>;
-    
+
     /// Checks if a file exists at the specified path.
     ///
     /// # Parameters
@@ -92,7 +92,7 @@ pub trait JournalIO {
     ///
     /// `true` if the file exists, `false` otherwise.
     fn file_exists(&self, path: &str) -> bool;
-    
+
     /// Creates a new file or opens an existing file at the specified path.
     ///
     /// # Parameters
@@ -104,7 +104,7 @@ pub trait JournalIO {
     /// A Result containing either the opened File or an AppError
     /// if file creation/opening failed.
     fn create_or_open_file(&self, path: &str) -> AppResult<File>;
-    
+
     /// Reads the content of a file as a string.
     ///
     /// # Parameters
@@ -116,7 +116,7 @@ pub trait JournalIO {
     /// A Result containing either the file content as a String
     /// or an AppError if file reading failed.
     fn read_file_content(&self, path: &str) -> AppResult<String>;
-    
+
     /// Appends content to a file.
     ///
     /// # Parameters

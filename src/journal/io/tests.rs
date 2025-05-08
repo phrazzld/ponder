@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::journal::io::JournalIO;
     use crate::errors::AppResult;
+    use crate::journal::io::JournalIO;
     use chrono::{DateTime, Datelike, Local, NaiveDate};
     use std::fs::{self, File, OpenOptions};
     use std::io::{Read, Write};
@@ -66,21 +66,21 @@ mod tests {
     fn test_file_operations() -> AppResult<()> {
         let temp_dir = tempdir()?;
         let journal_dir = temp_dir.path().to_string_lossy().to_string();
-        
+
         let io = TestFileSystemIO { journal_dir };
         io.ensure_journal_dir()?;
-        
+
         let test_path = format!("{}/test.md", io.journal_dir);
         let mut file = io.create_or_open_file(&test_path)?;
-        
+
         io.append_to_file(&mut file, "Test content")?;
-        
+
         let content = io.read_file_content(&test_path)?;
         assert_eq!(content, "Test content");
-        
+
         assert!(io.file_exists(&test_path));
         assert!(!io.file_exists(&format!("{}/nonexistent.md", io.journal_dir)));
-        
+
         Ok(())
     }
 }

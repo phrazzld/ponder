@@ -1,7 +1,7 @@
-/*! 
+/*!
 # Ponder
 
-Ponder is a simple journaling tool for daily reflections, designed to help users maintain 
+Ponder is a simple journaling tool for daily reflections, designed to help users maintain
 a journal with minimal friction. It provides functionality for creating and viewing daily
 journal entries, as well as reviewing past entries.
 
@@ -33,7 +33,7 @@ use ponder::editor::SystemEditor;
 fn main() -> ponder::AppResult<()> {
     // Load configuration
     let config = Config::load()?;
-    
+
     // Create components
     let io = Box::new(FileSystemIO {
         journal_dir: config.journal_dir.to_string_lossy().to_string(),
@@ -41,7 +41,7 @@ fn main() -> ponder::AppResult<()> {
     let editor = Box::new(SystemEditor {
         editor_cmd: config.editor.clone(),
     });
-    
+
     // Create service and open today's journal entry
     let journal_service = JournalService::new(config, io, editor);
     journal_service.open_entries(&DateSpecifier::Today)

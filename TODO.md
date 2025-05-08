@@ -228,7 +228,7 @@
     - **Depends‑on:** [T014]
 
 ## Automation Setup
-- [ ] **T019 · CI · P2: Configure rustfmt**
+- [x] **T019 · CI · P2: Configure rustfmt**
     - **Context:** PLAN.md, Coding Standards & Automation Setup
     - **Action:**
         1. Add `rustfmt.toml` if needed (prefer defaults).
