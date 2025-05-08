@@ -121,7 +121,10 @@ mod tests {
 
     #[test]
     fn test_load_with_editor_env() {
-        setup();
+        // Clear all environment variables before this test
+        env::remove_var("PONDER_EDITOR");
+        env::remove_var("EDITOR");
+        env::remove_var("PONDER_DIR");
         
         // Set EDITOR
         env::set_var("EDITOR", "nano");

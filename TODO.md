@@ -190,7 +190,7 @@
         1. `cargo test` passes for all unit tests.
     - **Depends‑on:** [T003, T005, T007, T010, T012]
 
-- [ ] **T016 · Test · P1: Write integration tests**
+- [x] **T016 · Test · P1: Write integration tests**
     - **Context:** PLAN.md, Testing Strategy
     - **Action:**
         1. Create tests directory with integration tests.
