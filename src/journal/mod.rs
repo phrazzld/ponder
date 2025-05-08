@@ -246,6 +246,26 @@ impl JournalService {
             }
         }
     }
+    
+    /// Opens today's journal entry, creating it if it doesn't exist
+    pub fn open_entry(&self) -> AppResult<()> {
+        self.open_entries(&DateSpecifier::Today)
+    }
+    
+    /// Opens entries from the past week (excluding today)
+    pub fn open_retro_entry(&self) -> AppResult<()> {
+        self.open_entries(&DateSpecifier::Retro)
+    }
+    
+    /// Opens entries from significant past dates (1 month ago, 3 months ago, yearly anniversaries)
+    pub fn open_reminisce_entry(&self) -> AppResult<()> {
+        self.open_entries(&DateSpecifier::Reminisce)
+    }
+    
+    /// Opens a journal entry for a specific date
+    pub fn open_specific_entry(&self, date: NaiveDate) -> AppResult<()> {
+        self.open_entries(&DateSpecifier::Specific(date))
+    }
 }
 
 // Keep the old Journal struct for backward compatibility during refactoring

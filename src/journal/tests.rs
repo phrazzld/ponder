@@ -209,4 +209,83 @@ mod tests {
         // That's expected and we're just testing the logic flow
         let _ = service.open_entries(&DateSpecifier::Today);
     }
+    
+    #[test]
+    fn test_journal_service_convenience_methods() {
+        // Create a special version of MockJournalIO that doesn't fail on create_or_open_file
+        struct TestMockJournalIO {
+            paths_generated: RefCell<Vec<String>>,
+        }
+        
+        impl TestMockJournalIO {
+            fn new() -> Self {
+                TestMockJournalIO {
+                    paths_generated: RefCell::new(Vec::new()),
+                }
+            }
+        }
+        
+        impl JournalIO for TestMockJournalIO {
+            fn ensure_journal_dir(&self) -> AppResult<()> {
+                Ok(())
+            }
+            
+            fn generate_path_for_date(&self, date: chrono::DateTime<Local>) -> AppResult<String> {
+                let path = format!("/test/journal/{}.md", date.format("%Y%m%d"));
+                self.paths_generated.borrow_mut().push(path.clone());
+                Ok(path)
+            }
+            
+            fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
+                let path = format!(
+                    "/test/journal/{:04}{:02}{:02}.md",
+                    date.year(),
+                    date.month(),
+                    date.day()
+                );
+                self.paths_generated.borrow_mut().push(path.clone());
+                Ok(path)
+            }
+            
+            fn file_exists(&self, _path: &str) -> bool {
+                true
+            }
+            
+            fn create_or_open_file(&self, _path: &str) -> AppResult<File> {
+                // Just return a dummy value that will be captured by the mock file system
+                let file = tempfile::tempfile().map_err(|e| 
+                    AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+                )?;
+                Ok(file)
+            }
+            
+            fn read_file_content(&self, _path: &str) -> AppResult<String> {
+                Ok(String::new())
+            }
+            
+            fn append_to_file(&self, _file: &mut File, _content: &str) -> AppResult<()> {
+                Ok(())
+            }
+        }
+        
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+        
+        let io = Box::new(TestMockJournalIO::new());
+        let editor = Box::new(MockEditor::new());
+        
+        let service = JournalService::new(config, io, editor);
+        
+        // Test the convenience methods - no assertions needed as we just want to ensure
+        // they run without panicking
+        let _ = service.open_entry();
+        let _ = service.open_retro_entry();
+        let _ = service.open_reminisce_entry();
+        
+        // Test with a specific date
+        let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+        let _ = service.open_specific_entry(specific_date);
+    }
 }

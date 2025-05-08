@@ -113,7 +113,7 @@
         1. Unit test: construct with mock dependencies.
     - **Depends‑on:** [T003, T004, T006, T008]
 
-- [ ] **T010 · Feature · P1: Implement core JournalService methods**
+- [x] **T010 · Feature · P1: Implement core JournalService methods**
     - **Context:** PLAN.md, Core Journal Logic
     - **Action:**
         1. Implement `open_entry`, `open_retro_entry`, and `open_reminisce_entry` methods for `JournalService`.
