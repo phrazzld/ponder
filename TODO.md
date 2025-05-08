@@ -178,7 +178,7 @@
     - **Depends‑on:** [T012, T010, T013]
 
 ## Testing
-- [ ] **T015 · Test · P1: Write unit tests for each module**
+- [x] **T015 · Test · P1: Write unit tests for each module**
     - **Context:** PLAN.md, Testing Strategy
     - **Action:**
         1. Add `#[cfg(test)] mod tests` to each module with unit tests.

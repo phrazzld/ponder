@@ -91,3 +91,88 @@ fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
         Ok(DateSpecifier::Today)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use errors::AppError;
+    use chrono::Datelike;
+    
+    #[test]
+    fn test_get_date_specifier_from_retro_args() {
+        let args = CliArgs {
+            retro: true,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
+        
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Retro);
+    }
+    
+    #[test]
+    fn test_get_date_specifier_from_reminisce_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: true,
+            date: None,
+            verbose: false,
+        };
+        
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Reminisce);
+    }
+    
+    #[test]
+    fn test_get_date_specifier_from_date_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("2023-01-15".to_string()),
+            verbose: false,
+        };
+        
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        if let DateSpecifier::Specific(date) = date_spec {
+            assert_eq!(date.year(), 2023);
+            assert_eq!(date.month(), 1);
+            assert_eq!(date.day(), 15);
+        } else {
+            panic!("Expected DateSpecifier::Specific");
+        }
+    }
+    
+    #[test]
+    fn test_get_date_specifier_from_invalid_date_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("invalid-date".to_string()),
+            verbose: false,
+        };
+        
+        let result = get_date_specifier_from_args(&args);
+        assert!(result.is_err());
+        
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Invalid date format"));
+            },
+            _ => panic!("Expected Journal error"),
+        }
+    }
+    
+    #[test]
+    fn test_get_date_specifier_from_default_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
+        
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Today);
+    }
+}
