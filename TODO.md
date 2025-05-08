@@ -160,7 +160,7 @@
         1. Verify log output with different log levels.
     - **Depends‑on:** [T001]
 
-- [ ] **T014 · Feature · P0: Implement main application flow**
+- [x] **T014 · Feature · P0: Implement main application flow**
     - **Context:** PLAN.md, Main Application Logic
     - **Action:**
         1. In `src/main.rs`, implement the main function to:
