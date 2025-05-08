@@ -204,7 +204,7 @@
     - **Depends‑on:** [T014, T015]
 
 ## Documentation
-- [ ] **T017 · Doc · P2: Add Rustdoc comments**
+- [x] **T017 · Doc · P2: Add Rustdoc comments**
     - **Context:** PLAN.md, Documentation, Code Self-Doc Patterns
     - **Action:**
         1. Add comprehensive Rustdoc comments (`///`) to all public items.

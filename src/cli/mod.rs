@@ -1,37 +1,128 @@
+//! Command-line interface for the ponder application.
+//!
+//! This module handles command-line argument parsing using the `clap` crate.
+//! It defines the CLI structure and provides methods to parse and validate
+//! command-line arguments.
+
 use clap::{Parser, ArgGroup};
 use chrono::NaiveDate;
 use std::str::FromStr;
 
-/// A simple journaling tool for daily reflections
+/// Command-line arguments for the ponder application.
+///
+/// This struct is automatically populated by clap from the command-line arguments.
+/// It defines a variety of options for interacting with journal entries, including
+/// viewing today's entry, past entries, or entries for specific dates.
+///
+/// The arguments form a mutual exclusion group, so only one of `--retro`, `--reminisce`,
+/// or `--date` can be specified at a time.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::cli::CliArgs;
+/// use clap::Parser;
+///
+/// // Simulate parsing from command-line args
+/// let args = CliArgs::parse_from(["ponder", "--retro"]);
+/// assert!(args.retro);
+/// assert!(!args.reminisce);
+/// assert!(args.date.is_none());
+/// ```
 #[derive(Parser, Debug)]
 #[clap(name = "ponder", about = "A simple journaling tool for daily reflections")]
 #[clap(author, version, long_about = None)]
 #[clap(group(ArgGroup::new("entry_type").args(&["retro", "reminisce", "date"])))]
 pub struct CliArgs {
-    /// Opens entries from the past week excluding today
+    /// Opens entries from the past week excluding today.
+    ///
+    /// When this flag is specified, ponder will find and open journal entries
+    /// from the past 7 days (excluding today).
     #[clap(short = 'r', long, conflicts_with_all = &["reminisce", "date"])]
     pub retro: bool,
     
-    /// Opens entries from significant past intervals (1 month ago, 3 months ago, yearly anniversaries)
+    /// Opens entries from significant past intervals.
+    ///
+    /// This includes entries from 1 month ago, 3 months ago, 6 months ago,
+    /// and yearly anniversaries (1 year ago, 2 years ago, etc.).
+    /// This is useful for reflection on past writings.
     #[clap(short = 'm', long, conflicts_with_all = &["retro", "date"])]
     pub reminisce: bool,
     
-    /// Opens an entry for a specific date (format: YYYY-MM-DD or YYYYMMDD)
+    /// Opens an entry for a specific date.
+    ///
+    /// The date can be specified in either YYYY-MM-DD format (e.g., 2023-01-15)
+    /// or YYYYMMDD format (e.g., 20230115).
     #[clap(short = 'd', long, conflicts_with_all = &["retro", "reminisce"])]
     pub date: Option<String>,
     
-    /// Print verbose output
+    /// Enables verbose output.
+    ///
+    /// When this flag is set, ponder will output more detailed information
+    /// about what it's doing, which can be useful for debugging.
     #[clap(short = 'v', long)]
     pub verbose: bool,
 }
 
 impl CliArgs {
-    /// Parse command-line arguments
+    /// Parses command-line arguments from the current process.
+    ///
+    /// This is a convenience wrapper around `clap::Parser::parse()` that
+    /// uses the current process's command-line arguments.
+    ///
+    /// # Returns
+    ///
+    /// A new `CliArgs` instance populated from command-line arguments.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ponder::cli::CliArgs;
+    ///
+    /// let args = CliArgs::parse();
+    /// // Use the parsed arguments
+    /// ```
     pub fn parse() -> Self {
         CliArgs::parse_from(std::env::args())
     }
     
-    /// Get the date if specified, parsing it into a NaiveDate
+    /// Parses the date string from command-line arguments into a NaiveDate.
+    ///
+    /// This method attempts to parse the date specified with the `--date` option
+    /// into a `chrono::NaiveDate`. It supports two date formats:
+    /// - YYYY-MM-DD (e.g., 2023-01-15)
+    /// - YYYYMMDD (e.g., 20230115)
+    ///
+    /// # Returns
+    ///
+    /// - `None` if no date was specified in the command-line arguments
+    /// - `Some(Ok(date))` if the date was successfully parsed
+    /// - `Some(Err(error))` if the date string could not be parsed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ponder::cli::CliArgs;
+    /// use clap::Parser;
+    ///
+    /// // Valid date in YYYY-MM-DD format
+    /// let args = CliArgs::parse_from(["ponder", "--date", "2023-01-15"]);
+    /// let date = args.parse_date().unwrap().unwrap();
+    /// assert_eq!(date.to_string(), "2023-01-15");
+    ///
+    /// // Valid date in YYYYMMDD format
+    /// let args = CliArgs::parse_from(["ponder", "--date", "20230115"]);
+    /// let date = args.parse_date().unwrap().unwrap();
+    /// assert_eq!(date.to_string(), "2023-01-15");
+    ///
+    /// // No date specified
+    /// let args = CliArgs::parse_from(["ponder"]);
+    /// assert!(args.parse_date().is_none());
+    ///
+    /// // Invalid date format
+    /// let args = CliArgs::parse_from(["ponder", "--date", "invalid"]);
+    /// assert!(args.parse_date().unwrap().is_err());
+    /// ```
     pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
         self.date.as_ref().map(|date_str| {
             // Try parsing in YYYY-MM-DD format first
@@ -44,7 +135,14 @@ impl CliArgs {
     }
 }
 
-/// Parse command-line arguments - for backward compatibility
+/// Parse command-line arguments (backward compatibility function).
+///
+/// This is a top-level function provided for backward compatibility.
+/// New code should use `CliArgs::parse()` instead.
+///
+/// # Returns
+///
+/// A `CliArgs` instance populated from the current process's command-line arguments.
 pub fn parse_args() -> CliArgs {
     CliArgs::parse()
 }

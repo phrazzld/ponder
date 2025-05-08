@@ -1,3 +1,14 @@
+//! Core journal functionality for the ponder application.
+//!
+//! This module contains the core logic for handling journal entries,
+//! including creating, opening, and managing entries based on different
+//! date specifications. It provides the `DateSpecifier` enum for different
+//! types of date selections and the `JournalService` which implements the
+//! main journal operations.
+//!
+//! The module follows a dependency injection pattern, allowing for flexible
+//! configuration and easier testing.
+
 pub mod io;
 
 #[cfg(test)]
@@ -10,24 +21,106 @@ use chrono::{Duration, Local, Months, NaiveDate};
 use io::JournalIO;
 use std::path::PathBuf;
 
-/// Represents different ways to specify a date in the journal system
+/// Represents different ways to specify a date or set of dates for journal entries.
+///
+/// This enum is used to represent the different modes of selecting journal entries:
+/// - Today's entry
+/// - Entries from the past week (retro)
+/// - Entries from significant past intervals (reminisce)
+/// - An entry for a specific date
+///
+/// # Examples
+///
+/// ```
+/// use ponder::journal::DateSpecifier;
+/// use chrono::NaiveDate;
+///
+/// // Create a DateSpecifier for today's entry
+/// let today = DateSpecifier::Today;
+///
+/// // Create a DateSpecifier for the past week
+/// let retro = DateSpecifier::Retro;
+///
+/// // Create a DateSpecifier for significant past intervals
+/// let reminisce = DateSpecifier::Reminisce;
+///
+/// // Create a DateSpecifier for a specific date
+/// let date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+/// let specific = DateSpecifier::Specific(date);
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum DateSpecifier {
-    /// Today's entry
+    /// Represents today's journal entry.
     Today,
     
-    /// Entries from the past week (excluding today)
+    /// Represents entries from the past week (excluding today).
+    ///
+    /// When this variant is used, the journal service will attempt to
+    /// open all existing entries from the 7 days before today.
     Retro,
     
-    /// Entries from significant past intervals (1 month ago, 3 months ago, yearly anniversaries)
+    /// Represents entries from significant past intervals.
+    ///
+    /// This includes entries from:
+    /// - 1 month ago
+    /// - 3 months ago
+    /// - 6 months ago
+    /// - Yearly anniversaries (1 year ago, 2 years ago, etc.)
     Reminisce,
     
-    /// A specific date's entry
+    /// Represents a specific date's journal entry.
+    ///
+    /// This variant holds a `NaiveDate` value representing the specific
+    /// date for which to open or create a journal entry.
     Specific(NaiveDate),
 }
 
 impl DateSpecifier {
-    /// Creates a DateSpecifier from command-line arguments
+    /// Creates a DateSpecifier from command-line arguments.
+    ///
+    /// This method creates a DateSpecifier based on the values of the retro,
+    /// reminisce, and date_str parameters, which typically come from
+    /// command-line arguments.
+    ///
+    /// # Parameters
+    ///
+    /// * `retro` - Flag indicating whether to open entries from the past week
+    /// * `reminisce` - Flag indicating whether to open entries from significant past intervals
+    /// * `date_str` - Optional string containing a specific date (in YYYY-MM-DD or YYYYMMDD format)
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the appropriate DateSpecifier or an AppError
+    /// if the date string couldn't be parsed.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Journal` if the date string is invalid or in an unsupported format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ponder::journal::DateSpecifier;
+    ///
+    /// // Create a DateSpecifier for today (default)
+    /// let today = DateSpecifier::from_args(false, false, None).unwrap();
+    /// assert_eq!(today, DateSpecifier::Today);
+    ///
+    /// // Create a DateSpecifier for retro mode
+    /// let retro = DateSpecifier::from_args(true, false, None).unwrap();
+    /// assert_eq!(retro, DateSpecifier::Retro);
+    ///
+    /// // Create a DateSpecifier for reminisce mode
+    /// let reminisce = DateSpecifier::from_args(false, true, None).unwrap();
+    /// assert_eq!(reminisce, DateSpecifier::Reminisce);
+    ///
+    /// // Create a DateSpecifier for a specific date
+    /// let specific = DateSpecifier::from_args(false, false, Some("2023-01-15")).unwrap();
+    /// match specific {
+    ///     DateSpecifier::Specific(date) => assert_eq!(date.to_string(), "2023-01-15"),
+    ///     _ => panic!("Expected Specific variant"),
+    /// }
+    /// ```
     pub fn from_args(retro: bool, reminisce: bool, date_str: Option<&str>) -> AppResult<Self> {
         // If a specific date is provided, it takes precedence
         if let Some(date_str) = date_str {
@@ -100,15 +193,90 @@ impl DateSpecifier {
     }
 }
 
-/// Service for journal operations that follows dependency injection pattern
+/// Service for journal operations that follows dependency injection pattern.
+///
+/// This struct is the main entry point for journal operations. It implements
+/// the core functionality for creating, opening, and managing journal entries.
+/// It uses dependency injection to allow for flexible configuration and easier testing.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::{Config, JournalService, DateSpecifier};
+/// use ponder::journal::io::FileSystemIO;
+/// use ponder::editor::SystemEditor;
+/// use std::path::PathBuf;
+///
+/// // Create configuration
+/// let config = Config {
+///     editor: "vim".to_string(),
+///     journal_dir: PathBuf::from("/path/to/journal"),
+/// };
+///
+/// // Create dependencies
+/// let io = Box::new(FileSystemIO {
+///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+/// });
+/// let editor = Box::new(SystemEditor {
+///     editor_cmd: config.editor.clone(),
+/// });
+///
+/// // Create the journal service
+/// let journal_service = JournalService::new(config, io, editor);
+///
+/// // Use the service to open today's entry
+/// journal_service.open_entry().expect("Failed to open today's entry");
+/// ```
 pub struct JournalService {
+    /// Configuration settings for the journal service
     config: Config,
+    
+    /// I/O abstraction for file operations
     io: Box<dyn JournalIO>,
+    
+    /// Editor abstraction for opening files
     editor: Box<dyn Editor>,
 }
 
 impl JournalService {
-    /// Creates a new JournalService with the given dependencies
+    /// Creates a new JournalService with the given dependencies.
+    ///
+    /// This constructor takes ownership of the provided dependencies, allowing
+    /// for maximum flexibility in how they are implemented.
+    ///
+    /// # Parameters
+    ///
+    /// * `config` - Configuration settings for the journal service
+    /// * `io` - I/O abstraction for file operations
+    /// * `editor` - Editor abstraction for opening files
+    ///
+    /// # Returns
+    ///
+    /// A new JournalService instance with the given dependencies.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ponder::{Config, JournalService};
+    /// use ponder::journal::io::FileSystemIO;
+    /// use ponder::editor::SystemEditor;
+    /// use std::path::PathBuf;
+    ///
+    /// let config = Config {
+    ///     editor: "vim".to_string(),
+    ///     journal_dir: PathBuf::from("/path/to/journal"),
+    /// };
+    ///
+    /// let io = Box::new(FileSystemIO {
+    ///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+    /// });
+    ///
+    /// let editor = Box::new(SystemEditor {
+    ///     editor_cmd: config.editor.clone(),
+    /// });
+    ///
+    /// let journal_service = JournalService::new(config, io, editor);
+    /// ```
     pub fn new(config: Config, io: Box<dyn JournalIO>, editor: Box<dyn Editor>) -> Self {
         JournalService {
             config,
@@ -117,17 +285,73 @@ impl JournalService {
         }
     }
     
-    /// Gets the editor command from config
+    /// Gets the editor command from the configuration.
+    ///
+    /// # Returns
+    ///
+    /// A string slice containing the editor command.
     pub fn get_editor_cmd(&self) -> &str {
         &self.config.editor
     }
     
-    /// Gets the journal directory from config
+    /// Gets the journal directory from the configuration.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the PathBuf containing the journal directory path.
     pub fn get_journal_dir(&self) -> &PathBuf {
         &self.config.journal_dir
     }
     
-    /// Appends a date/time header to the specified journal file
+    /// Appends a date/time header to the specified journal file.
+    ///
+    /// This method appends a formatted header to a journal file. If the file is empty,
+    /// it adds a primary header with the date and a secondary header with the time.
+    /// If the file already has content, it adds only a secondary header with the time.
+    ///
+    /// # Parameters
+    ///
+    /// * `path` - The path to the journal file
+    ///
+    /// # Returns
+    ///
+    /// A Result that is Ok(()) if the header was appended successfully,
+    /// or an AppError if there was a problem with file operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The file couldn't be created or opened
+    /// - The file content couldn't be read
+    /// - The header couldn't be appended
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ponder::{Config, JournalService};
+    /// use ponder::journal::io::FileSystemIO;
+    /// use ponder::editor::SystemEditor;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn main() -> ponder::errors::AppResult<()> {
+    /// let config = Config {
+    ///     editor: "vim".to_string(),
+    ///     journal_dir: PathBuf::from("/path/to/journal"),
+    /// };
+    ///
+    /// let io = Box::new(FileSystemIO {
+    ///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+    /// });
+    ///
+    /// let editor = Box::new(SystemEditor {
+    ///     editor_cmd: config.editor.clone(),
+    /// });
+    ///
+    /// let journal_service = JournalService::new(config, io, editor);
+    /// journal_service.append_date_time("/path/to/journal/20230115.md")?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn append_date_time(&self, path: &str) -> AppResult<()> {
         let mut file = self.io.create_or_open_file(path)?;
         let now = Local::now();
@@ -148,13 +372,95 @@ impl JournalService {
         Ok(())
     }
 
-    /// Gets the path for today's journal entry
+    /// Gets the path for today's journal entry.
+    ///
+    /// This method generates the file path for today's journal entry
+    /// using the current date.
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the path as a String or an AppError
+    /// if path generation failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path couldn't be generated (which depends on
+    /// the implementation of the JournalIO trait).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ponder::{Config, JournalService};
+    /// use ponder::journal::io::FileSystemIO;
+    /// use ponder::editor::SystemEditor;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn main() -> ponder::errors::AppResult<()> {
+    /// let journal_service = JournalService::new(
+    ///     Config {
+    ///         editor: "vim".to_string(),
+    ///         journal_dir: PathBuf::from("/path/to/journal"),
+    ///     },
+    ///     Box::new(FileSystemIO {
+    ///         journal_dir: "/path/to/journal".to_string(),
+    ///     }),
+    ///     Box::new(SystemEditor {
+    ///         editor_cmd: "vim".to_string(),
+    ///     }),
+    /// );
+    ///
+    /// let path = journal_service.get_todays_entry_path()?;
+    /// println!("Today's entry path: {}", path);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn get_todays_entry_path(&self) -> AppResult<String> {
         let now = Local::now();
         self.io.generate_path_for_date(now)
     }
 
-    /// Gets paths to entries from the past week (excluding today)
+    /// Gets paths to entries from the past week (excluding today).
+    ///
+    /// This method searches for existing journal entries from the past 7 days
+    /// (excluding today) and returns their paths.
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either a vector of paths as Strings or an AppError
+    /// if path generation or file checking failed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if paths couldn't be generated (which depends on
+    /// the implementation of the JournalIO trait).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use ponder::{Config, JournalService};
+    /// use ponder::journal::io::FileSystemIO;
+    /// use ponder::editor::SystemEditor;
+    /// use std::path::PathBuf;
+    ///
+    /// # fn main() -> ponder::errors::AppResult<()> {
+    /// let journal_service = JournalService::new(
+    ///     Config {
+    ///         editor: "vim".to_string(),
+    ///         journal_dir: PathBuf::from("/path/to/journal"),
+    ///     },
+    ///     Box::new(FileSystemIO {
+    ///         journal_dir: "/path/to/journal".to_string(),
+    ///     }),
+    ///     Box::new(SystemEditor {
+    ///         editor_cmd: "vim".to_string(),
+    ///     }),
+    /// );
+    ///
+    /// let paths = journal_service.get_retro_entries()?;
+    /// println!("Found {} entries from the past week", paths.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
         let mut paths = Vec::new();
         
