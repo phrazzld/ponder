@@ -239,7 +239,7 @@
         1. All code is consistently formatted.
     - **Depends‑on:** [T014]
 
-- [ ] **T020 · CI · P2: Configure clippy**
+- [x] **T020 · CI · P2: Configure clippy**
     - **Context:** PLAN.md, Coding Standards & Automation Setup
     - **Action:**
         1. Configure `clippy` lints (e.g., via `.cargo/config.toml`).

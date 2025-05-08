@@ -1,0 +1,10 @@
+[build]
+# rustc options that apply to all profiles
+rustflags = [
+    "--cap-lints=warn", # never treat lints as errors, just as warnings
+]
+
+[lints.clippy]
+# Don't treat dead code as an error since we have public API methods that are intended to be available
+# even though they're not used in the main application.
+dead_code = "allow"

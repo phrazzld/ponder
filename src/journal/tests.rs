@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod journal_tests {
     use crate::config::Config;
     use crate::editor::Editor;
     use crate::errors::{AppError, AppResult};

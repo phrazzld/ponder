@@ -56,6 +56,7 @@ pub trait JournalIO {
     ///
     /// A Result that is Ok(()) if the directory exists or was successfully created,
     /// or an AppError if directory creation failed.
+    #[allow(dead_code)]
     fn ensure_journal_dir(&self) -> AppResult<()>;
 
     /// Generates a file path for a journal entry on the specified date.
@@ -184,7 +185,6 @@ impl JournalIO for FileSystemIO {
     fn create_or_open_file(&self, path: &str) -> AppResult<File> {
         let file = OpenOptions::new()
             .read(true)
-            .write(true)
             .create(true)
             .append(true)
             .open(path)?;

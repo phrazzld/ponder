@@ -1,5 +1,4 @@
 use serial_test::serial;
-use std::env;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::tempdir;
@@ -9,7 +8,7 @@ use ponder::config::Config;
 use ponder::editor::SystemEditor;
 use ponder::errors::AppResult;
 use ponder::journal::io::FileSystemIO;
-use ponder::journal::{DateSpecifier, JournalService};
+use ponder::journal::JournalService;
 
 // Helper function to set up a test environment
 fn set_up_test_env() -> (Config, tempfile::TempDir) {

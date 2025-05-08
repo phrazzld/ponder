@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod io_tests {
     use crate::errors::AppResult;
     use crate::journal::io::JournalIO;
     use chrono::{DateTime, Datelike, Local, NaiveDate};
@@ -42,7 +42,6 @@ mod tests {
         fn create_or_open_file(&self, path: &str) -> AppResult<File> {
             let file = OpenOptions::new()
                 .read(true)
-                .write(true)
                 .create(true)
                 .append(true)
                 .open(path)?;

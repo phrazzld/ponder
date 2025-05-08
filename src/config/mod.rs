@@ -64,6 +64,16 @@ pub struct Config {
     pub journal_dir: PathBuf,
 }
 
+impl Default for Config {
+    /// Creates a new Config with default values.
+    fn default() -> Self {
+        Config {
+            editor: "vim".to_string(),
+            journal_dir: PathBuf::from(""),
+        }
+    }
+}
+
 impl Config {
     /// Creates a new Config with default values.
     ///
@@ -82,11 +92,9 @@ impl Config {
     /// let config = Config::new();
     /// assert_eq!(config.editor, "vim");
     /// ```
+    #[allow(dead_code)]
     pub fn new() -> Self {
-        Config {
-            editor: "vim".to_string(),
-            journal_dir: PathBuf::from(""),
-        }
+        Self::default()
     }
 
     /// Loads configuration from environment variables with sensible defaults.

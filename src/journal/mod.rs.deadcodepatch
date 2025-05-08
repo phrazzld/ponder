@@ -1,0 +1,19 @@
+    #[allow(dead_code)]
+    pub fn append_date_time(&self, path: &str) -> AppResult<()> {
+        // ... existing code ...
+    }
+
+    #[allow(dead_code)]
+    pub fn get_todays_entry_path(&self) -> AppResult<String> {
+        // ... existing code ...
+    }
+
+    #[allow(dead_code)]
+    pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
+        // ... existing code ...
+    }
+
+    #[allow(dead_code)]
+    pub fn get_reminisce_entries(&self) -> AppResult<Vec<String>> {
+        // ... existing code ...
+    }

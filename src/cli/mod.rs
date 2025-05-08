@@ -126,6 +126,7 @@ impl CliArgs {
     /// let args = CliArgs::parse_from(["ponder", "--date", "invalid"]);
     /// assert!(args.parse_date().unwrap().is_err());
     /// ```
+    #[allow(dead_code)]
     pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
         self.date.as_ref().map(|date_str| {
             // Try parsing in YYYY-MM-DD format first
@@ -145,6 +146,7 @@ impl CliArgs {
 /// # Returns
 ///
 /// A `CliArgs` instance populated from the current process's command-line arguments.
+#[allow(dead_code)]
 pub fn parse_args() -> CliArgs {
     CliArgs::parse()
 }

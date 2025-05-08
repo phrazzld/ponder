@@ -1,0 +1,17 @@
+# Clippy configuration for Ponder
+
+# Treat these warnings as errors
+deny = [
+    "clippy::correctness",              # Correctness issues
+    "clippy::suspicious",               # Suspicious code
+    "clippy::perf",                     # Performance issues
+    "clippy::style",                    # Style issues
+    "clippy::complexity",               # Code complexity issues
+    "unused-imports",                   # Unused imports
+    "dead_code",                        # Dead code
+]
+
+# Allow certain lints - keep this list minimal
+allow = [
+    # Add exceptions here if needed
+]
