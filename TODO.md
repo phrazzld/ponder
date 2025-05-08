@@ -217,7 +217,7 @@
         1. `cargo doc --no-deps` builds without warnings.
     - **Depends‑on:** [T014]
 
-- [ ] **T018 · Doc · P2: Update README.md**
+- [x] **T018 · Doc · P2: Update README.md**
     - **Context:** PLAN.md, Documentation, Required Readme Updates
     - **Action:**
         1. Update `README.md` with detailed project description, features, installation instructions, usage examples, configuration details, and architecture overview.
