@@ -92,7 +92,7 @@
     - **Depends‑on:** [T006]
 
 ## Journal Core
-- [ ] **T008 · Feature · P0: Define DateSpecifier type in journal/mod.rs**
+- [x] **T008 · Feature · P0: Define DateSpecifier type in journal/mod.rs**
     - **Context:** PLAN.md, Core Journal Logic
     - **Action:**
         1. Define an enum or struct in `src/journal/mod.rs` to represent different ways of specifying a date (today, retro, specific date string).

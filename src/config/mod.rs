@@ -128,6 +128,10 @@ mod tests {
         env::set_var("PONDER_EDITOR", "code");
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "code");
+        
+        // Clean up environment variables
+        env::remove_var("EDITOR");
+        env::remove_var("PONDER_EDITOR");
     }
 
     #[test]
