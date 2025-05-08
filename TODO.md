@@ -102,7 +102,7 @@
         1. Unit test: construct from typical CLI inputs.
     - **Depends‑on:** [T001]
 
-- [ ] **T009 · Feature · P0: Define JournalService struct and constructor**
+- [x] **T009 · Feature · P0: Define JournalService struct and constructor**
     - **Context:** PLAN.md, Core Journal Logic
     - **Action:**
         1. Implement `JournalService` struct in `src/journal/mod.rs` that takes `Config`, `Box<dyn JournalIO>`, and `Box<dyn Editor>` as dependencies.

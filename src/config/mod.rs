@@ -110,6 +110,10 @@ mod tests {
     fn test_load_with_default_editor() {
         setup();
         
+        // Make sure EDITOR is not set from previous tests
+        env::remove_var("EDITOR");
+        env::remove_var("PONDER_EDITOR");
+        
         // Neither PONDER_EDITOR nor EDITOR is set
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "vim");
