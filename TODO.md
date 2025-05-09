@@ -66,7 +66,7 @@
         1. `SystemEditor::open_files` implementation is updated and compiles.
         2. Relevant unit tests for `SystemEditor` pass.
     - **Depends‑on:** [T005]
-- [ ] **T007 · Refactor · P0: update `mockeditor` `open_files` implementation for `asref<path>`**
+- [x] **T007 · Refactor · P0: update `mockeditor` `open_files` implementation for `asref<path>`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 1
     - **Action:**
         1. Open `src/editor.rs`.

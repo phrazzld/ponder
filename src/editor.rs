@@ -118,10 +118,11 @@ impl Editor for SystemEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     struct MockEditor {
-        pub opened_files: Arc<Mutex<Vec<String>>>,
+        pub opened_files: Arc<Mutex<Vec<PathBuf>>>,
     }
 
     impl MockEditor {
@@ -133,10 +134,10 @@ mod tests {
     }
 
     impl Editor for MockEditor {
-        fn open_files(&self, paths: &[String]) -> AppResult<()> {
+        fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
             let mut opened = self.opened_files.lock().unwrap();
-            for path in paths {
-                opened.push(path.clone());
+            for &path in paths {
+                opened.push(path.to_path_buf());
             }
             Ok(())
         }
@@ -145,7 +146,9 @@ mod tests {
     #[test]
     fn test_mock_editor_open_files() {
         let editor = MockEditor::new();
-        let paths = vec!["file1.md".to_string(), "file2.md".to_string()];
+        let file1 = Path::new("file1.md");
+        let file2 = Path::new("file2.md");
+        let paths = [file1, file2];
 
         // Open files
         editor.open_files(&paths).unwrap();
@@ -153,8 +156,8 @@ mod tests {
         // Check that the files were recorded
         let opened = editor.opened_files.lock().unwrap();
         assert_eq!(opened.len(), 2);
-        assert_eq!(opened[0], "file1.md");
-        assert_eq!(opened[1], "file2.md");
+        assert_eq!(opened[0], Path::new("file1.md"));
+        assert_eq!(opened[1], Path::new("file2.md"));
     }
 
     #[test]
