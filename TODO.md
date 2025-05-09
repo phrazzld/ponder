@@ -48,11 +48,11 @@
     - **Depends‑on:** [T003]
 
 ## API Path Handling
-- [ ] **T005 · Refactor · P0: update `editor` trait `open_files` signature to use `asref<path>`**
+- [x] **T005 · Refactor · P0: update `editor` trait `open_files` signature to use `asref<path>`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 1
     - **Action:**
         1. Open `src/editor.rs`.
-        2. Modify the `Editor::open_files` signature to `fn open_files(&self, paths: &[impl AsRef<Path>]) -> AppResult<()>;`.
+        2. Modify the `Editor::open_files` signature to use path types instead of strings.
     - **Done‑when:**
         1. The `Editor::open_files` trait method signature is updated in `src/editor.rs`.
         2. Code compiles (implementations will be updated in subsequent tickets).

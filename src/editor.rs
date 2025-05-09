@@ -5,6 +5,7 @@
 //! by mocking the editor functionality.
 
 use crate::errors::{AppError, AppResult};
+use std::path::Path;
 use std::process::Command;
 
 /// Trait defining the interface for an editor component.
@@ -18,19 +19,22 @@ use std::process::Command;
 /// ```
 /// use ponder::editor::Editor;
 /// use ponder::errors::AppResult;
+/// use std::path::Path;
 ///
 /// struct DummyEditor;
 ///
 /// impl Editor for DummyEditor {
-///     fn open_files(&self, paths: &[String]) -> AppResult<()> {
+///     fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
 ///         println!("Would open files: {:?}", paths);
 ///         Ok(())
 ///     }
 /// }
 ///
 /// let editor = DummyEditor;
-/// let files = vec!["file1.md".to_string(), "file2.md".to_string()];
-/// editor.open_files(&files).unwrap();
+/// let file1 = Path::new("file1.md");
+/// let file2 = Path::new("file2.md");
+/// let paths = vec![file1, file2];
+/// editor.open_files(&paths).unwrap();
 /// ```
 pub trait Editor {
     /// Opens one or more files in the editor.
@@ -47,7 +51,7 @@ pub trait Editor {
     /// # Errors
     ///
     /// Different implementations may return different errors when file opening fails.
-    fn open_files(&self, paths: &[String]) -> AppResult<()>;
+    fn open_files(&self, paths: &[&Path]) -> AppResult<()>;
 }
 
 /// An implementation of the Editor trait that uses a system command to open files.
@@ -65,8 +69,10 @@ pub trait Editor {
 ///     editor_cmd: "vim".to_string(),
 /// };
 ///
-/// let files = vec!["file1.md".to_string(), "file2.md".to_string()];
-/// editor.open_files(&files).expect("Failed to open files");
+/// let file1 = Path::new("file1.md");
+/// let file2 = Path::new("file2.md");
+/// let paths = vec![file1, file2];
+/// editor.open_files(&paths).expect("Failed to open files");
 /// ```
 pub struct SystemEditor {
     /// The command to use for opening files (e.g., "vim", "code", "nano").
