@@ -10,7 +10,7 @@ use crate::errors::AppResult;
 use chrono::{DateTime, Datelike, Local, NaiveDate};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(test)]
 mod tests;
@@ -28,10 +28,11 @@ mod tests;
 /// ```no_run
 /// use ponder::journal::io::{JournalIO, FileSystemIO};
 /// use chrono::Local;
+/// use std::path::PathBuf;
 ///
 /// # fn main() -> ponder::errors::AppResult<()> {
 /// let io = FileSystemIO {
-///     journal_dir: "/path/to/journal".to_string(),
+///     journal_dir: PathBuf::from("/path/to/journal"),
 /// };
 ///
 /// // Create the journal directory if it doesn't exist
@@ -142,9 +143,10 @@ pub trait JournalIO {
 ///
 /// ```no_run
 /// use ponder::journal::io::{JournalIO, FileSystemIO};
+/// use std::path::PathBuf;
 ///
 /// let io = FileSystemIO {
-///     journal_dir: "/path/to/journal".to_string(),
+///     journal_dir: PathBuf::from("/path/to/journal"),
 /// };
 ///
 /// // Ensure the journal directory exists
@@ -152,30 +154,27 @@ pub trait JournalIO {
 /// ```
 pub struct FileSystemIO {
     /// The directory where journal entries are stored.
-    pub journal_dir: String,
+    pub journal_dir: PathBuf,
 }
 
 impl JournalIO for FileSystemIO {
     fn ensure_journal_dir(&self) -> AppResult<()> {
-        let path = Path::new(&self.journal_dir);
-        if !path.exists() {
-            std::fs::create_dir_all(path)?;
+        if !self.journal_dir.exists() {
+            std::fs::create_dir_all(&self.journal_dir)?;
         }
         Ok(())
     }
 
     fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<String> {
-        Ok(format!("{}/{}.md", self.journal_dir, date.format("%Y%m%d")))
+        let filename = format!("{}.md", date.format("%Y%m%d"));
+        let filepath = self.journal_dir.join(filename);
+        Ok(filepath.to_string_lossy().to_string())
     }
 
     fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
-        Ok(format!(
-            "{}/{:04}{:02}{:02}.md",
-            self.journal_dir,
-            date.year(),
-            date.month(),
-            date.day()
-        ))
+        let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
+        let filepath = self.journal_dir.join(filename);
+        Ok(filepath.to_string_lossy().to_string())
     }
 
     fn file_exists(&self, path: &str) -> bool {

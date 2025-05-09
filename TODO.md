@@ -75,7 +75,7 @@
         1. `MockEditor::open_files` implementation is updated and compiles.
         2. Relevant unit tests for `MockEditor` pass.
     - **Depends‑on:** [T005]
-- [ ] **T008 · Refactor · P0: change `filesystemio::journal_dir` field type to `pathbuf`**
+- [x] **T008 · Refactor · P0: change `filesystemio::journal_dir` field type to `pathbuf`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Open `src/journal/io/mod.rs`.
