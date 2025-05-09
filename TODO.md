@@ -33,7 +33,7 @@
     - **Verification:**
         1. Introduce temporary code that violates a denied lint (e.g., dead code) and confirm `cargo clippy` fails.
     - **Depends‑on:** [T001, T002]
-- [ ] **T004 · Chore · P0: enforce strict clippy checks in ci pipeline**
+- [x] **T004 · Chore · P0: enforce strict clippy checks in ci pipeline**
     - **Context:** REMEDIATION_PLAN.md - Section 3.1, Step 4
     - **Action:**
         1. Modify the CI pipeline configuration file (e.g., GitHub Actions workflow).
