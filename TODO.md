@@ -12,7 +12,7 @@
     - **Verification:**
         1. Introduce a temporary lint warning (e.g., an unused variable if not denied by clippy.toml yet) and confirm `cargo clippy` reports it as an error if other stricter settings are active, or as a warning if not.
     - **Depends‑on:** none
-- [ ] **T002 · Chore · P0: remove `dead_code = "allow"` clippy lint from cargo config**
+- [x] **T002 · Chore · P0: remove `dead_code = "allow"` clippy lint from cargo config**
     - **Context:** REMEDIATION_PLAN.md - Section 3.1, Step 2
     - **Action:**
         1. Open `.cargo/config.toml`.
