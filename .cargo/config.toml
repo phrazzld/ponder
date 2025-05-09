@@ -1,7 +1,6 @@
 [build]
 # rustc options that apply to all profiles
 rustflags = [
-    "--cap-lints=warn", # never treat lints as errors, just as warnings
 ]
 
 [lints.clippy]
