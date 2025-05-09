@@ -57,7 +57,7 @@
         1. The `Editor::open_files` trait method signature is updated in `src/editor.rs`.
         2. Code compiles (implementations will be updated in subsequent tickets).
     - **Depends‑on:** none
-- [ ] **T006 · Refactor · P0: update `systemeditor` `open_files` implementation for `asref<path>`**
+- [x] **T006 · Refactor · P0: update `systemeditor` `open_files` implementation for `asref<path>`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 1
     - **Action:**
         1. Open `src/editor.rs`.

@@ -101,7 +101,7 @@ impl Editor for SystemEditor {
     /// - The editor command is not found
     /// - The process cannot be spawned
     /// - One of the file paths is invalid
-    fn open_files(&self, paths: &[String]) -> AppResult<()> {
+    fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
         if paths.is_empty() {
             return Ok(());
         }
@@ -162,7 +162,7 @@ mod tests {
         let editor = SystemEditor {
             editor_cmd: "vim".to_string(),
         };
-        let paths: Vec<String> = Vec::new();
+        let paths: Vec<&Path> = Vec::new();
 
         // Should succeed with empty paths
         let result = editor.open_files(&paths);
