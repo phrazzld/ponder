@@ -2,6 +2,7 @@
 
 # Treat these warnings as errors
 deny = [
+    "clippy::all",                      # All clippy lints
     "clippy::correctness",              # Correctness issues
     "clippy::suspicious",               # Suspicious code
     "clippy::perf",                     # Performance issues

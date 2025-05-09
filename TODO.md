@@ -21,7 +21,7 @@
         1. The `dead_code = "allow"` override for clippy is removed from `.cargo/config.toml`.
         2. `dead_code` lint behavior is solely determined by `.cargo/clippy.toml`.
     - **Depends‑on:** [T001]
-- [ ] **T003 · Chore · P0: verify and update `.cargo/clippy.toml` for strict lint enforcement**
+- [x] **T003 · Chore · P0: verify and update `.cargo/clippy.toml` for strict lint enforcement**
     - **Context:** REMEDIATION_PLAN.md - Section 3.1, Step 3
     - **Action:**
         1. Open `.cargo/clippy.toml`.
