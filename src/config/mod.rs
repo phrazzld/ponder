@@ -92,6 +92,9 @@ impl Config {
     /// let config = Config::new();
     /// assert_eq!(config.editor, "vim");
     /// ```
+    /// 
+    /// Note: For normal application usage, prefer `Config::load()` which populates
+    /// the configuration from environment variables with sensible defaults.
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()

@@ -147,6 +147,8 @@ impl DateSpecifier {
     }
 
     /// Gets the relevant dates for this date specifier
+    /// 
+    /// Note: This method is used in tests to verify date calculations.
     #[allow(dead_code)]
     pub fn get_dates(&self) -> Vec<NaiveDate> {
         match self {
@@ -270,7 +272,7 @@ impl JournalService {
     /// };
     ///
     /// let io = Box::new(FileSystemIO {
-    ///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+    ///     journal_dir: config.journal_dir.clone(),
     /// });
     ///
     /// let editor = Box::new(SystemEditor {
@@ -288,6 +290,8 @@ impl JournalService {
     /// # Returns
     ///
     /// A string slice containing the editor command.
+    /// 
+    /// Note: This method is used in tests to verify JournalService construction.
     #[allow(dead_code)]
     pub fn get_editor_cmd(&self) -> &str {
         &self.config.editor
@@ -298,6 +302,8 @@ impl JournalService {
     /// # Returns
     ///
     /// A reference to the PathBuf containing the journal directory path.
+    /// 
+    /// Note: This method is used in tests and integration tests to access the journal directory.
     #[allow(dead_code)]
     pub fn get_journal_dir(&self) -> &PathBuf {
         &self.config.journal_dir
@@ -340,7 +346,7 @@ impl JournalService {
     /// };
     ///
     /// let io = Box::new(FileSystemIO {
-    ///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+    ///     journal_dir: config.journal_dir.clone(),
     /// });
     ///
     /// let editor = Box::new(SystemEditor {
@@ -348,7 +354,7 @@ impl JournalService {
     /// });
     ///
     /// let journal_service = JournalService::new(config, io, editor);
-    /// journal_service.append_date_time("/path/to/journal/20230115.md")?;
+    /// journal_service.append_date_time(&PathBuf::from("/path/to/journal/20230115.md"))?;
     /// # Ok(())
     /// # }
     /// ```
@@ -402,7 +408,7 @@ impl JournalService {
     ///         journal_dir: PathBuf::from("/path/to/journal"),
     ///     },
     ///     Box::new(FileSystemIO {
-    ///         journal_dir: "/path/to/journal".to_string(),
+    ///         journal_dir: PathBuf::from("/path/to/journal"),
     ///     }),
     ///     Box::new(SystemEditor {
     ///         editor_cmd: "vim".to_string(),
@@ -449,7 +455,7 @@ impl JournalService {
     ///         journal_dir: PathBuf::from("/path/to/journal"),
     ///     },
     ///     Box::new(FileSystemIO {
-    ///         journal_dir: "/path/to/journal".to_string(),
+    ///         journal_dir: PathBuf::from("/path/to/journal"),
     ///     }),
     ///     Box::new(SystemEditor {
     ///         editor_cmd: "vim".to_string(),
@@ -558,31 +564,40 @@ impl JournalService {
     }
 
     /// Opens today's journal entry, creating it if it doesn't exist
+    /// 
+    /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Today)
     }
 
     /// Opens entries from the past week (excluding today)
+    /// 
+    /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_retro_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Retro)
     }
 
     /// Opens entries from significant past dates (1 month ago, 3 months ago, yearly anniversaries)
+    /// 
+    /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_reminisce_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Reminisce)
     }
 
     /// Opens a journal entry for a specific date
+    /// 
+    /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_specific_entry(&self, date: NaiveDate) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Specific(date))
     }
 }
 
-// Keep the old Journal struct for backward compatibility during refactoring
+// Note: This struct is scheduled for removal in ticket T025.
+// It is kept for backward compatibility during refactoring.
 #[allow(dead_code)]
 pub struct Journal<T: JournalIO> {
     io: T,

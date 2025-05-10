@@ -36,7 +36,7 @@ fn main() -> ponder::AppResult<()> {
 
     // Create components
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
     let editor = Box::new(SystemEditor {
         editor_cmd: config.editor.clone(),

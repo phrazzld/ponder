@@ -187,7 +187,7 @@
     - **Done‑when:**
         1. The `#[allow(dead_code)]` instance in `src/journal/io/mod.rs` is reviewed and documented.
     - **Depends‑on:** [T003]
-- [ ] **T020 · Refactor · P0: apply actions from `dead_code` review**
+- [x] **T020 · Refactor · P0: apply actions from `dead_code` review**
     - **Context:** REMEDIATION_PLAN.md - Section 3.3, Steps 2-3
     - **Action:**
         1. Based on findings from T016-T019, delete genuinely unused code.

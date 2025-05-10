@@ -53,6 +53,11 @@ mod tests;
 pub trait JournalIO {
     /// Ensures the journal directory exists, creating it if necessary.
     ///
+    /// This method is part of the complete JournalIO abstraction, ensuring that
+    /// all implementations can manage their journal directory. In the current
+    /// implementation, it's not directly called from the main application code,
+    /// but it's required for custom JournalIO implementations and used in tests.
+    ///
     /// # Returns
     ///
     /// A Result that is Ok(()) if the directory exists or was successfully created,
