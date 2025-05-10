@@ -19,7 +19,7 @@ use crate::editor::Editor;
 use crate::errors::{AppError, AppResult};
 use chrono::{Duration, Local, Months, NaiveDate};
 use io::JournalIO;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Represents different ways to specify a date or set of dates for journal entries.
 ///
@@ -352,7 +352,7 @@ impl JournalService {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn append_date_time(&self, path: &str) -> AppResult<()> {
+    pub fn append_date_time(&self, path: &Path) -> AppResult<()> {
         let mut file = self.io.create_or_open_file(path)?;
         let now = Local::now();
 
@@ -379,7 +379,7 @@ impl JournalService {
     ///
     /// # Returns
     ///
-    /// A Result containing either the path as a String or an AppError
+    /// A Result containing either the path as a PathBuf or an AppError
     /// if path generation failed.
     ///
     /// # Errors
@@ -410,11 +410,11 @@ impl JournalService {
     /// );
     ///
     /// let path = journal_service.get_todays_entry_path()?;
-    /// println!("Today's entry path: {}", path);
+    /// println!("Today's entry path: {:?}", path);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_todays_entry_path(&self) -> AppResult<String> {
+    pub fn get_todays_entry_path(&self) -> AppResult<PathBuf> {
         let now = Local::now();
         self.io.generate_path_for_date(now)
     }
@@ -426,7 +426,7 @@ impl JournalService {
     ///
     /// # Returns
     ///
-    /// A Result containing either a vector of paths as Strings or an AppError
+    /// A Result containing either a vector of paths as PathBufs or an AppError
     /// if path generation or file checking failed.
     ///
     /// # Errors
@@ -461,7 +461,7 @@ impl JournalService {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
+    pub fn get_retro_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for i in (1..=7).rev() {
@@ -477,7 +477,7 @@ impl JournalService {
     }
 
     /// Gets paths to entries from significant past dates (1 month ago, 3 months ago, yearly)
-    pub fn get_reminisce_entries(&self) -> AppResult<Vec<String>> {
+    pub fn get_reminisce_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
         let now = Local::now();
         let today = now.naive_local().date();
@@ -524,7 +524,7 @@ impl JournalService {
             DateSpecifier::Today => {
                 let path = self.get_todays_entry_path()?;
                 self.append_date_time(&path)?;
-                self.editor.open_files(&[path])
+                self.editor.open_files(&[&path])
             }
             DateSpecifier::Retro => {
                 let paths = self.get_retro_entries()?;
@@ -532,7 +532,9 @@ impl JournalService {
                     println!("No entries found for the past week");
                     return Ok(());
                 }
-                self.editor.open_files(&paths)
+                // Convert Vec<PathBuf> to Vec<&Path>
+                let path_refs: Vec<&Path> = paths.iter().map(|p| p.as_path()).collect();
+                self.editor.open_files(&path_refs)
             }
             DateSpecifier::Reminisce => {
                 let paths = self.get_reminisce_entries()?;
@@ -540,7 +542,9 @@ impl JournalService {
                     println!("No entries found for reminisce intervals");
                     return Ok(());
                 }
-                self.editor.open_files(&paths)
+                // Convert Vec<PathBuf> to Vec<&Path>
+                let path_refs: Vec<&Path> = paths.iter().map(|p| p.as_path()).collect();
+                self.editor.open_files(&path_refs)
             }
             DateSpecifier::Specific(date) => {
                 let path = self.io.generate_path_for_naive_date(*date)?;
@@ -548,7 +552,7 @@ impl JournalService {
                     // Create a new file for the specific date
                     self.append_date_time(&path)?;
                 }
-                self.editor.open_files(&[path])
+                self.editor.open_files(&[&path])
             }
         }
     }
@@ -591,7 +595,7 @@ impl<T: JournalIO> Journal<T> {
         Journal { io }
     }
 
-    pub fn append_date_time(&self, path: &str) -> AppResult<()> {
+    pub fn append_date_time(&self, path: &Path) -> AppResult<()> {
         let mut file = self.io.create_or_open_file(path)?;
         let now = Local::now();
 
@@ -611,12 +615,12 @@ impl<T: JournalIO> Journal<T> {
         Ok(())
     }
 
-    pub fn get_todays_entry_path(&self) -> AppResult<String> {
+    pub fn get_todays_entry_path(&self) -> AppResult<PathBuf> {
         let now = Local::now();
         self.io.generate_path_for_date(now)
     }
 
-    pub fn get_retro_entries(&self) -> AppResult<Vec<String>> {
+    pub fn get_retro_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
 
         for i in (1..=7).rev() {
@@ -631,7 +635,7 @@ impl<T: JournalIO> Journal<T> {
         Ok(paths)
     }
 
-    pub fn get_reminisce_entries(&self) -> AppResult<Vec<String>> {
+    pub fn get_reminisce_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
         let now = Local::now();
         let today = now.naive_local().date();

@@ -129,7 +129,7 @@
         1. `FileSystemIO` methods accepting paths are updated and compile.
         2. Relevant unit tests pass.
     - **Depends‑on:** [T008, T012]
-- [ ] **T014 · Refactor · P0: update `journalservice` to use new path types from `editor` and `journalio`**
+- [x] **T014 · Refactor · P0: update `journalservice` to use new path types from `editor` and `journalio`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 3
     - **Action:**
         1. Open `src/journal/mod.rs` (for `JournalService`).

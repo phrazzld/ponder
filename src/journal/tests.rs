@@ -8,7 +8,7 @@ mod journal_tests {
     use chrono::{Datelike, Duration, Local, NaiveDate};
     use std::cell::RefCell;
     use std::fs::File;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn test_date_specifier_from_args() {
@@ -101,17 +101,17 @@ mod journal_tests {
 
     // Mock implementations for testing JournalService
     struct MockJournalIO {
-        journal_dir: String,
+        journal_dir: PathBuf,
         exists_result: bool,
         file_content: String,
-        paths_generated: RefCell<Vec<String>>,
+        paths_generated: RefCell<Vec<PathBuf>>,
         appended_content: RefCell<Vec<String>>,
     }
 
     impl MockJournalIO {
         fn new() -> Self {
             MockJournalIO {
-                journal_dir: String::from("/mock/journal/dir"),
+                journal_dir: PathBuf::from("/mock/journal/dir"),
                 exists_result: true,
                 file_content: String::new(),
                 paths_generated: RefCell::new(Vec::new()),
@@ -125,35 +125,36 @@ mod journal_tests {
             Ok(())
         }
 
-        fn generate_path_for_date(&self, date: chrono::DateTime<Local>) -> AppResult<String> {
-            let path = format!("{}/{}.md", self.journal_dir, date.format("%Y%m%d"));
+        fn generate_path_for_date(&self, date: chrono::DateTime<Local>) -> AppResult<PathBuf> {
+            let filename = format!("{}.md", date.format("%Y%m%d"));
+            let path = self.journal_dir.join(filename);
             self.paths_generated.borrow_mut().push(path.clone());
             Ok(path)
         }
 
-        fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
-            let path = format!(
-                "{}/{:04}{:02}{:02}.md",
-                self.journal_dir,
+        fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<PathBuf> {
+            let filename = format!(
+                "{:04}{:02}{:02}.md",
                 date.year(),
                 date.month(),
                 date.day()
             );
+            let path = self.journal_dir.join(filename);
             self.paths_generated.borrow_mut().push(path.clone());
             Ok(path)
         }
 
-        fn file_exists(&self, _path: &str) -> bool {
+        fn file_exists(&self, _path: &Path) -> bool {
             self.exists_result
         }
 
-        fn create_or_open_file(&self, _path: &str) -> AppResult<File> {
+        fn create_or_open_file(&self, _path: &Path) -> AppResult<File> {
             Err(AppError::Journal(
                 "Mock doesn't create real files".to_string(),
             ))
         }
 
-        fn read_file_content(&self, _path: &str) -> AppResult<String> {
+        fn read_file_content(&self, _path: &Path) -> AppResult<String> {
             Ok(self.file_content.clone())
         }
 
@@ -164,7 +165,7 @@ mod journal_tests {
     }
 
     struct MockEditor {
-        opened_files: RefCell<Vec<Vec<String>>>,
+        opened_files: RefCell<Vec<Vec<PathBuf>>>,
     }
 
     impl MockEditor {
@@ -176,8 +177,8 @@ mod journal_tests {
     }
 
     impl Editor for MockEditor {
-        fn open_files(&self, paths: &[String]) -> AppResult<()> {
-            self.opened_files.borrow_mut().push(paths.to_vec());
+        fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
+            self.opened_files.borrow_mut().push(paths.iter().map(|&p| p.to_path_buf()).collect());
             Ok(())
         }
     }
@@ -225,7 +226,7 @@ mod journal_tests {
     fn test_journal_service_convenience_methods() {
         // Create a special version of MockJournalIO that doesn't fail on create_or_open_file
         struct TestMockJournalIO {
-            paths_generated: RefCell<Vec<String>>,
+            paths_generated: RefCell<Vec<PathBuf>>,
         }
 
         impl TestMockJournalIO {
@@ -241,35 +242,35 @@ mod journal_tests {
                 Ok(())
             }
 
-            fn generate_path_for_date(&self, date: chrono::DateTime<Local>) -> AppResult<String> {
-                let path = format!("/test/journal/{}.md", date.format("%Y%m%d"));
+            fn generate_path_for_date(&self, date: chrono::DateTime<Local>) -> AppResult<PathBuf> {
+                let path = PathBuf::from(format!("/test/journal/{}.md", date.format("%Y%m%d")));
                 self.paths_generated.borrow_mut().push(path.clone());
                 Ok(path)
             }
 
-            fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
-                let path = format!(
+            fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<PathBuf> {
+                let path = PathBuf::from(format!(
                     "/test/journal/{:04}{:02}{:02}.md",
                     date.year(),
                     date.month(),
                     date.day()
-                );
+                ));
                 self.paths_generated.borrow_mut().push(path.clone());
                 Ok(path)
             }
 
-            fn file_exists(&self, _path: &str) -> bool {
+            fn file_exists(&self, _path: &Path) -> bool {
                 true
             }
 
-            fn create_or_open_file(&self, _path: &str) -> AppResult<File> {
+            fn create_or_open_file(&self, _path: &Path) -> AppResult<File> {
                 // Just return a dummy value that will be captured by the mock file system
                 let file = tempfile::tempfile()
                     .map_err(|e| AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
                 Ok(file)
             }
 
-            fn read_file_content(&self, _path: &str) -> AppResult<String> {
+            fn read_file_content(&self, _path: &Path) -> AppResult<String> {
                 Ok(String::new())
             }
 
