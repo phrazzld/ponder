@@ -64,6 +64,7 @@ pub trait Editor {
 /// ```no_run
 /// use ponder::editor::SystemEditor;
 /// use ponder::editor::Editor;
+/// use std::path::Path;
 ///
 /// let editor = SystemEditor {
 ///     editor_cmd: "vim".to_string(),

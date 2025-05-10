@@ -248,7 +248,7 @@
     - **Depends‑on:** [T022, T023]
 
 ## Deprecated Code Removal
-- [ ] **T025 · Refactor · P1: remove old `journal<t: journalio>` struct and implementation**
+- [x] **T025 · Refactor · P1: remove old `journal<t: journalio>` struct and implementation**
     - **Context:** REMEDIATION_PLAN.md - Section 3.5, Step 1
     - **Action:**
         1. Open `src/journal/mod.rs`.

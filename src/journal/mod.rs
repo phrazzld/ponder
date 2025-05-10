@@ -218,7 +218,7 @@ impl DateSpecifier {
 ///
 /// // Create dependencies
 /// let io = Box::new(FileSystemIO {
-///     journal_dir: config.journal_dir.to_string_lossy().to_string(),
+///     journal_dir: config.journal_dir.clone(),
 /// });
 /// let editor = Box::new(SystemEditor {
 ///     editor_cmd: config.editor.clone(),
@@ -596,98 +596,3 @@ impl JournalService {
     }
 }
 
-// Note: This struct is scheduled for removal in ticket T025.
-// It is kept for backward compatibility during refactoring.
-#[allow(dead_code)]
-pub struct Journal<T: JournalIO> {
-    io: T,
-}
-
-#[allow(dead_code)]
-impl<T: JournalIO> Journal<T> {
-    #[allow(dead_code)]
-    pub fn new(io: T) -> Self {
-        Journal { io }
-    }
-
-    pub fn append_date_time(&self, path: &Path) -> AppResult<()> {
-        let mut file = self.io.create_or_open_file(path)?;
-        let now = Local::now();
-
-        let content = self.io.read_file_content(path)?;
-
-        let entry = if content.is_empty() {
-            format!(
-                "# {}\n\n## {}\n\n",
-                now.format("%B %d, %Y: %A"),
-                now.format("%H:%M:%S")
-            )
-        } else {
-            format!("\n\n## {}\n\n", now.format("%H:%M:%S"))
-        };
-
-        self.io.append_to_file(&mut file, &entry)?;
-        Ok(())
-    }
-
-    pub fn get_todays_entry_path(&self) -> AppResult<PathBuf> {
-        let now = Local::now();
-        self.io.generate_path_for_date(now)
-    }
-
-    pub fn get_retro_entries(&self) -> AppResult<Vec<PathBuf>> {
-        let mut paths = Vec::new();
-
-        for i in (1..=7).rev() {
-            let date = Local::now() - Duration::days(i);
-            let path = self.io.generate_path_for_date(date)?;
-
-            if self.io.file_exists(&path) {
-                paths.push(path);
-            }
-        }
-
-        Ok(paths)
-    }
-
-    pub fn get_reminisce_entries(&self) -> AppResult<Vec<PathBuf>> {
-        let mut paths = Vec::new();
-        let now = Local::now();
-        let today = now.naive_local().date();
-
-        let mut dates = Vec::new();
-
-        // Add specific month intervals
-        if let Some(date) = today.checked_sub_months(Months::new(1)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(3)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(6)) {
-            dates.push(date);
-        }
-
-        // Add every year ago for the past hundred years
-        for year in 1..=100 {
-            if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
-                dates.push(date);
-            }
-        }
-
-        // Remove duplicates and sort the dates
-        dates.sort();
-        dates.dedup();
-
-        // Collect paths for existing entries
-        for date in dates {
-            let path = self.io.generate_path_for_naive_date(date)?;
-            if self.io.file_exists(&path) {
-                paths.push(path);
-            }
-        }
-
-        paths.reverse();
-        Ok(paths)
-    }
-}
