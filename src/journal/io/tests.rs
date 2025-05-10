@@ -32,11 +32,11 @@ mod io_tests {
             Ok(filepath)
         }
 
-        fn file_exists(&self, path: &str) -> bool {
-            Path::new(path).exists()
+        fn file_exists(&self, path: &Path) -> bool {
+            path.exists()
         }
 
-        fn create_or_open_file(&self, path: &str) -> AppResult<File> {
+        fn create_or_open_file(&self, path: &Path) -> AppResult<File> {
             let file = OpenOptions::new()
                 .read(true)
                 .create(true)
@@ -45,7 +45,7 @@ mod io_tests {
             Ok(file)
         }
 
-        fn read_file_content(&self, path: &str) -> AppResult<String> {
+        fn read_file_content(&self, path: &Path) -> AppResult<String> {
             let mut content = String::new();
             let mut file = File::open(path)?;
             file.read_to_string(&mut content)?;
@@ -66,7 +66,7 @@ mod io_tests {
         let io = TestFileSystemIO { journal_dir };
         io.ensure_journal_dir()?;
 
-        let test_path = io.journal_dir.join("test.md").to_string_lossy().to_string();
+        let test_path = io.journal_dir.join("test.md");
         let mut file = io.create_or_open_file(&test_path)?;
 
         io.append_to_file(&mut file, "Test content")?;
@@ -75,12 +75,7 @@ mod io_tests {
         assert_eq!(content, "Test content");
 
         assert!(io.file_exists(&test_path));
-        assert!(!io.file_exists(
-            &io.journal_dir
-                .join("nonexistent.md")
-                .to_string_lossy()
-                .to_string()
-        ));
+        assert!(!io.file_exists(&io.journal_dir.join("nonexistent.md")));
 
         Ok(())
     }

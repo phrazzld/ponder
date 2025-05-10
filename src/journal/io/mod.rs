@@ -177,11 +177,11 @@ impl JournalIO for FileSystemIO {
         Ok(filepath)
     }
 
-    fn file_exists(&self, path: &str) -> bool {
-        Path::new(path).exists()
+    fn file_exists(&self, path: &Path) -> bool {
+        path.exists()
     }
 
-    fn create_or_open_file(&self, path: &str) -> AppResult<File> {
+    fn create_or_open_file(&self, path: &Path) -> AppResult<File> {
         let file = OpenOptions::new()
             .read(true)
             .create(true)
@@ -190,7 +190,7 @@ impl JournalIO for FileSystemIO {
         Ok(file)
     }
 
-    fn read_file_content(&self, path: &str) -> AppResult<String> {
+    fn read_file_content(&self, path: &Path) -> AppResult<String> {
         let mut content = String::new();
         let mut file = File::open(path)?;
         file.read_to_string(&mut content)?;

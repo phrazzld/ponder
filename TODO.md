@@ -120,7 +120,7 @@
         1. Method signatures in `JournalIO` trait accepting paths are updated.
         2. Code compiles (implementations updated in next ticket).
     - **Depends‑on:** none
-- [ ] **T013 · Refactor · P0: update `filesystemio` method implementations accepting paths to use `asref<path>` or `&path`**
+- [x] **T013 · Refactor · P0: update `filesystemio` method implementations accepting paths to use `asref<path>` or `&path`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Open `src/journal/io/mod.rs`.
