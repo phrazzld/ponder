@@ -141,19 +141,6 @@ impl CliArgs {
     }
 }
 
-/// Parse command-line arguments (backward compatibility function).
-///
-/// This is a top-level function provided for backward compatibility.
-/// New code should use `CliArgs::parse()` instead.
-///
-/// # Returns
-///
-/// A `CliArgs` instance populated from the current process's command-line arguments.
-#[deprecated(since = "0.1.2", note = "Use CliArgs::parse() instead")]
-#[allow(dead_code)]
-pub fn parse_args() -> CliArgs {
-    CliArgs::parse()
-}
 
 #[cfg(test)]
 mod tests {

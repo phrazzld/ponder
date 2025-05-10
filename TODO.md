@@ -259,7 +259,7 @@
     - **Verification:**
         1. Check for any dependencies on the removed code.
     - **Depends‑on:** [T014, T015]
-- [ ] **T026 · Refactor · P1: remove `fn parse_args()` backward-compatibility function**
+- [x] **T026 · Refactor · P1: remove `fn parse_args()` backward-compatibility function**
     - **Context:** REMEDIATION_PLAN.md - Section 3.5, Step 2
     - **Action:**
         1. Open `src/cli/mod.rs`.
