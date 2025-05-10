@@ -105,29 +105,29 @@ mod journal_tests {
         // Tracking fields (for assertions in tests)
         paths_generated: RefCell<Vec<PathBuf>>,
         appended_content: RefCell<Vec<String>>,
-        
+
         // Configuration for ensure_journal_dir
         ensure_dir_should_fail: bool,
         ensure_dir_error: Option<AppError>,
-        
+
         // Configuration for path generation methods
         generate_path_should_fail: bool,
         generate_path_error: Option<AppError>,
-        
+
         // Configuration for file_exists
         default_exists_result: bool,
         file_exists_results: RefCell<std::collections::HashMap<PathBuf, bool>>,
-        
+
         // Configuration for create_or_open_file
         create_or_open_should_fail: bool,
         create_or_open_error: Option<AppError>,
-        
+
         // Configuration for read_file_content
         read_content_should_fail: bool,
         read_content_error: Option<AppError>,
         default_file_content: String,
         file_contents: RefCell<std::collections::HashMap<PathBuf, String>>,
-        
+
         // Configuration for append_to_file
         append_should_fail: bool,
         append_error: Option<AppError>,
@@ -139,7 +139,7 @@ mod journal_tests {
                 journal_dir: PathBuf::from("/mock/journal/dir"),
                 paths_generated: RefCell::new(Vec::new()),
                 appended_content: RefCell::new(Vec::new()),
-                
+
                 // Default configuration (for backward compatibility)
                 ensure_dir_should_fail: false,
                 ensure_dir_error: None,
@@ -148,7 +148,9 @@ mod journal_tests {
                 default_exists_result: true,
                 file_exists_results: RefCell::new(std::collections::HashMap::new()),
                 create_or_open_should_fail: true, // Default to fail for backward compatibility
-                create_or_open_error: Some(AppError::Journal("Mock doesn't create real files".to_string())),
+                create_or_open_error: Some(AppError::Journal(
+                    "Mock doesn't create real files".to_string(),
+                )),
                 read_content_should_fail: false,
                 read_content_error: None,
                 default_file_content: String::new(),
@@ -157,69 +159,69 @@ mod journal_tests {
                 append_error: None,
             }
         }
-        
+
         // Configuration methods for ensure_journal_dir
         fn set_ensure_dir_should_fail(&mut self, should_fail: bool) {
             self.ensure_dir_should_fail = should_fail;
         }
-        
+
         fn set_ensure_dir_error(&mut self, error: AppError) {
             self.ensure_dir_error = Some(error);
         }
-        
+
         // Configuration methods for path generation
         fn set_generate_path_should_fail(&mut self, should_fail: bool) {
             self.generate_path_should_fail = should_fail;
         }
-        
+
         fn set_generate_path_error(&mut self, error: AppError) {
             self.generate_path_error = Some(error);
         }
-        
+
         // Configuration methods for file_exists
         fn set_default_exists_result(&mut self, exists: bool) {
             self.default_exists_result = exists;
         }
-        
+
         fn set_file_exists_result(&mut self, path: PathBuf, exists: bool) {
             self.file_exists_results.borrow_mut().insert(path, exists);
         }
-        
+
         // Configuration methods for create_or_open_file
         fn set_create_or_open_should_fail(&mut self, should_fail: bool) {
             self.create_or_open_should_fail = should_fail;
         }
-        
+
         fn set_create_or_open_error(&mut self, error: AppError) {
             self.create_or_open_error = Some(error);
         }
-        
+
         // Configuration methods for read_file_content
         fn set_read_content_should_fail(&mut self, should_fail: bool) {
             self.read_content_should_fail = should_fail;
         }
-        
+
         fn set_read_content_error(&mut self, error: AppError) {
             self.read_content_error = Some(error);
         }
-        
+
         fn set_default_file_content(&mut self, content: String) {
             self.default_file_content = content;
         }
-        
+
         fn set_file_content(&mut self, path: PathBuf, content: String) {
             self.file_contents.borrow_mut().insert(path, content);
         }
-        
+
         // Configuration methods for append_to_file
         fn set_append_should_fail(&mut self, should_fail: bool) {
             self.append_should_fail = should_fail;
         }
-        
+
         fn set_append_error(&mut self, error: AppError) {
             self.append_error = Some(error);
         }
-        
+
         // Utility method to configure success paths (for tests that need the mock to work)
         fn configure_for_success(&mut self) {
             self.ensure_dir_should_fail = false;
@@ -236,7 +238,9 @@ mod journal_tests {
             if self.ensure_dir_should_fail {
                 return match &self.ensure_dir_error {
                     Some(error) => Err(error.clone()),
-                    None => Err(AppError::Journal("Mock directory creation failed".to_string())),
+                    None => Err(AppError::Journal(
+                        "Mock directory creation failed".to_string(),
+                    )),
                 };
             }
             Ok(())
@@ -250,14 +254,14 @@ mod journal_tests {
                     None => Err(AppError::Journal("Mock path generation failed".to_string())),
                 };
             }
-            
+
             // Generate the path using the standard format
             let filename = format!("{}.md", date.format("%Y%m%d"));
             let path = self.journal_dir.join(filename);
-            
+
             // Track the path for test assertions
             self.paths_generated.borrow_mut().push(path.clone());
-            
+
             Ok(path)
         }
 
@@ -269,19 +273,14 @@ mod journal_tests {
                     None => Err(AppError::Journal("Mock path generation failed".to_string())),
                 };
             }
-            
+
             // Generate the path using the standard format
-            let filename = format!(
-                "{:04}{:02}{:02}.md",
-                date.year(),
-                date.month(),
-                date.day()
-            );
+            let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
             let path = self.journal_dir.join(filename);
-            
+
             // Track the path for test assertions
             self.paths_generated.borrow_mut().push(path.clone());
-            
+
             Ok(path)
         }
 
@@ -290,7 +289,7 @@ mod journal_tests {
             if let Some(exists) = self.file_exists_results.borrow().get(path) {
                 return *exists;
             }
-            
+
             // Otherwise return the default exists result
             self.default_exists_result
         }
@@ -299,14 +298,19 @@ mod journal_tests {
             if self.create_or_open_should_fail {
                 return match &self.create_or_open_error {
                     Some(error) => Err(error.clone()),
-                    None => Err(AppError::Journal("Mock doesn't create real files".to_string())),
+                    None => Err(AppError::Journal(
+                        "Mock doesn't create real files".to_string(),
+                    )),
                 };
             }
-            
+
             // Return a tempfile if configured to succeed
             match tempfile::tempfile() {
                 Ok(file) => Ok(file),
-                Err(e) => Err(AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))),
+                Err(e) => Err(AppError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                ))),
             }
         }
 
@@ -317,12 +321,12 @@ mod journal_tests {
                     None => Err(AppError::Journal("Mock file reading failed".to_string())),
                 };
             }
-            
+
             // Check if we have a specific content for this path
             if let Some(content) = self.file_contents.borrow().get(path) {
                 return Ok(content.clone());
             }
-            
+
             // Otherwise return the default content
             Ok(self.default_file_content.clone())
         }
@@ -334,10 +338,10 @@ mod journal_tests {
                     None => Err(AppError::Journal("Mock file append failed".to_string())),
                 };
             }
-            
+
             // Track the appended content for test assertions
             self.appended_content.borrow_mut().push(content.to_string());
-            
+
             Ok(())
         }
     }
@@ -357,7 +361,7 @@ mod journal_tests {
                 failure_error: None,
             }
         }
-        
+
         fn with_failure(error: AppError) -> Self {
             MockEditor {
                 opened_files: RefCell::new(Vec::new()),
@@ -365,12 +369,12 @@ mod journal_tests {
                 failure_error: Some(error),
             }
         }
-        
+
         #[allow(dead_code)]
         fn set_should_fail(&mut self, should_fail: bool) {
             self.should_fail = should_fail;
         }
-        
+
         #[allow(dead_code)]
         fn set_failure_error(&mut self, error: AppError) {
             self.failure_error = Some(error);
@@ -380,16 +384,20 @@ mod journal_tests {
     impl Editor for MockEditor {
         fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
             // Record the files that were attempted to be opened
-            self.opened_files.borrow_mut().push(paths.iter().map(|&p| p.to_path_buf()).collect());
-            
+            self.opened_files
+                .borrow_mut()
+                .push(paths.iter().map(|&p| p.to_path_buf()).collect());
+
             // If configured to fail, return the specified error or a default one
             if self.should_fail {
                 return match &self.failure_error {
                     Some(error) => Err(error.clone()),
-                    None => Err(AppError::Editor("Mock editor failed by configuration".to_string())),
+                    None => Err(AppError::Editor(
+                        "Mock editor failed by configuration".to_string(),
+                    )),
                 };
             }
-            
+
             Ok(())
         }
     }
@@ -432,7 +440,7 @@ mod journal_tests {
         // That's expected and we're just testing the logic flow
         let _ = service.open_entries(&DateSpecifier::Today);
     }
-    
+
     #[test]
     fn test_journal_service_editor_failure() {
         let config = Config {
@@ -454,7 +462,7 @@ mod journal_tests {
 
         // Try to open today's entry - should fail because the editor is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -464,7 +472,7 @@ mod journal_tests {
             _ => panic!("Expected Editor error"),
         }
     }
-    
+
     #[test]
     fn test_journal_service_path_generation_failure() {
         let config = Config {
@@ -485,7 +493,7 @@ mod journal_tests {
 
         // Try to open today's entry - should fail because path generation is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -494,19 +502,19 @@ mod journal_tests {
             }
             _ => panic!("Expected Journal error for path generation"),
         }
-        
+
         // The same failure should occur for other date specifiers too
         let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
         let result = service.open_entries(&DateSpecifier::Specific(specific_date));
         assert!(result.is_err());
-        
+
         let result = service.open_entries(&DateSpecifier::Retro);
         assert!(result.is_err());
-        
+
         let result = service.open_entries(&DateSpecifier::Reminisce);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_journal_service_file_creation_failure() {
         let config = Config {
@@ -526,7 +534,7 @@ mod journal_tests {
 
         // Try to open today's entry - should fail because file creation is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -536,7 +544,7 @@ mod journal_tests {
             _ => panic!("Expected Journal error for file creation"),
         }
     }
-    
+
     #[test]
     fn test_journal_service_file_read_failure() {
         let config = Config {
@@ -558,7 +566,7 @@ mod journal_tests {
 
         // Try to open today's entry - should fail because file reading is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -568,7 +576,7 @@ mod journal_tests {
             _ => panic!("Expected Journal error for file reading"),
         }
     }
-    
+
     #[test]
     fn test_journal_service_file_append_failure() {
         let config = Config {
@@ -591,7 +599,7 @@ mod journal_tests {
 
         // Try to open today's entry - should fail because file appending is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -679,7 +687,7 @@ mod journal_tests {
         let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
         let _ = service.open_specific_entry(specific_date);
     }
-    
+
     #[test]
     fn test_journal_service_ensure_journal_dir_failure() {
         let config = Config {
@@ -690,7 +698,9 @@ mod journal_tests {
         let mut io = MockJournalIO::new();
         // Configure ensure_journal_dir to fail
         io.set_ensure_dir_should_fail(true);
-        io.set_ensure_dir_error(AppError::Journal("Cannot create journal directory".to_string()));
+        io.set_ensure_dir_error(AppError::Journal(
+            "Cannot create journal directory".to_string(),
+        ));
         let io_ptr = Box::new(io);
 
         let editor = MockEditor::new();
@@ -700,7 +710,7 @@ mod journal_tests {
 
         // Create a method that explicitly calls ensure_journal_dir
         let result = service.io.ensure_journal_dir();
-        
+
         // Verify the error
         assert!(result.is_err());
         match result {
@@ -710,7 +720,7 @@ mod journal_tests {
             _ => panic!("Expected Journal error for directory creation"),
         }
     }
-    
+
     #[test]
     fn test_journal_service_retro_entries_with_custom_file_exists() {
         let config = Config {
@@ -722,50 +732,54 @@ mod journal_tests {
         let mut io = MockJournalIO::new();
         io.configure_for_success();
         io.set_default_exists_result(false); // Default: files don't exist
-        
+
         // Set a specific path to exist
         let today = Local::now().naive_local().date();
         let specific_date = today - Duration::days(3);
-        let path = io.journal_dir.join(format!("{:04}{:02}{:02}.md", 
-                                              specific_date.year(),
-                                              specific_date.month(),
-                                              specific_date.day()));
+        let path = io.journal_dir.join(format!(
+            "{:04}{:02}{:02}.md",
+            specific_date.year(),
+            specific_date.month(),
+            specific_date.day()
+        ));
         io.set_file_exists_result(path, true);
-        
+
         let io_ptr = Box::new(io);
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
         let service = JournalService::new(config, io_ptr, editor_ptr);
-        
+
         // Get retro entries - should only include the one we configured to exist
         let result = service.get_retro_entries();
         assert!(result.is_ok());
-        
+
         let paths = result.unwrap();
         assert_eq!(paths.len(), 1); // Only one path should exist
-        
+
         // Make sure it's the path we expect
         let path_string = paths[0].to_string_lossy();
-        assert!(path_string.contains(&format!("{:04}{:02}{:02}", 
-                                             specific_date.year(),
-                                             specific_date.month(),
-                                             specific_date.day())));
+        assert!(path_string.contains(&format!(
+            "{:04}{:02}{:02}",
+            specific_date.year(),
+            specific_date.month(),
+            specific_date.day()
+        )));
     }
-    
+
     // Tests for our enhanced MockJournalIO
     #[test]
     fn test_mock_journal_io_configurability() {
         // Create a MockJournalIO with default configuration
         let mut io = MockJournalIO::new();
-        
+
         // Test ensure_journal_dir configurability
         assert!(io.ensure_journal_dir().is_ok()); // Default is success
-        
+
         io.set_ensure_dir_should_fail(true);
         let result = io.ensure_journal_dir();
         assert!(result.is_err());
-        
+
         io.set_ensure_dir_error(AppError::Config("Custom error".to_string()));
         let result = io.ensure_journal_dir();
         assert!(result.is_err());
@@ -773,30 +787,30 @@ mod journal_tests {
             Err(AppError::Config(msg)) => assert_eq!(msg, "Custom error"),
             _ => panic!("Expected AppError::Config"),
         }
-        
+
         // Test generate_path configurability
         io.set_ensure_dir_should_fail(false); // Reset
         io.set_generate_path_should_fail(true);
         let result = io.generate_path_for_date(Local::now());
         assert!(result.is_err());
-        
+
         let result = io.generate_path_for_naive_date(Local::now().naive_local().date());
         assert!(result.is_err());
-        
+
         // Test file_exists configurability
         io.set_generate_path_should_fail(false); // Reset
         io.set_default_exists_result(false);
         let path = PathBuf::from("/test/specific/path.md");
         assert!(!io.file_exists(&path)); // Should use default (false)
-        
+
         io.set_file_exists_result(path.clone(), true);
         assert!(io.file_exists(&path)); // Should use specific setting (true)
-        
+
         // Test create_or_open_file configurability
         io.set_create_or_open_should_fail(false);
         let result = io.create_or_open_file(&path);
         assert!(result.is_ok()); // Should succeed now
-        
+
         io.set_create_or_open_should_fail(true);
         io.set_create_or_open_error(AppError::Config("Can't open file".to_string()));
         let result = io.create_or_open_file(&path);
@@ -805,50 +819,53 @@ mod journal_tests {
             Err(AppError::Config(msg)) => assert_eq!(msg, "Can't open file"),
             _ => panic!("Expected AppError::Config"),
         }
-        
+
         // Test read_file_content configurability
         io.set_read_content_should_fail(true);
         let result = io.read_file_content(&path);
         assert!(result.is_err());
-        
+
         io.set_read_content_should_fail(false);
         let result = io.read_file_content(&path);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ""); // Default content is empty
-        
+
         io.set_default_file_content("Default content".to_string());
         assert_eq!(io.read_file_content(&path).unwrap(), "Default content");
-        
+
         let specific_path = PathBuf::from("/specific/path.md");
         io.set_file_content(specific_path.clone(), "Specific content".to_string());
-        assert_eq!(io.read_file_content(&specific_path).unwrap(), "Specific content");
-        
+        assert_eq!(
+            io.read_file_content(&specific_path).unwrap(),
+            "Specific content"
+        );
+
         // Test append_to_file configurability
         io.set_append_should_fail(true);
         let mut file = tempfile::tempfile().unwrap();
         let result = io.append_to_file(&mut file, "Content");
         assert!(result.is_err());
-        
+
         io.set_append_should_fail(false);
         let result = io.append_to_file(&mut file, "Content");
         assert!(result.is_ok());
-        
+
         // Verify that append content was tracked
         {
             let appended = io.appended_content.borrow();
             assert_eq!(appended.len(), 1);
             assert_eq!(appended[0], "Content");
         } // Drop the appended borrow here
-        
+
         // Test the utility configure_for_success method
         io.set_ensure_dir_should_fail(true);
         io.set_generate_path_should_fail(true);
         io.set_create_or_open_should_fail(true);
         io.set_read_content_should_fail(true);
         io.set_append_should_fail(true);
-        
+
         io.configure_for_success();
-        
+
         assert!(io.ensure_journal_dir().is_ok());
         assert!(io.generate_path_for_date(Local::now()).is_ok());
         assert!(io.create_or_open_file(&path).is_ok());

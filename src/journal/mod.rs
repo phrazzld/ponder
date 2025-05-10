@@ -154,7 +154,7 @@ impl DateSpecifier {
     }
 
     /// Gets the relevant dates for this date specifier
-    /// 
+    ///
     /// This method calculates and returns the dates corresponding to the date specifier:
     /// - For Today: returns just today's date
     /// - For Retro: returns dates from the past 7 days
@@ -178,16 +178,21 @@ impl DateSpecifier {
                 if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_ONE_MONTH_AGO)) {
                     dates.push(date);
                 }
-                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_THREE_MONTHS_AGO)) {
+                if let Some(date) =
+                    today.checked_sub_months(Months::new(REMINISCE_THREE_MONTHS_AGO))
+                {
                     dates.push(date);
                 }
-                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_SIX_MONTHS_AGO)) {
+                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_SIX_MONTHS_AGO))
+                {
                     dates.push(date);
                 }
 
                 // Add every year ago for the past MAX_REMINISCE_YEARS_AGO years
                 for year in 1..=MAX_REMINISCE_YEARS_AGO {
-                    if let Some(date) = today.checked_sub_months(Months::new(MONTHS_PER_YEAR * year)) {
+                    if let Some(date) =
+                        today.checked_sub_months(Months::new(MONTHS_PER_YEAR * year))
+                    {
                         dates.push(date);
                     }
                 }
@@ -300,7 +305,7 @@ impl JournalService {
     /// # Returns
     ///
     /// A string slice containing the editor command.
-    /// 
+    ///
     /// Note: This method is used in tests to verify JournalService construction.
     #[allow(dead_code)]
     pub fn get_editor_cmd(&self) -> &str {
@@ -312,7 +317,7 @@ impl JournalService {
     /// # Returns
     ///
     /// A reference to the PathBuf containing the journal directory path.
-    /// 
+    ///
     /// Note: This method is used in tests and integration tests to access the journal directory.
     #[allow(dead_code)]
     pub fn get_journal_dir(&self) -> &PathBuf {
@@ -479,14 +484,14 @@ impl JournalService {
     /// ```
     pub fn get_retro_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
-        
+
         // Use DateSpecifier to get dates from the past 7 days
         let dates = DateSpecifier::Retro.get_dates();
-        
+
         // Check for existing entries on each date
         for date in dates {
             let path = self.io.generate_path_for_naive_date(date)?;
-            
+
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
@@ -498,10 +503,10 @@ impl JournalService {
     /// Gets paths to entries from significant past dates (1 month ago, 3 months ago, yearly)
     pub fn get_reminisce_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
-        
+
         // Use DateSpecifier to calculate significant past dates
         let dates = DateSpecifier::Reminisce.get_dates();
-        
+
         // Check for existing entries on each date
         for date in dates {
             let path = self.io.generate_path_for_naive_date(date)?;
@@ -509,7 +514,7 @@ impl JournalService {
                 paths.push(path);
             }
         }
-        
+
         Ok(paths)
     }
 
@@ -553,7 +558,7 @@ impl JournalService {
     }
 
     /// Opens today's journal entry, creating it if it doesn't exist
-    /// 
+    ///
     /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_entry(&self) -> AppResult<()> {
@@ -561,7 +566,7 @@ impl JournalService {
     }
 
     /// Opens entries from the past week (excluding today)
-    /// 
+    ///
     /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_retro_entry(&self) -> AppResult<()> {
@@ -569,7 +574,7 @@ impl JournalService {
     }
 
     /// Opens entries from significant past dates (1 month ago, 3 months ago, yearly anniversaries)
-    /// 
+    ///
     /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_reminisce_entry(&self) -> AppResult<()> {
@@ -577,11 +582,10 @@ impl JournalService {
     }
 
     /// Opens a journal entry for a specific date
-    /// 
+    ///
     /// Note: This is a convenience method used in tests and integration tests.
     #[allow(dead_code)]
     pub fn open_specific_entry(&self, date: NaiveDate) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Specific(date))
     }
 }
-

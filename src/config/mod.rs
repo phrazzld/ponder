@@ -92,7 +92,7 @@ impl Config {
     /// let config = Config::new();
     /// assert_eq!(config.editor, "vim");
     /// ```
-    /// 
+    ///
     /// Note: For normal application usage, prefer `Config::load()` which populates
     /// the configuration from environment variables with sensible defaults.
     #[allow(dead_code)]
@@ -293,14 +293,14 @@ mod tests {
         // Store original environment variables to restore later
         let orig_editor = env::var("EDITOR").ok();
         let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
-        
+
         // Explicitly unset both variables
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
 
         // Run the test
         let config = Config::load().unwrap();
-        
+
         // Restore environment
         if let Some(val) = orig_editor {
             env::set_var("EDITOR", val);
@@ -308,7 +308,7 @@ mod tests {
         if let Some(val) = orig_ponder_editor {
             env::set_var("PONDER_EDITOR", val);
         }
-        
+
         assert_eq!(config.editor, "vim");
     }
 
@@ -321,7 +321,7 @@ mod tests {
         let orig_editor = env::var("EDITOR").ok();
         let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
         let orig_ponder_dir = env::var("PONDER_DIR").ok();
-        
+
         // Explicitly unset all variables
         env::remove_var("PONDER_EDITOR");
         env::remove_var("EDITOR");
@@ -340,7 +340,7 @@ mod tests {
         // Restore environment
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
-        
+
         if let Some(val) = orig_editor {
             env::set_var("EDITOR", val);
         }

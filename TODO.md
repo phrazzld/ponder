@@ -310,7 +310,7 @@
     - **Verification:**
         1. Manually test key CLI functionality to ensure no regressions.
     - **Depends‑on:** All tickets needed for a complete implementation
-- [ ] **T030 · Chore · P1: run linting and formatting checks**
+- [x] **T030 · Chore · P1: run linting and formatting checks**
     - **Context:** REMEDIATION_PLAN.md - Section 6
     - **Action:**
         1. Run `cargo clippy --all-targets -- -D warnings`.
