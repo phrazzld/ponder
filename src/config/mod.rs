@@ -287,37 +287,69 @@ mod tests {
 
     #[test]
     fn test_load_with_default_editor() {
+        // Fully reset environment variables
         setup();
 
-        // Make sure EDITOR is not set from previous tests
+        // Store original environment variables to restore later
+        let orig_editor = env::var("EDITOR").ok();
+        let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
+        
+        // Explicitly unset both variables
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
 
-        // Neither PONDER_EDITOR nor EDITOR is set
+        // Run the test
         let config = Config::load().unwrap();
+        
+        // Restore environment
+        if let Some(val) = orig_editor {
+            env::set_var("EDITOR", val);
+        }
+        if let Some(val) = orig_ponder_editor {
+            env::set_var("PONDER_EDITOR", val);
+        }
+        
         assert_eq!(config.editor, "vim");
     }
 
     #[test]
     fn test_load_with_editor_env() {
-        // Clear all environment variables before this test
+        // Fully reset environment variables
+        setup();
+
+        // Store original environment variables to restore later
+        let orig_editor = env::var("EDITOR").ok();
+        let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
+        
+        // Explicitly unset all variables
         env::remove_var("PONDER_EDITOR");
         env::remove_var("EDITOR");
         env::remove_var("PONDER_DIR");
 
-        // Set EDITOR
+        // Test EDITOR environment variable
         env::set_var("EDITOR", "nano");
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "nano");
 
-        // PONDER_EDITOR should take precedence
+        // Test PONDER_EDITOR taking precedence
         env::set_var("PONDER_EDITOR", "code");
         let config = Config::load().unwrap();
         assert_eq!(config.editor, "code");
 
-        // Clean up environment variables
+        // Restore environment
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
+        
+        if let Some(val) = orig_editor {
+            env::set_var("EDITOR", val);
+        }
+        if let Some(val) = orig_ponder_editor {
+            env::set_var("PONDER_EDITOR", val);
+        }
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        }
     }
 
     #[test]

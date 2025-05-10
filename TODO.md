@@ -299,7 +299,7 @@
     - **Depends‑on:** [T027]
 
 ## Final Verification
-- [ ] **T029 · Test · P1: run comprehensive test suite to verify all changes**
+- [x] **T029 · Test · P1: run comprehensive test suite to verify all changes**
     - **Context:** REMEDIATION_PLAN.md - Section 6
     - **Action:**
         1. Run all unit tests: `cargo test --all`.

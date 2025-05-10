@@ -366,10 +366,12 @@ mod journal_tests {
             }
         }
         
+        #[allow(dead_code)]
         fn set_should_fail(&mut self, should_fail: bool) {
             self.should_fail = should_fail;
         }
         
+        #[allow(dead_code)]
         fn set_failure_error(&mut self, error: AppError) {
             self.failure_error = Some(error);
         }
