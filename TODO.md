@@ -286,7 +286,7 @@
     - **Verification:**
         1. Manually test CLI commands using different date specifications (today, retro, reminisce) to ensure they still work correctly.
     - **Depends‑on:** [T015]
-- [ ] **T028 · Refactor · P2: replace magic numbers in reminisce logic with named constants**
+- [x] **T028 · Refactor · P2: replace magic numbers in reminisce logic with named constants**
     - **Context:** REMEDIATION_PLAN.md - Section 3.6, Step 2
     - **Action:**
         1. Open `src/journal/mod.rs` or other relevant files with reminisce logic.

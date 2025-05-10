@@ -21,6 +21,13 @@ use chrono::{Duration, Local, Months, NaiveDate};
 use io::JournalIO;
 use std::path::{Path, PathBuf};
 
+// Constants for date calculations
+const REMINISCE_ONE_MONTH_AGO: u32 = 1;
+const REMINISCE_THREE_MONTHS_AGO: u32 = 3;
+const REMINISCE_SIX_MONTHS_AGO: u32 = 6;
+const MONTHS_PER_YEAR: u32 = 12;
+const MAX_REMINISCE_YEARS_AGO: u32 = 100;
+
 /// Represents different ways to specify a date or set of dates for journal entries.
 ///
 /// This enum is used to represent the different modes of selecting journal entries:
@@ -168,19 +175,19 @@ impl DateSpecifier {
                 let mut dates = Vec::new();
 
                 // Add specific month intervals
-                if let Some(date) = today.checked_sub_months(Months::new(1)) {
+                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_ONE_MONTH_AGO)) {
                     dates.push(date);
                 }
-                if let Some(date) = today.checked_sub_months(Months::new(3)) {
+                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_THREE_MONTHS_AGO)) {
                     dates.push(date);
                 }
-                if let Some(date) = today.checked_sub_months(Months::new(6)) {
+                if let Some(date) = today.checked_sub_months(Months::new(REMINISCE_SIX_MONTHS_AGO)) {
                     dates.push(date);
                 }
 
-                // Add every year ago for the past hundred years
-                for year in 1..=100 {
-                    if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
+                // Add every year ago for the past MAX_REMINISCE_YEARS_AGO years
+                for year in 1..=MAX_REMINISCE_YEARS_AGO {
+                    if let Some(date) = today.checked_sub_months(Months::new(MONTHS_PER_YEAR * year)) {
                         dates.push(date);
                     }
                 }
