@@ -38,7 +38,7 @@ fn test_journal_service_basic_flow() -> AppResult<()> {
 
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -71,7 +71,7 @@ fn test_journal_service_specific_date() -> AppResult<()> {
 
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -105,7 +105,7 @@ fn test_journal_service_retro() -> AppResult<()> {
 
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -133,7 +133,7 @@ fn test_journal_service_reminisce() -> AppResult<()> {
 
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {

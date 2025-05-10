@@ -84,7 +84,7 @@
         1. `FileSystemIO::journal_dir` field type is `PathBuf`.
         2. Code compiles (instantiations updated in next ticket).
     - **Depends‑on:** none
-- [ ] **T009 · Refactor · P0: update `filesystemio` instantiations for `pathbuf` `journal_dir`**
+- [x] **T009 · Refactor · P0: update `filesystemio` instantiations for `pathbuf` `journal_dir`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Find all places where `FileSystemIO` is instantiated (e.g., `src/main.rs`, tests).

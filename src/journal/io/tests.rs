@@ -5,34 +5,31 @@ mod io_tests {
     use chrono::{DateTime, Datelike, Local, NaiveDate};
     use std::fs::{self, File, OpenOptions};
     use std::io::{Read, Write};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use tempfile::tempdir;
 
     struct TestFileSystemIO {
-        pub journal_dir: String,
+        pub journal_dir: PathBuf,
     }
 
     impl JournalIO for TestFileSystemIO {
         fn ensure_journal_dir(&self) -> AppResult<()> {
-            let path = Path::new(&self.journal_dir);
-            if !path.exists() {
-                fs::create_dir_all(path)?;
+            if !self.journal_dir.exists() {
+                fs::create_dir_all(&self.journal_dir)?;
             }
             Ok(())
         }
 
         fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<String> {
-            Ok(format!("{}/{}.md", self.journal_dir, date.format("%Y%m%d")))
+            let filename = format!("{}.md", date.format("%Y%m%d"));
+            let filepath = self.journal_dir.join(filename);
+            Ok(filepath.to_string_lossy().to_string())
         }
 
         fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
-            Ok(format!(
-                "{}/{:04}{:02}{:02}.md",
-                self.journal_dir,
-                date.year(),
-                date.month(),
-                date.day()
-            ))
+            let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
+            let filepath = self.journal_dir.join(filename);
+            Ok(filepath.to_string_lossy().to_string())
         }
 
         fn file_exists(&self, path: &str) -> bool {
@@ -64,12 +61,12 @@ mod io_tests {
     #[test]
     fn test_file_operations() -> AppResult<()> {
         let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().to_string_lossy().to_string();
+        let journal_dir = temp_dir.path().to_path_buf();
 
         let io = TestFileSystemIO { journal_dir };
         io.ensure_journal_dir()?;
 
-        let test_path = format!("{}/test.md", io.journal_dir);
+        let test_path = io.journal_dir.join("test.md").to_string_lossy().to_string();
         let mut file = io.create_or_open_file(&test_path)?;
 
         io.append_to_file(&mut file, "Test content")?;
@@ -78,7 +75,12 @@ mod io_tests {
         assert_eq!(content, "Test content");
 
         assert!(io.file_exists(&test_path));
-        assert!(!io.file_exists(&format!("{}/nonexistent.md", io.journal_dir)));
+        assert!(!io.file_exists(
+            &io.journal_dir
+                .join("nonexistent.md")
+                .to_string_lossy()
+                .to_string()
+        ));
 
         Ok(())
     }

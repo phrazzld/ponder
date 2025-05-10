@@ -50,6 +50,7 @@ use errors::AppResult;
 use journal::io::FileSystemIO;
 use journal::{DateSpecifier, JournalService};
 use log::{debug, error, info};
+use std::path::PathBuf;
 
 /// The main entry point for the ponder application.
 ///
@@ -110,7 +111,7 @@ fn main() -> AppResult<()> {
     // Initialize I/O, editor, and journal service
     info!("Initializing journal service");
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.to_string_lossy().to_string(),
+        journal_dir: config.journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
