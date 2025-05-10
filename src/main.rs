@@ -50,7 +50,6 @@ use errors::AppResult;
 use journal::io::FileSystemIO;
 use journal::{DateSpecifier, JournalService};
 use log::{debug, error, info};
-use std::path::PathBuf;
 
 /// The main entry point for the ponder application.
 ///

@@ -138,7 +138,7 @@
         1. `JournalService` correctly interacts with `Editor` and `JournalIO` using new path types.
         2. Code compiles and relevant `JournalService` tests pass.
     - **Depends‑on:** [T006, T007, T011, T013]
-- [ ] **T015 · Refactor · P0: update `main.rs` to use new path types when calling `filesystemio` and `journalservice`**
+- [x] **T015 · Refactor · P0: update `main.rs` to use new path types when calling `filesystemio` and `journalservice`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 3
     - **Action:**
         1. Open `src/main.rs`.
