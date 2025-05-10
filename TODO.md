@@ -111,7 +111,7 @@
         1. `FileSystemIO` path generation methods are updated and compile.
         2. Relevant unit tests pass.
     - **Depends‑on:** [T008, T010]
-- [ ] **T012 · Refactor · P0: update `journalio` trait methods accepting paths to use `asref<path>` or `&path`**
+- [x] **T012 · Refactor · P0: update `journalio` trait methods accepting paths to use `asref<path>` or `&path`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Open `src/journal/io/mod.rs`.

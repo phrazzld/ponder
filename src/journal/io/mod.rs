@@ -40,12 +40,11 @@ mod tests;
 ///
 /// // Generate a path for today's entry
 /// let path_buf = io.generate_path_for_date(Local::now())?;
-/// let path = path_buf.to_string_lossy().to_string();
 ///
 /// // Check if the file exists
-/// if !io.file_exists(&path) {
+/// if !io.file_exists(&path_buf) {
 ///     // Create a new file and write to it
-///     let mut file = io.create_or_open_file(&path)?;
+///     let mut file = io.create_or_open_file(&path_buf)?;
 ///     io.append_to_file(&mut file, "# New Journal Entry\n\n")?;
 /// }
 /// # Ok(())
@@ -94,7 +93,7 @@ pub trait JournalIO {
     /// # Returns
     ///
     /// `true` if the file exists, `false` otherwise.
-    fn file_exists(&self, path: &str) -> bool;
+    fn file_exists(&self, path: &Path) -> bool;
 
     /// Creates a new file or opens an existing file at the specified path.
     ///
@@ -106,7 +105,7 @@ pub trait JournalIO {
     ///
     /// A Result containing either the opened File or an AppError
     /// if file creation/opening failed.
-    fn create_or_open_file(&self, path: &str) -> AppResult<File>;
+    fn create_or_open_file(&self, path: &Path) -> AppResult<File>;
 
     /// Reads the content of a file as a string.
     ///
@@ -118,7 +117,7 @@ pub trait JournalIO {
     ///
     /// A Result containing either the file content as a String
     /// or an AppError if file reading failed.
-    fn read_file_content(&self, path: &str) -> AppResult<String>;
+    fn read_file_content(&self, path: &Path) -> AppResult<String>;
 
     /// Appends content to a file.
     ///
