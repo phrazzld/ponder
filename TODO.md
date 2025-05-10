@@ -272,7 +272,7 @@
     - **Depends‑on:** [T020]
 
 ## Logical Refinements
-- [ ] **T027 · Refactor · P2: centralize date calculation logic in `datespecifier`**
+- [x] **T027 · Refactor · P2: centralize date calculation logic in `datespecifier`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.6, Step 1
     - **Action:**
         1. Open `src/journal/mod.rs` (for `DateSpecifier` and `JournalService`).

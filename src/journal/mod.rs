@@ -148,8 +148,11 @@ impl DateSpecifier {
 
     /// Gets the relevant dates for this date specifier
     /// 
-    /// Note: This method is used in tests to verify date calculations.
-    #[allow(dead_code)]
+    /// This method calculates and returns the dates corresponding to the date specifier:
+    /// - For Today: returns just today's date
+    /// - For Retro: returns dates from the past 7 days
+    /// - For Reminisce: returns dates from 1 month ago, 3 months ago, 6 months ago, and yearly anniversaries
+    /// - For Specific: returns the specified date
     pub fn get_dates(&self) -> Vec<NaiveDate> {
         match self {
             DateSpecifier::Today => {
@@ -469,11 +472,14 @@ impl JournalService {
     /// ```
     pub fn get_retro_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
-
-        for i in (1..=7).rev() {
-            let date = Local::now() - Duration::days(i);
-            let path = self.io.generate_path_for_date(date)?;
-
+        
+        // Use DateSpecifier to get dates from the past 7 days
+        let dates = DateSpecifier::Retro.get_dates();
+        
+        // Check for existing entries on each date
+        for date in dates {
+            let path = self.io.generate_path_for_naive_date(date)?;
+            
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
@@ -485,42 +491,18 @@ impl JournalService {
     /// Gets paths to entries from significant past dates (1 month ago, 3 months ago, yearly)
     pub fn get_reminisce_entries(&self) -> AppResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
-        let now = Local::now();
-        let today = now.naive_local().date();
-
-        let mut dates = Vec::new();
-
-        // Add specific month intervals
-        if let Some(date) = today.checked_sub_months(Months::new(1)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(3)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(6)) {
-            dates.push(date);
-        }
-
-        // Add every year ago for the past hundred years
-        for year in 1..=100 {
-            if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
-                dates.push(date);
-            }
-        }
-
-        // Remove duplicates and sort the dates
-        dates.sort();
-        dates.dedup();
-
-        // Collect paths for existing entries
+        
+        // Use DateSpecifier to calculate significant past dates
+        let dates = DateSpecifier::Reminisce.get_dates();
+        
+        // Check for existing entries on each date
         for date in dates {
             let path = self.io.generate_path_for_naive_date(date)?;
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
         }
-
-        paths.reverse();
+        
         Ok(paths)
     }
 
