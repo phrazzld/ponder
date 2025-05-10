@@ -160,7 +160,7 @@
     - **Done‑when:**
         1. All `#[allow(dead_code)]` instances in `src/cli/mod.rs` are reviewed and documented.
     - **Depends‑on:** [T003]
-- [ ] **T017 · Refactor · P0: review `#[allow(dead_code)]` in `src/config/mod.rs`**
+- [x] **T017 · Refactor · P0: review `#[allow(dead_code)]` in `src/config/mod.rs`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.3
     - **Action:**
         1. Open `src/config/mod.rs`.
