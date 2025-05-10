@@ -151,7 +151,7 @@
     - **Depends‑on:** [T009, T014]
 
 ## Code Cleanup
-- [ ] **T016 · Refactor · P0: review `#[allow(dead_code)]` in `src/cli/mod.rs`**
+- [x] **T016 · Refactor · P0: review `#[allow(dead_code)]` in `src/cli/mod.rs`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.3
     - **Action:**
         1. Open `src/cli/mod.rs`.
