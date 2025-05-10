@@ -39,7 +39,8 @@ mod tests;
 /// io.ensure_journal_dir()?;
 ///
 /// // Generate a path for today's entry
-/// let path = io.generate_path_for_date(Local::now())?;
+/// let path_buf = io.generate_path_for_date(Local::now())?;
+/// let path = path_buf.to_string_lossy().to_string();
 ///
 /// // Check if the file exists
 /// if !io.file_exists(&path) {
@@ -68,9 +69,9 @@ pub trait JournalIO {
     ///
     /// # Returns
     ///
-    /// A Result containing either the generated path as a String
+    /// A Result containing either the generated path as a PathBuf
     /// or an AppError if path generation failed.
-    fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<String>;
+    fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<PathBuf>;
 
     /// Generates a file path for a journal entry from a NaiveDate.
     ///
@@ -80,9 +81,9 @@ pub trait JournalIO {
     ///
     /// # Returns
     ///
-    /// A Result containing either the generated path as a String
+    /// A Result containing either the generated path as a PathBuf
     /// or an AppError if path generation failed.
-    fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String>;
+    fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<PathBuf>;
 
     /// Checks if a file exists at the specified path.
     ///

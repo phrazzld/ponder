@@ -93,7 +93,7 @@
         1. All instantiations of `FileSystemIO` correctly use `PathBuf` for `journal_dir`.
         2. Code compiles.
     - **Depends‑on:** [T008]
-- [ ] **T010 · Refactor · P0: change `journalio` trait path generation methods to return `appresult<pathbuf>`**
+- [x] **T010 · Refactor · P0: change `journalio` trait path generation methods to return `appresult<pathbuf>`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Open `src/journal/io/mod.rs`.
