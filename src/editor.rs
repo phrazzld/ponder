@@ -121,43 +121,139 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
-    struct MockEditor {
+    /// Mock implementation of Editor for testing purposes.
+    ///
+    /// This mock captures opened files and can be configured to succeed or fail.
+    /// It allows testing both success and error paths in code that uses an Editor.
+    pub struct MockEditor {
+        /// Records file paths that were opened through this editor.
         pub opened_files: Arc<Mutex<Vec<PathBuf>>>,
+        /// Controls whether the editor should fail when opening files.
+        pub should_fail: bool,
+        /// The error to return when `should_fail` is true.
+        pub failure_error: Option<AppError>,
     }
 
     impl MockEditor {
+        /// Creates a new MockEditor instance that succeeds by default.
         fn new() -> Self {
             MockEditor {
                 opened_files: Arc::new(Mutex::new(Vec::new())),
+                should_fail: false,
+                failure_error: None,
             }
+        }
+        
+        /// Configures the MockEditor to fail with the specified error.
+        fn with_failure(error: AppError) -> Self {
+            MockEditor {
+                opened_files: Arc::new(Mutex::new(Vec::new())),
+                should_fail: true,
+                failure_error: Some(error),
+            }
+        }
+        
+        /// Configures whether this editor should fail when opening files.
+        fn set_should_fail(&mut self, should_fail: bool) {
+            self.should_fail = should_fail;
+        }
+        
+        /// Sets the error to return when `should_fail` is true.
+        fn set_failure_error(&mut self, error: AppError) {
+            self.failure_error = Some(error);
         }
     }
 
     impl Editor for MockEditor {
         fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
+            // Record the files that were attempted to be opened
             let mut opened = self.opened_files.lock().unwrap();
             for &path in paths {
                 opened.push(path.to_path_buf());
             }
+            
+            // If configured to fail, return the specified error or a default one
+            if self.should_fail {
+                return match &self.failure_error {
+                    Some(error) => Err(error.clone()),
+                    None => Err(AppError::Editor("Mock editor failed by configuration".to_string())),
+                };
+            }
+            
             Ok(())
         }
     }
 
     #[test]
-    fn test_mock_editor_open_files() {
+    fn test_mock_editor_open_files_success() {
         let editor = MockEditor::new();
         let file1 = Path::new("file1.md");
         let file2 = Path::new("file2.md");
         let paths = [file1, file2];
 
-        // Open files
-        editor.open_files(&paths).unwrap();
+        // Open files - should succeed by default
+        let result = editor.open_files(&paths);
+        assert!(result.is_ok());
 
         // Check that the files were recorded
         let opened = editor.opened_files.lock().unwrap();
         assert_eq!(opened.len(), 2);
         assert_eq!(opened[0], Path::new("file1.md"));
         assert_eq!(opened[1], Path::new("file2.md"));
+    }
+    
+    #[test]
+    fn test_mock_editor_open_files_failure() {
+        // Create a MockEditor configured to fail
+        let error = AppError::Editor("Test error".to_string());
+        let editor = MockEditor::with_failure(error);
+        
+        let file = Path::new("file.md");
+        let paths = [file];
+        
+        // Attempt to open files - should fail
+        let result = editor.open_files(&paths);
+        assert!(result.is_err());
+        
+        // The error should match our configured error
+        match result {
+            Err(AppError::Editor(msg)) => assert!(msg.contains("Test error")),
+            _ => panic!("Unexpected error type"),
+        }
+        
+        // Even though it failed, the files should still be recorded
+        let opened = editor.opened_files.lock().unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0], Path::new("file.md"));
+    }
+    
+    #[test]
+    fn test_mock_editor_set_failure_behavior() {
+        // Start with a successful editor
+        let mut editor = MockEditor::new();
+        let file = Path::new("file.md");
+        let paths = [file];
+        
+        // Should succeed initially
+        assert!(editor.open_files(&paths).is_ok());
+        
+        // Configure to fail
+        editor.set_should_fail(true);
+        editor.set_failure_error(AppError::Editor("Configured failure".to_string()));
+        
+        // Should fail now
+        let result = editor.open_files(&paths);
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Editor(msg)) => assert!(msg.contains("Configured failure")),
+            _ => panic!("Unexpected error type"),
+        }
+        
+        // Reset to success
+        editor.set_should_fail(false);
+        
+        // Should succeed again
+        assert!(editor.open_files(&paths).is_ok());
     }
 
     #[test]

@@ -56,6 +56,17 @@ pub enum AppError {
     Editor(String),
 }
 
+impl Clone for AppError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Config(msg) => Self::Config(msg.clone()),
+            Self::Io(err) => Self::Io(std::io::Error::new(err.kind(), err.to_string())),
+            Self::Journal(msg) => Self::Journal(msg.clone()),
+            Self::Editor(msg) => Self::Editor(msg.clone()),
+        }
+    }
+}
+
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
 ///
 /// This type alias is used throughout the application to represent operations

@@ -211,7 +211,7 @@
     - **Verification:**
         1. Verify all file operations (read, write, create) are correctly tested.
     - **Depends‑on:** [T009]
-- [ ] **T022 · Test · P1: enhance `mockeditor` with configurable success/failure behavior**
+- [x] **T022 · Test · P1: enhance `mockeditor` with configurable success/failure behavior**
     - **Context:** REMEDIATION_PLAN.md - Section 3.4, Step 2
     - **Action:**
         1. Open `src/editor.rs`.
