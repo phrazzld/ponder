@@ -199,7 +199,7 @@
     - **Depends‑on:** [T016, T017, T018, T019]
 
 ## Test Infrastructure
-- [ ] **T021 · Test · P1: refactor `filesystemio` tests to use actual struct with `tempfile`**
+- [x] **T021 · Test · P1: refactor `filesystemio` tests to use actual struct with `tempfile`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.4, Step 1
     - **Action:**
         1. Open `src/journal/io/tests.rs`.
