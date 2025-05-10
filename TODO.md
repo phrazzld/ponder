@@ -102,7 +102,7 @@
         1. Path generation method signatures in the `JournalIO` trait are updated.
         2. Code compiles (implementations updated in next ticket).
     - **Depends‑on:** none
-- [ ] **T011 · Refactor · P0: update `filesystemio` path generation method implementations to return `appresult<pathbuf>`**
+- [x] **T011 · Refactor · P0: update `filesystemio` path generation method implementations to return `appresult<pathbuf>`**
     - **Context:** REMEDIATION_PLAN.md - Section 3.2, Step 2
     - **Action:**
         1. Open `src/journal/io/mod.rs`.

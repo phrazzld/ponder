@@ -166,16 +166,16 @@ impl JournalIO for FileSystemIO {
         Ok(())
     }
 
-    fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<String> {
+    fn generate_path_for_date(&self, date: DateTime<Local>) -> AppResult<PathBuf> {
         let filename = format!("{}.md", date.format("%Y%m%d"));
         let filepath = self.journal_dir.join(filename);
-        Ok(filepath.to_string_lossy().to_string())
+        Ok(filepath)
     }
 
-    fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<String> {
+    fn generate_path_for_naive_date(&self, date: NaiveDate) -> AppResult<PathBuf> {
         let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
         let filepath = self.journal_dir.join(filename);
-        Ok(filepath.to_string_lossy().to_string())
+        Ok(filepath)
     }
 
     fn file_exists(&self, path: &str) -> bool {
