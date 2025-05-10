@@ -342,21 +342,52 @@ mod journal_tests {
         }
     }
 
+    // Enhanced MockEditor for test use - includes success/failure configuration
     struct MockEditor {
         opened_files: RefCell<Vec<Vec<PathBuf>>>,
+        should_fail: bool,
+        failure_error: Option<AppError>,
     }
 
     impl MockEditor {
         fn new() -> Self {
             MockEditor {
                 opened_files: RefCell::new(Vec::new()),
+                should_fail: false,
+                failure_error: None,
             }
+        }
+        
+        fn with_failure(error: AppError) -> Self {
+            MockEditor {
+                opened_files: RefCell::new(Vec::new()),
+                should_fail: true,
+                failure_error: Some(error),
+            }
+        }
+        
+        fn set_should_fail(&mut self, should_fail: bool) {
+            self.should_fail = should_fail;
+        }
+        
+        fn set_failure_error(&mut self, error: AppError) {
+            self.failure_error = Some(error);
         }
     }
 
     impl Editor for MockEditor {
         fn open_files(&self, paths: &[&Path]) -> AppResult<()> {
+            // Record the files that were attempted to be opened
             self.opened_files.borrow_mut().push(paths.iter().map(|&p| p.to_path_buf()).collect());
+            
+            // If configured to fail, return the specified error or a default one
+            if self.should_fail {
+                return match &self.failure_error {
+                    Some(error) => Err(error.clone()),
+                    None => Err(AppError::Editor("Mock editor failed by configuration".to_string())),
+                };
+            }
+            
             Ok(())
         }
     }
@@ -398,6 +429,175 @@ mod journal_tests {
         // This will not work in the test since we return an error in create_or_open_file
         // That's expected and we're just testing the logic flow
         let _ = service.open_entries(&DateSpecifier::Today);
+    }
+    
+    #[test]
+    fn test_journal_service_editor_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Configure the IO to succeed for this test
+        io.configure_for_success();
+        let io_ptr = Box::new(io);
+
+        // Configure the editor to fail with a specific error
+        let editor_error = AppError::Editor("Failed to launch editor".to_string());
+        let editor = MockEditor::with_failure(editor_error);
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Try to open today's entry - should fail because the editor is configured to fail
+        let result = service.open_entries(&DateSpecifier::Today);
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Editor(msg)) => {
+                assert!(msg.contains("Failed to launch editor"));
+            }
+            _ => panic!("Expected Editor error"),
+        }
+    }
+    
+    #[test]
+    fn test_journal_service_path_generation_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Configure the path generation to fail
+        io.set_generate_path_should_fail(true);
+        io.set_generate_path_error(AppError::Journal("Path generation failed".to_string()));
+        let io_ptr = Box::new(io);
+
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Try to open today's entry - should fail because path generation is configured to fail
+        let result = service.open_entries(&DateSpecifier::Today);
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Path generation failed"));
+            }
+            _ => panic!("Expected Journal error for path generation"),
+        }
+        
+        // The same failure should occur for other date specifiers too
+        let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+        let result = service.open_entries(&DateSpecifier::Specific(specific_date));
+        assert!(result.is_err());
+        
+        let result = service.open_entries(&DateSpecifier::Retro);
+        assert!(result.is_err());
+        
+        let result = service.open_entries(&DateSpecifier::Reminisce);
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_journal_service_file_creation_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Keep create_or_open_should_fail as true (the default)
+        io.set_create_or_open_error(AppError::Journal("Cannot create file".to_string()));
+        let io_ptr = Box::new(io);
+
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Try to open today's entry - should fail because file creation is configured to fail
+        let result = service.open_entries(&DateSpecifier::Today);
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Cannot create file"));
+            }
+            _ => panic!("Expected Journal error for file creation"),
+        }
+    }
+    
+    #[test]
+    fn test_journal_service_file_read_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Configure file creation to succeed but reading to fail
+        io.set_create_or_open_should_fail(false);
+        io.set_read_content_should_fail(true);
+        io.set_read_content_error(AppError::Journal("Cannot read file".to_string()));
+        let io_ptr = Box::new(io);
+
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Try to open today's entry - should fail because file reading is configured to fail
+        let result = service.open_entries(&DateSpecifier::Today);
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Cannot read file"));
+            }
+            _ => panic!("Expected Journal error for file reading"),
+        }
+    }
+    
+    #[test]
+    fn test_journal_service_file_append_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Configure creation and reading to succeed but appending to fail
+        io.set_create_or_open_should_fail(false);
+        io.set_read_content_should_fail(false);
+        io.set_append_should_fail(true);
+        io.set_append_error(AppError::Journal("Cannot append to file".to_string()));
+        let io_ptr = Box::new(io);
+
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Try to open today's entry - should fail because file appending is configured to fail
+        let result = service.open_entries(&DateSpecifier::Today);
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Cannot append to file"));
+            }
+            _ => panic!("Expected Journal error for file appending"),
+        }
     }
 
     #[test]
@@ -476,6 +676,79 @@ mod journal_tests {
         // Test with a specific date
         let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
         let _ = service.open_specific_entry(specific_date);
+    }
+    
+    #[test]
+    fn test_journal_service_ensure_journal_dir_failure() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        let mut io = MockJournalIO::new();
+        // Configure ensure_journal_dir to fail
+        io.set_ensure_dir_should_fail(true);
+        io.set_ensure_dir_error(AppError::Journal("Cannot create journal directory".to_string()));
+        let io_ptr = Box::new(io);
+
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+
+        // Create a method that explicitly calls ensure_journal_dir
+        let result = service.io.ensure_journal_dir();
+        
+        // Verify the error
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Cannot create journal directory"));
+            }
+            _ => panic!("Expected Journal error for directory creation"),
+        }
+    }
+    
+    #[test]
+    fn test_journal_service_retro_entries_with_custom_file_exists() {
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: PathBuf::from("/test/journal/dir"),
+        };
+
+        // Create a MockJournalIO with custom file_exists settings
+        let mut io = MockJournalIO::new();
+        io.configure_for_success();
+        io.set_default_exists_result(false); // Default: files don't exist
+        
+        // Set a specific path to exist
+        let today = Local::now().naive_local().date();
+        let specific_date = today - Duration::days(3);
+        let path = io.journal_dir.join(format!("{:04}{:02}{:02}.md", 
+                                              specific_date.year(),
+                                              specific_date.month(),
+                                              specific_date.day()));
+        io.set_file_exists_result(path, true);
+        
+        let io_ptr = Box::new(io);
+        let editor = MockEditor::new();
+        let editor_ptr = Box::new(editor);
+
+        let service = JournalService::new(config, io_ptr, editor_ptr);
+        
+        // Get retro entries - should only include the one we configured to exist
+        let result = service.get_retro_entries();
+        assert!(result.is_ok());
+        
+        let paths = result.unwrap();
+        assert_eq!(paths.len(), 1); // Only one path should exist
+        
+        // Make sure it's the path we expect
+        let path_string = paths[0].to_string_lossy();
+        assert!(path_string.contains(&format!("{:04}{:02}{:02}", 
+                                             specific_date.year(),
+                                             specific_date.month(),
+                                             specific_date.day())));
     }
     
     // Tests for our enhanced MockJournalIO

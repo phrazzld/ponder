@@ -236,7 +236,7 @@
     - **Verification:**
         1. Add tests that verify both success and error paths using the new configuration options.
     - **Depends‑on:** [T011, T013]
-- [ ] **T024 · Test · P1: update tests to use enhanced mocks for thorough coverage**
+- [x] **T024 · Test · P1: update tests to use enhanced mocks for thorough coverage**
     - **Context:** REMEDIATION_PLAN.md - Section 3.4, Step 2
     - **Action:**
         1. Find tests that use `MockEditor` and `MockJournalIO`.
