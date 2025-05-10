@@ -224,7 +224,7 @@
     - **Verification:**
         1. Add tests that verify both success and error paths using the new configuration options.
     - **Depends‑on:** [T007]
-- [ ] **T023 · Test · P1: enhance `mockjournalio` with configurable return values and error conditions**
+- [x] **T023 · Test · P1: enhance `mockjournalio` with configurable return values and error conditions**
     - **Context:** REMEDIATION_PLAN.md - Section 3.4, Step 2
     - **Action:**
         1. Create/Find the `MockJournalIO` implementation.
