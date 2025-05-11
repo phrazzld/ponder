@@ -126,7 +126,7 @@ impl CliArgs {
     /// let args = CliArgs::parse_from(["ponder", "--date", "invalid"]);
     /// assert!(args.parse_date().unwrap().is_err());
     /// ```
-    /// 
+    ///
     /// Note: This method is primarily used for testing purposes and may be useful
     /// for applications that need to perform custom date parsing.
     #[allow(dead_code)]
@@ -140,7 +140,6 @@ impl CliArgs {
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
