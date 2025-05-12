@@ -103,7 +103,7 @@
         3. `cargo clippy --all-targets -- -D warnings` passes regarding this change.
     - **Depends‑on:** none
 
-- [ ] **T026 · Refactor · P1: scope `Config::new()` to tests and remove `dead_code` suppression**
+- [x] **T026 · Refactor · P1: scope `Config::new()` to tests and remove `dead_code` suppression**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 3 (`src/config/mod.rs:85`)
     - **Action:**
         1. In `src/config/mod.rs`, move `Config::new()` into a `#[cfg(test)] mod tests { ... }` block, or change its signature to `#[cfg(test)] pub fn new() ...`.
