@@ -136,7 +136,7 @@
         3. `cargo clippy --all-targets -- -D warnings` passes regarding these changes.
     - **Depends‑on:** none
 
-- [ ] **T029 · Refactor · P0: perform final `dead_code` sweep and fix any remaining issues**
+- [x] **T029 · Refactor · P0: perform final `dead_code` sweep and fix any remaining issues**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 6
     - **Action:**
         1. Run `cargo clippy --all-targets -- -D warnings`.
