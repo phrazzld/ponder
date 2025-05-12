@@ -529,7 +529,7 @@ impl JournalService {
             DateSpecifier::Retro => {
                 let paths = self.get_retro_entries()?;
                 if paths.is_empty() {
-                    println!("No entries found for the past week");
+                    log::info!("No entries found for the past week");
                     return Ok(());
                 }
                 // Convert Vec<PathBuf> to Vec<&Path>
@@ -539,7 +539,7 @@ impl JournalService {
             DateSpecifier::Reminisce => {
                 let paths = self.get_reminisce_entries()?;
                 if paths.is_empty() {
-                    println!("No entries found for reminisce intervals");
+                    log::info!("No entries found for reminisce intervals");
                     return Ok(());
                 }
                 // Convert Vec<PathBuf> to Vec<&Path>
