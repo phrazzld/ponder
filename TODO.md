@@ -159,7 +159,7 @@
         1. Observe log output for correct JSON structure and content for the specified messages.
     - **Depends‑on:** [T021, T022, T023]
 
-- [ ] **T031 · Chore · P0: update `TODO.md` to mark tasks T016-T020 as complete**
+- [x] **T031 · Chore · P0: update `TODO.md` to mark tasks T016-T020 as complete**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Done-When
     - **Action:**
         1. After successfully implementing all `dead_code` remediation tasks, update `TODO.md` to mark tasks T016-T020 as complete (`[x]`).
