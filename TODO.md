@@ -148,7 +148,7 @@
     - **Depends‑on:** [T025, T026, T027, T028]
 
 ## Final Verification
-- [ ] **T030 · Test · P1: manually verify operational messages are output via structured logging**
+- [x] **T030 · Test · P1: manually verify operational messages are output via structured logging**
     - **Context:** Remediation Plan – Sprint 1 / Validation Checklist & cr-02 / Done-When
     - **Action:**
         1. Run the application in a way that triggers the log messages modified in T021 and T022.
