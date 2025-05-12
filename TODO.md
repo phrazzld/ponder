@@ -62,7 +62,7 @@
         1. All `#[allow(dead_code)]` instances in `src/journal/io/mod.rs` are reviewed and documented.
     - **Depends‑on:** none
 
-- [ ] **T019 · Refactor · P0: review `#[allow(dead_code)]` in `src/journal/mod.rs`**
+- [x] **T019 · Refactor · P0: review `#[allow(dead_code)]` in `src/journal/mod.rs`**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 5
     - **Action:**
         1. Review all instances of `#[allow(dead_code)]` in `src/journal/mod.rs`.
