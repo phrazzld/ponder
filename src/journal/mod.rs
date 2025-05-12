@@ -247,6 +247,7 @@ impl DateSpecifier {
 /// ```
 pub struct JournalService {
     /// Configuration settings for the journal service
+    #[allow(dead_code)] // Used only in test-only methods
     config: Config,
 
     /// I/O abstraction for file operations

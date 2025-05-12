@@ -92,7 +92,7 @@
         1. `TODO.md` tasks T016-T020 are marked as `[ ]`.
     - **Depends‑on:** none
 
-- [ ] **T025 · Refactor · P1: scope `CliArgs::parse_date()` to tests and remove `dead_code` suppression**
+- [x] **T025 · Refactor · P1: scope `CliArgs::parse_date()` to tests and remove `dead_code` suppression**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 2 (`src/cli/mod.rs:155`)
     - **Action:**
         1. In `src/cli/mod.rs`, move `CliArgs::parse_date()` into a `#[cfg(test)] mod tests { ... }` block, or change its signature to `#[cfg(test)] pub fn parse_date(&self) ...`.

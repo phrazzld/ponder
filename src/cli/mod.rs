@@ -6,6 +6,11 @@
 
 use clap::{ArgGroup, Parser};
 
+#[cfg(test)]
+use chrono::NaiveDate;
+#[cfg(test)]
+use std::str::FromStr;
+
 /// Command-line arguments for the ponder application.
 ///
 /// This struct is automatically populated by clap from the command-line arguments.
