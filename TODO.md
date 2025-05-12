@@ -125,7 +125,7 @@
         2. `cargo clippy --all-targets -- -D warnings` passes regarding this change.
     - **Depends‑on:** none
 
-- [ ] **T028 · Refactor · P1: scope `JournalService` test-only `pub` methods to tests and remove `dead_code` suppressions**
+- [x] **T028 · Refactor · P1: scope `JournalService` test-only `pub` methods to tests and remove `dead_code` suppressions**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 5 (`src/journal/mod.rs`)
     - **Action:**
         1. For methods like `get_editor_cmd`, `get_journal_dir`, `open_entry`, etc., in `src/journal/mod.rs` marked with `#[allow(dead_code)]` and intended only for tests: move these methods into a `#[cfg(test)] mod tests { ... }` block or change their signatures to `#[cfg(test)] pub fn method_name(...)`.

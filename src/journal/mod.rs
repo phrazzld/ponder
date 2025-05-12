@@ -240,15 +240,15 @@ impl DateSpecifier {
 /// });
 ///
 /// // Create the journal service
-/// let journal_service = JournalService::new(config, io, editor);
+/// let journal_service = JournalService::new(config, io, editor).expect("Failed to create journal service");
 ///
-/// // Use the service to open today's entry
-/// journal_service.open_entry().expect("Failed to open today's entry");
+/// // Use the service to open entries for today
+/// journal_service.open_entries(&DateSpecifier::Today).expect("Failed to open today's entry");
 /// ```
 pub struct JournalService {
-    /// Configuration settings for the journal service
-    #[allow(dead_code)] // Used only in test-only methods
-    config: Config,
+    /// Configuration settings for the journal service (only used in tests)
+    #[cfg(test)]
+    pub(crate) config: Config,
 
     /// I/O abstraction for file operations
     io: Box<dyn JournalIO>,
@@ -300,7 +300,17 @@ impl JournalService {
         // Ensure journal directory exists
         io.ensure_journal_dir()?;
         
-        Ok(JournalService { config, io, editor })
+        #[cfg(test)]
+        {
+            Ok(JournalService { config, io, editor })
+        }
+        
+        #[cfg(not(test))]
+        {
+            // In non-test builds, config is only needed for constructor but not stored
+            let _ = config; // Use the parameter to avoid unused variable warning
+            Ok(JournalService { io, editor })
+        }
     }
 
     /// Gets the editor command from the configuration.
@@ -371,7 +381,7 @@ impl JournalService {
     ///     editor_cmd: config.editor.clone(),
     /// });
     ///
-    /// let journal_service = JournalService::new(config, io, editor);
+    /// let journal_service = JournalService::new(config, io, editor)?;
     /// journal_service.append_date_time(&PathBuf::from("/path/to/journal/20230115.md"))?;
     /// # Ok(())
     /// # }
@@ -431,7 +441,7 @@ impl JournalService {
     ///     Box::new(SystemEditor {
     ///         editor_cmd: "vim".to_string(),
     ///     }),
-    /// );
+    /// )?;
     ///
     /// let path = journal_service.get_todays_entry_path()?;
     /// println!("Today's entry path: {:?}", path);
@@ -478,7 +488,7 @@ impl JournalService {
     ///     Box::new(SystemEditor {
     ///         editor_cmd: "vim".to_string(),
     ///     }),
-    /// );
+    /// )?;
     ///
     /// let paths = journal_service.get_retro_entries()?;
     /// println!("Found {} entries from the past week", paths.len());
