@@ -247,7 +247,6 @@ impl DateSpecifier {
 /// ```
 pub struct JournalService {
     /// Configuration settings for the journal service
-    #[allow(dead_code)]
     config: Config,
 
     /// I/O abstraction for file operations
@@ -296,8 +295,11 @@ impl JournalService {
     ///
     /// let journal_service = JournalService::new(config, io, editor);
     /// ```
-    pub fn new(config: Config, io: Box<dyn JournalIO>, editor: Box<dyn Editor>) -> Self {
-        JournalService { config, io, editor }
+    pub fn new(config: Config, io: Box<dyn JournalIO>, editor: Box<dyn Editor>) -> AppResult<Self> {
+        // Ensure journal directory exists
+        io.ensure_journal_dir()?;
+        
+        Ok(JournalService { config, io, editor })
     }
 
     /// Gets the editor command from the configuration.
@@ -307,7 +309,7 @@ impl JournalService {
     /// A string slice containing the editor command.
     ///
     /// Note: This method is used in tests to verify JournalService construction.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn get_editor_cmd(&self) -> &str {
         &self.config.editor
     }
@@ -319,7 +321,7 @@ impl JournalService {
     /// A reference to the PathBuf containing the journal directory path.
     ///
     /// Note: This method is used in tests and integration tests to access the journal directory.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn get_journal_dir(&self) -> &PathBuf {
         &self.config.journal_dir
     }
@@ -560,7 +562,7 @@ impl JournalService {
     /// Opens today's journal entry, creating it if it doesn't exist
     ///
     /// Note: This is a convenience method used in tests and integration tests.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn open_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Today)
     }
@@ -568,7 +570,7 @@ impl JournalService {
     /// Opens entries from the past week (excluding today)
     ///
     /// Note: This is a convenience method used in tests and integration tests.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn open_retro_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Retro)
     }
@@ -576,7 +578,7 @@ impl JournalService {
     /// Opens entries from significant past dates (1 month ago, 3 months ago, yearly anniversaries)
     ///
     /// Note: This is a convenience method used in tests and integration tests.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn open_reminisce_entry(&self) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Reminisce)
     }
@@ -584,7 +586,7 @@ impl JournalService {
     /// Opens a journal entry for a specific date
     ///
     /// Note: This is a convenience method used in tests and integration tests.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn open_specific_entry(&self, date: NaiveDate) -> AppResult<()> {
         self.open_entries(&DateSpecifier::Specific(date))
     }

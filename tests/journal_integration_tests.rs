@@ -33,12 +33,13 @@ fn set_up_test_env() -> (Config, tempfile::TempDir) {
 fn test_journal_service_basic_flow() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-    // Ensure the journal directory exists
-    config.ensure_journal_dir()?;
 
+    // Create copies of the config values so we can check results
+    let journal_dir = config.journal_dir.clone();
+    
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
+        journal_dir: journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -46,14 +47,13 @@ fn test_journal_service_basic_flow() -> AppResult<()> {
     });
 
     // Create the journal service
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor)?;
 
     // Test opening today's entry
-    journal_service.open_entry()?;
+    journal_service.open_entries(&ponder::DateSpecifier::Today)?;
 
     // Verify that a journal file was created for today
-    let journal_dir = journal_service.get_journal_dir();
-    let dir_entries = fs::read_dir(journal_dir).unwrap();
+    let dir_entries = fs::read_dir(&journal_dir).unwrap();
 
     // Should be at least one entry (today's)
     assert!(dir_entries.count() > 0);
@@ -66,12 +66,13 @@ fn test_journal_service_basic_flow() -> AppResult<()> {
 fn test_journal_service_specific_date() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-    // Ensure the journal directory exists
-    config.ensure_journal_dir()?;
 
+    // Create copies of the config values so we can check results
+    let journal_dir = config.journal_dir.clone();
+    
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
+        journal_dir: journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -79,15 +80,14 @@ fn test_journal_service_specific_date() -> AppResult<()> {
     });
 
     // Create the journal service
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor)?;
 
     // Test opening entry for a specific date
     use chrono::NaiveDate;
     let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
-    journal_service.open_specific_entry(specific_date)?;
+    journal_service.open_entries(&ponder::DateSpecifier::Specific(specific_date))?;
 
     // Verify that a journal file was created for the specific date
-    let journal_dir = journal_service.get_journal_dir();
     let expected_file = journal_dir.join("20230115.md");
 
     assert!(expected_file.exists());
@@ -100,12 +100,13 @@ fn test_journal_service_specific_date() -> AppResult<()> {
 fn test_journal_service_retro() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-    // Ensure the journal directory exists
-    config.ensure_journal_dir()?;
 
+    // Create copies of the config values so we can check results
+    let journal_dir = config.journal_dir.clone();
+    
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
+        journal_dir: journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -113,10 +114,10 @@ fn test_journal_service_retro() -> AppResult<()> {
     });
 
     // Create the journal service
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor)?;
 
     // Since we're just creating the directory, there shouldn't be any retro entries
-    journal_service.open_retro_entry()?;
+    journal_service.open_entries(&ponder::DateSpecifier::Retro)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 
@@ -128,12 +129,13 @@ fn test_journal_service_retro() -> AppResult<()> {
 fn test_journal_service_reminisce() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-    // Ensure the journal directory exists
-    config.ensure_journal_dir()?;
 
+    // Create copies of the config values so we can check results
+    let journal_dir = config.journal_dir.clone();
+    
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
+        journal_dir: journal_dir.clone(),
     });
 
     let editor = Box::new(SystemEditor {
@@ -141,10 +143,10 @@ fn test_journal_service_reminisce() -> AppResult<()> {
     });
 
     // Create the journal service
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor)?;
 
     // Since we're just creating the directory, there shouldn't be any reminisce entries
-    journal_service.open_reminisce_entry()?;
+    journal_service.open_entries(&ponder::DateSpecifier::Reminisce)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 

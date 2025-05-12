@@ -4,9 +4,7 @@
 //! It defines the CLI structure and provides methods to parse and validate
 //! command-line arguments.
 
-use chrono::NaiveDate;
 use clap::{ArgGroup, Parser};
-use std::str::FromStr;
 
 /// Command-line arguments for the ponder application.
 ///
@@ -129,7 +127,7 @@ impl CliArgs {
     ///
     /// Note: This method is primarily used for testing purposes and may be useful
     /// for applications that need to perform custom date parsing.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
         self.date.as_ref().map(|date_str| {
             // Try parsing in YYYY-MM-DD format first

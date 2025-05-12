@@ -412,7 +412,7 @@ mod journal_tests {
         let io = Box::new(MockJournalIO::new());
         let editor = Box::new(MockEditor::new());
 
-        let service = JournalService::new(config, io, editor);
+        let service = JournalService::new(config, io, editor).unwrap();
 
         assert_eq!(service.get_editor_cmd(), "test-editor");
         assert_eq!(
@@ -434,7 +434,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // This will not work in the test since we return an error in create_or_open_file
         // That's expected and we're just testing the logic flow
@@ -458,7 +458,7 @@ mod journal_tests {
         let editor = MockEditor::with_failure(editor_error);
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Try to open today's entry - should fail because the editor is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
@@ -489,7 +489,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Try to open today's entry - should fail because path generation is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
@@ -530,7 +530,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Try to open today's entry - should fail because file creation is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
@@ -562,7 +562,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Try to open today's entry - should fail because file reading is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
@@ -595,7 +595,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Try to open today's entry - should fail because file appending is configured to fail
         let result = service.open_entries(&DateSpecifier::Today);
@@ -675,7 +675,7 @@ mod journal_tests {
         let io = Box::new(TestMockJournalIO::new());
         let editor = Box::new(MockEditor::new());
 
-        let service = JournalService::new(config, io, editor);
+        let service = JournalService::new(config, io, editor).unwrap();
 
         // Test the convenience methods - no assertions needed as we just want to ensure
         // they run without panicking
@@ -706,10 +706,8 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
-
-        // Create a method that explicitly calls ensure_journal_dir
-        let result = service.io.ensure_journal_dir();
+        // This should now fail because ensure_journal_dir is called in new()
+        let result = JournalService::new(config, io_ptr, editor_ptr);
 
         // Verify the error
         assert!(result.is_err());
@@ -748,7 +746,7 @@ mod journal_tests {
         let editor = MockEditor::new();
         let editor_ptr = Box::new(editor);
 
-        let service = JournalService::new(config, io_ptr, editor_ptr);
+        let service = JournalService::new(config, io_ptr, editor_ptr).unwrap();
 
         // Get retro entries - should only include the one we configured to exist
         let result = service.get_retro_entries();

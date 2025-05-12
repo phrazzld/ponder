@@ -43,7 +43,7 @@ fn main() -> ponder::AppResult<()> {
     });
 
     // Create service and open today's journal entry
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor)?;
     journal_service.open_entries(&DateSpecifier::Today)
 }
 ```

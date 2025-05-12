@@ -132,7 +132,10 @@ fn main() -> AppResult<()> {
         editor_cmd: config.editor.clone(),
     });
 
-    let journal_service = JournalService::new(config, io, editor);
+    let journal_service = JournalService::new(config, io, editor).map_err(|e| {
+        error!("Failed to initialize journal service: {}", e);
+        e
+    })?;
 
     // Determine which entry type to open based on CLI arguments
     let date_spec = get_date_specifier_from_args(&args)?;

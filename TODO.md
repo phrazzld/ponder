@@ -72,7 +72,7 @@
         1. All `#[allow(dead_code)]` instances in `src/journal/mod.rs` are reviewed and documented.
     - **Depends‑on:** none
 
-- [ ] **T020 · Refactor · P0: implement fixes for `#[allow(dead_code)]` issues**
+- [x] **T020 · Refactor · P0: implement fixes for `#[allow(dead_code)]` issues**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 6
     - **Action:**
         1. Based on findings from T016-T019, implement the necessary fixes to eliminate `#[allow(dead_code)]` attributes.

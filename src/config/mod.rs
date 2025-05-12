@@ -95,7 +95,7 @@ impl Config {
     ///
     /// Note: For normal application usage, prefer `Config::load()` which populates
     /// the configuration from environment variables with sensible defaults.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn new() -> Self {
         Self::default()
     }
