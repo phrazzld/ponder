@@ -21,7 +21,7 @@
         3. `cargo clippy --all-targets -- -D warnings` passes regarding this change.
     - **Depends‑on:** none
 
-- [ ] **T023 · Refactor · P1: initialize structured logging in application entry point**
+- [x] **T023 · Refactor · P1: initialize structured logging in application entry point**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-02 / Steps / 3
     - **Action:**
         1. Ensure a logging implementation (e.g., `env_logger`, `tracing-subscriber`) is properly initialized in the application's main entry point (`src/main.rs` or equivalent) to output messages in the standard structured format (e.g., JSON).

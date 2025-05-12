@@ -75,8 +75,23 @@ use log::{debug, error, info};
 /// - Journal logic errors (invalid date format, etc.)
 /// - Editor errors (failed to launch editor)
 fn main() -> AppResult<()> {
-    // Initialize logging
-    env_logger::init();
+    // Initialize structured JSON logging
+    env_logger::Builder::from_default_env()
+        .format(|buf, record| {
+            use std::io::Write;
+
+            // Create JSON structure with timestamp, level, and message
+            let timestamp = chrono::Local::now().to_rfc3339();
+            writeln!(
+                buf,
+                "{{\"timestamp\":\"{}\",\"level\":\"{}\",\"message\":\"{}\"}}",
+                timestamp,
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
+
     info!("Starting ponder");
 
     // Parse command-line arguments
