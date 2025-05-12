@@ -32,7 +32,7 @@
     - **Depends‑on:** none
 
 ## Dead Code Remediation (cr-01)
-- [ ] **T016 · Refactor · P0: review `#[allow(dead_code)]` in `src/cli/mod.rs`**
+- [x] **T016 · Refactor · P0: review `#[allow(dead_code)]` in `src/cli/mod.rs`**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 2
     - **Action:**
         1. Review all instances of `#[allow(dead_code)]` in `src/cli/mod.rs`.
