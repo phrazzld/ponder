@@ -114,7 +114,7 @@
         3. `cargo clippy --all-targets -- -D warnings` passes regarding this change.
     - **Depends‑on:** none
 
-- [ ] **T027 · Refactor · P1: address `dead_code` for `JournalIO::ensure_journal_dir()`**
+- [x] **T027 · Refactor · P1: address `dead_code` for `JournalIO::ensure_journal_dir()`**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 4 (`src/journal/io/mod.rs:47`)
     - **Action:**
         1. Review `JournalIO::ensure_journal_dir()`: ensure a primary consumer of the `JournalIO` trait calls this method (e.g., `JournalService::new` or application setup logic).
