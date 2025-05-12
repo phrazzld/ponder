@@ -32,7 +32,59 @@
     - **Depends‑on:** none
 
 ## Dead Code Remediation (cr-01)
-- [ ] **T024 · Chore · P1: update `TODO.md` to mark tasks T016-T020 as incomplete**
+- [ ] **T016 · Refactor · P0: review `#[allow(dead_code)]` in `src/cli/mod.rs`**
+    - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 2
+    - **Action:**
+        1. Review all instances of `#[allow(dead_code)]` in `src/cli/mod.rs`.
+        2. Identify which items are only used in tests and should be marked with `#[cfg(test)]`.
+        3. Document findings for remediation.
+    - **Done‑when:**
+        1. All `#[allow(dead_code)]` instances in `src/cli/mod.rs` are reviewed and documented.
+    - **Depends‑on:** none
+
+- [ ] **T017 · Refactor · P0: review `#[allow(dead_code)]` in `src/config/mod.rs`**
+    - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 3
+    - **Action:**
+        1. Review all instances of `#[allow(dead_code)]` in `src/config/mod.rs`.
+        2. Identify which items are only used in tests and should be marked with `#[cfg(test)]`.
+        3. Document findings for remediation.
+    - **Done‑when:**
+        1. All `#[allow(dead_code)]` instances in `src/config/mod.rs` are reviewed and documented.
+    - **Depends‑on:** none
+
+- [ ] **T018 · Refactor · P0: review `#[allow(dead_code)]` in `src/journal/io/mod.rs`**
+    - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 4
+    - **Action:**
+        1. Review all instances of `#[allow(dead_code)]` in `src/journal/io/mod.rs`.
+        2. Identify which items are only used in tests or should be removed from trait definitions.
+        3. Document findings for remediation.
+    - **Done‑when:**
+        1. All `#[allow(dead_code)]` instances in `src/journal/io/mod.rs` are reviewed and documented.
+    - **Depends‑on:** none
+
+- [ ] **T019 · Refactor · P0: review `#[allow(dead_code)]` in `src/journal/mod.rs`**
+    - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 5
+    - **Action:**
+        1. Review all instances of `#[allow(dead_code)]` in `src/journal/mod.rs`.
+        2. Identify which methods are only used in tests and should be marked with `#[cfg(test)]`.
+        3. Document findings for remediation.
+    - **Done‑when:**
+        1. All `#[allow(dead_code)]` instances in `src/journal/mod.rs` are reviewed and documented.
+    - **Depends‑on:** none
+
+- [ ] **T020 · Refactor · P0: implement fixes for `#[allow(dead_code)]` issues**
+    - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 6
+    - **Action:**
+        1. Based on findings from T016-T019, implement the necessary fixes to eliminate `#[allow(dead_code)]` attributes.
+        2. Properly scope test-only code with `#[cfg(test)]`.
+        3. Remove genuinely unused code.
+        4. Ensure public trait methods are actively used.
+    - **Done‑when:**
+        1. All `#[allow(dead_code)]` attributes identified in T016-T019 are addressed.
+        2. `cargo clippy --all-targets -- -D warnings` runs without any `dead_code` errors.
+    - **Depends‑on:** [T016, T017, T018, T019]
+
+- [x] **T024 · Chore · P1: update `TODO.md` to mark tasks T016-T020 as incomplete**
     - **Context:** Remediation Plan – Sprint 1 / Detailed Remedies / cr-01 / Steps / 1
     - **Action:**
         1. In `TODO.md`, change the status for tasks T016-T020 back to `[ ]` (incomplete).
