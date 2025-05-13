@@ -2,381 +2,484 @@
 
 ## High Priority
 
-- support encrypted notes
-- support cross-device sync
+### Core Architecture & Philosophy Alignment
 
-### Testing & Code Quality Issues
+-   **[Refactor]**: Eliminate Unnecessary Trait Abstractions (`JournalIO`, `Editor`)
+    -   **Complexity**: Medium
+    -   **Rationale**: Current traits add unnecessary complexity and indirection for a single-implementation CLI, violating "Simplicity First". Direct use of concrete types simplifies code, improves readability, and is a prerequisite for effective integration testing.
+    -   **Expected Outcome**: `JournalIO` and `Editor` traits and their associated mock implementations are removed. Code directly uses `std::fs`, `std::process::Command`, or similar standard library features. The `JournalService` (if retained) will use concrete types.
+    -   **Implementation Steps**:
+        - Remove the `JournalIO` and `Editor` traits
+        - Replace trait objects with concrete implementations
+        - Use `std::fs` operations directly where appropriate
+        - Refactor `main.rs` to use concrete types
+    -   **Dependencies**: Enables "Replace Mock-Based Tests with Integration Tests".
 
-- **[Fix]**: Test Strategy: Violation of Mocking Policy and Over-Reliance on Internal Mocks
-  - **Complexity**: Complex
-  - **Rationale**: The current testing strategy for `JournalService` relies heavily on mocking internal collaborators like `Editor` and `JournalIO`, violating the development philosophy. Tests are coupled to implementation details rather than observable behavior.
-  - **Expected Outcome**: Refactored `JournalService` with more pure, easily testable logic. Integration tests using real or in-memory implementations where possible. Mocks reserved only for true external boundaries.
-  - **Implementation Steps**:
-    - Refactor `JournalService` to extract more pure logic
-    - Implement real or in-memory filesystem implementations for `JournalIO`
-    - Redesign tests to focus on observable behavior
-    - Reserve mocks only for true external boundaries
+-   **[Refactor]**: Simplify or Eliminate `JournalService`
+    -   **Complexity**: Medium
+    -   **Rationale**: The `JournalService` struct primarily serves to hold trait objects for dependency injection. With trait elimination, its purpose needs re-evaluation to align with "Simplicity First" and reduce conceptual overhead.
+    -   **Expected Outcome**: Core logic previously in `JournalService` is refactored into a simpler structure (e.g., free functions within relevant modules, or a significantly simplified struct if state is truly necessary). The application flow in `main.rs` is streamlined.
+    -   **Implementation Steps**:
+        - Move core logic to a simpler structure or free functions
+        - Remove dependency on trait objects
+        - Simplify main.rs flow
+    -   **Dependencies**: Eliminate Unnecessary Trait Abstractions.
 
-- **[Fix]**: Security: Inadequate Log Redaction for Sensitive Information
-  - **Complexity**: Medium
-  - **Rationale**: Logging full `CliArgs` and `Config` at DEBUG level can leak potentially sensitive information, violating the logging guidelines in the development philosophy.
-  - **Expected Outcome**: Safe `Debug` implementations for `CliArgs` and `Config` that redact or summarize sensitive fields. Careful consideration of what paths and commands are logged.
-  - **Implementation Steps**:
-    - Implement custom `Debug` formatting for sensitive structs
-    - Redact or summarize sensitive fields
-    - Log only specific, non-sensitive fields instead of entire structures
+-   **[Refactor]**: Enhance Modularity and Separation of Concerns
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Modularity is Mandatory" and "Separation of Concerns". The current structure mixes different concerns (CLI, file I/O, date logic) in `main.rs`. Extracting logic into dedicated modules improves organization, testability, and maintainability.
+    -   **Expected Outcome**: Application logic is organized into logical modules (e.g., `src/cli.rs`, `src/journal_io.rs`, `src/date_utils.rs`, `src/config.rs`, `src/editor.rs`, `src/errors.rs`). `main.rs` becomes a thin orchestrator.
+    -   **Implementation Steps**:
+        - Identify logical separation points in the codebase
+        - Extract functionality into well-defined modules
+        - Ensure each module has a clear, single responsibility
+        - Update imports and make `main.rs` an orchestrator
+    -   **Dependencies**: None (but facilitates testing and error handling improvements).
 
-- **[Fix]**: Observability: Missing Mandatory Context Fields in Structured Logs
-  - **Complexity**: Medium
-  - **Rationale**: Structured logs are missing required context fields like `service_name`, `correlation_id`, and `module/function`, hampering log analysis and debugging.
-  - **Expected Outcome**: Enhanced logging setup with all mandatory context fields included in every log entry.
-  - **Implementation Steps**:
-    - Add static `service_name` to logs
-    - Generate and include `correlation_id` for each invocation
-    - Include `module_path` and line numbers in logs
-    - Ensure `error_details` are captured for ERROR level logs
+-   **[Fix]**: Audit and Remediate Linter/Compiler Suppressions (`#[allow(...)]`)
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with the core philosophy of fixing root causes rather than suppressing issues ("Address Violations, Don't Suppress"). Suppressions hide technical debt or bugs, undermining maintainability and reliability.
+    -   **Expected Outcome**: A codebase free of unjustified `#[allow(...)]` attributes. Any remaining suppressions are documented with clear rationale (e.g., `// ALLOWANCE: Reason...`) and consciously accepted.
+    -   **Implementation Steps**:
+        - Search codebase for all `#[allow(...)]` attributes
+        - Evaluate each case to determine if the root cause can be fixed
+        - Fix root causes where possible
+        - Document any remaining suppressions with clear justification
+        - Add tests to confirm fixed issues remain resolved
 
-- **[Fix]**: Error Handling: Inconsistent Error Propagation and Context
-  - **Complexity**: Medium
-  - **Rationale**: Errors are logged at lower levels and then propagated, leading to potential double logging and cluttered logs. The context added via logging is not part of the error value itself.
-  - **Expected Outcome**: Consistent error propagation without intermediate logging. Better error context through enhanced error types. A single, comprehensive logging point for unhandled errors.
-  - **Implementation Steps**:
-    - Remove intermediate logging within `.map_err` blocks
-    - Use `context` methods from crates like `anyhow` for better error context
-    - Establish a single logging point for unhandled errors
-    - Handle potential `env_logger::init()` errors
+### Testing Strategy & Quality
+
+-   **[Refactor]**: Replace Mock-Based Internal Tests with Behavior-Driven Integration Tests
+    -   **Complexity**: Medium
+    -   **Rationale**: Addresses "Current Architecture Issues" (complex mock-based testing) and a critical violation of the "Testing Strategy" philosophy ("NO Mocking Internal Collaborators"). Current tests are brittle and coupled to implementation details. Integration tests verify actual application behavior.
+    -   **Expected Outcome**: All tests relying on internal mocks (`MockJournalIO`, `MockEditor`) are replaced with integration tests (in `tests/` directory) that interact with a real (temporary) filesystem and use simple system commands (like `echo` or `true`) to simulate editor behavior. Tests verify observable outcomes (file content, exit codes).
+    -   **Implementation Steps**:
+        - Create integration tests using `assert_cmd` and `tempfile`
+        - Test file system operations with temporary directories
+        - Use simple editor commands (like `true` or `echo`) for testing
+        - Remove all internal mocks
+        - Reduce reliance on `#[cfg(test)]` public methods/fields
+    -   **Dependencies**: Eliminate Unnecessary Trait Abstractions.
+
+-   **[Enhancement]**: Implement Comprehensive Automated Testing Strategy & Coverage Enforcement
+    -   **Complexity**: Complex
+    -   **Rationale**: Aligns with "Design for Testability" and "Test Coverage Enforcement". A robust testing strategy is fundamental for verifying correctness, preventing regressions, and enabling safe code evolution.
+    -   **Expected Outcome**:
+        -   Unit tests (`#[test]` in `src/.../tests.rs` submodules) cover core pure logic (date calculations, filename generation, parsing).
+        -   Integration tests (in the `tests/` directory) simulate CLI execution (`assert_cmd`), interact with a temporary filesystem (`tempfile`), and verify command behavior end-to-end.
+        -   Doc tests (`///`) for public API elements.
+        -   Test coverage reporting (e.g., `cargo-tarpaulin`) is integrated into CI, with an initial target threshold (e.g., 80%) defined and enforced. Builds fail if coverage drops.
+    -   **Implementation Steps**:
+        - Write unit tests for core logic components
+        - Create integration tests for key workflows 
+        - Add doc tests for public APIs
+        - Configure test coverage reporting
+        - Set up enforcement of coverage thresholds in CI
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns, Implement CI Pipeline for Automated Checks.
+
+### Error Handling & Logging
+
+-   **[Refactor]**: Standardize Error Handling, Eliminate Panics, and Prevent Double Logging
+    -   **Complexity**: Medium
+    -   **Rationale**: Addresses "Inconsistent error handling and logging" and aligns with "Consistent Error Handling" and "Robustness". Current `unwrap()`/`expect()` usage, and error logging patterns lead to fragile application behavior and cluttered logs.
+    -   **Expected Outcome**: All `unwrap()`/`expect()` calls on `Result`/`Option` in recoverable paths are replaced with `?` or proper error handling. Custom error types using `thiserror` provide clear context. Errors are propagated cleanly and logged only once at the application boundary (e.g., in `main.rs`). `AppError::Io`'s `Clone` implementation is fixed if cloning is truly necessary, or `Clone` is removed. `main` returns `Result`.
+    -   **Implementation Steps**:
+        - Remove `Clone` implementation for `AppError`
+        - Use `thiserror` features for proper context
+        - Eliminate `.map_err(|e| { error!(...); e })` pattern
+        - Log errors only at the top level
+        - Replace all `unwrap()`/`expect()` with proper error handling
+    -   **Dependencies**: None. Enables "Implement Structured, Contextual Logging".
+
+-   **[Enhancement]**: Implement Structured, Contextual Logging with `tracing`
+    -   **Complexity**: Medium
+    -   **Rationale**: Addresses "Inconsistent error handling and logging" and aligns with "Logging Strategy" ("Structured Logging is Mandatory", "Context Propagation"). Current logging is basic. `tracing` provides richer, structured logs essential for debugging and observability.
+    -   **Expected Outcome**: `tracing` and `tracing-subscriber` are integrated. Logs are output in JSON format (especially in CI/non-interactive environments). All log entries include mandatory context fields: `timestamp`, `level`, `message`, `target` (module path), `correlation_id` (unique ID generated per application invocation), and `error_details` (for ERROR level logs).
+    -   **Implementation Steps**:
+        - Add dependencies for `tracing` ecosystem
+        - Generate correlation ID per invocation
+        - Configure JSON output with mandatory context fields
+        - Log only at appropriate boundaries
+        - Add static `service_name` to logs
+    -   **Dependencies**: Standardize Error Handling, Eliminate Panics, and Prevent Double Logging.
 
 ### Developer Workflow & Automation
 
-- **[Enhancement]**: Implement CI Pipeline for Automated Checks
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Automation, Quality Gates, CI/CD). Ensures consistent code quality, catches regressions early, automates repetitive tasks (formatting, linting, testing), and provides rapid feedback. Critical for maintaining a healthy codebase and enabling confident development.
-  - **Updates Needed**:
-    - Add test coverage enforcement using `cargo-tarpaulin` or similar tool
-    - Add dependency vulnerability scanning with `cargo audit`
-    - Fail build on coverage drops or security vulnerabilities
-  - **Expected Outcome**: A fully automated CI pipeline (e.g., GitHub Actions) that runs on every push and pull request, executing checks for code formatting (`cargo fmt --check`), strict linting (`cargo clippy -- -D warnings`), automated tests (`cargo test --all-features`), and dependency vulnerability scanning (`cargo audit`). Builds fail on any violation.
-  - **Implementation Steps**:
-    - Create `.github/workflows` directory
-    - Create CI workflow file for running on push and pull requests
-    - Configure tests to run in CI
-    - Configure linters and type checking
-    - Set up test coverage reporting
-    - Add build status badge to README.md
-  - **Dependencies**: Enforce Consistent Code Formatting, Enforce Strict Code Linting, Implement Comprehensive Automated Testing Strategy, Bolster Security Practices (for audit).
+-   **[Enhancement]**: Implement CI Pipeline for Automated Checks (e.g., GitHub Actions)
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Automate Everything", "Quality Gates", and "CI/CD" philosophy. Essential for consistent code quality, early regression detection, and automating repetitive checks, which improves developer experience.
+    -   **Expected Outcome**: A CI workflow is configured to run on every push and pull request. The workflow executes:
+        1.  Code formatting check (`cargo fmt --check`).
+        2.  Strict linting (`cargo clippy -- -D warnings`).
+        3.  Automated tests (`cargo test --all-features`).
+        4.  Test coverage check (once "Implement Comprehensive Automated Testing Strategy" is done).
+        5.  Dependency vulnerability scanning (`cargo audit`).
+        Builds fail on any violation. A build status badge is added to `README.md`.
+    -   **Implementation Steps**:
+        - Create `.github/workflows` directory
+        - Create CI workflow file for running on push and pull requests
+        - Configure tests to run in CI
+        - Configure linters and type checking
+        - Set up test coverage reporting
+        - Add build status badge to README.md
+    -   **Dependencies**: Enforce Consistent Code Formatting, Enforce Strict Code Linting.
 
-- **[Enhancement]**: Setup Local Pre-commit Hooks
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Automation, Quality Gates). Catches formatting and linting issues locally before commit, reducing CI failures, developer friction, and ensuring consistency.
-  - **Expected Outcome**: A pre-commit framework (e.g., `pre-commit` with `husky` or similar) configured to automatically run `cargo fmt`, `cargo clippy`, and `cargo check` locally before each commit. Commits are blocked if hooks fail.
-  - **Implementation Steps**:
-    - Install pre-commit framework
-    - Configure linting and formatting checks
-    - Add type checking
-    - Prevent commit of sensitive data and large files
-    - Enforce conventional commit format
-    - Configure post-commit hooks for documentation generation
-    - Configure pre-push hooks to run complete test suite and enforce branch naming conventions
-  - **Dependencies**: Enforce Consistent Code Formatting, Enforce Strict Code Linting.
+-   **[Enhancement]**: Setup Local Pre-commit Hooks
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with "Local Development: Pre-commit Hooks" philosophy. Catches formatting, linting, and basic compilation issues locally before commit, reducing CI failures and providing faster feedback.
+    -   **Expected Outcome**: A pre-commit framework (e.g., `pre-commit` with Rust support, or `husky`) is configured to run `cargo fmt`, `cargo clippy -- -D warnings`, and `cargo check` (at minimum) before each commit. Commits are blocked if hooks fail.
+    -   **Implementation Steps**:
+        - Install pre-commit framework
+        - Configure linting and formatting checks
+        - Add type checking
+        - Prevent commit of sensitive data and large files
+        - Enforce conventional commit format
+        - Configure pre-push hooks to run complete test suite
+    -   **Dependencies**: Enforce Consistent Code Formatting, Enforce Strict Code Linting.
 
-- **[Enhancement]**: Enforce Consistent Code Formatting (`rustfmt`)
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Code Quality, Maintainability) and Rust Appendix (Tooling). Ensures a consistent code style, significantly improving readability, reducing cognitive load, and minimizing stylistic debates.
-  - **Expected Outcome**: All code in the repository is formatted according to `rustfmt` standards. `cargo fmt --check` passes in CI and pre-commit hooks. A `.rustfmt.toml` configuration file is present if non-default settings are used.
-  - **Dependencies**: Implement CI Pipeline, Setup Local Pre-commit Hooks.
+-   **[Enhancement]**: Enforce Consistent Code Formatting (`rustfmt`)
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with "Code Quality" and Rust Appendix (Tooling, Formatting). Ensures a consistent code style, improving readability and reducing cognitive load.
+    -   **Expected Outcome**: `rustfmt` is configured (default or with `rustfmt.toml`). All code adheres to the standard format, enforced by pre-commit hooks and CI checks.
+    -   **Implementation Steps**:
+        - Configure rustfmt with default or custom settings
+        - Add formatting check to CI 
+        - Add formatting check to pre-commit hooks
+        - Format all existing code
+    -   **Dependencies**: Part of Implement CI Pipeline and Setup Local Pre-commit Hooks.
 
-- **[Enhancement]**: Enforce Strict Code Linting (`clippy`)
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Code Quality, Maintainability, Error Handling) and Rust Appendix (Clippy usage). Catches common Rust anti-patterns, potential bugs, and style issues, improving code quality and robustness.
-  - **Expected Outcome**: `clippy` is configured for strictness (e.g., `cargo clippy -- -D warnings` or via `Cargo.toml`/`clippy.toml`). All `clippy` checks pass in CI and pre-commit hooks.
-  - **Dependencies**: Implement CI Pipeline, Setup Local Pre-commit Hooks.
+-   **[Enhancement]**: Enforce Strict Code Linting (`clippy`)
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with "Code Quality" and Rust Appendix (Linting). `clippy` catches common pitfalls, potential bugs, and style issues, improving code quality and robustness.
+    -   **Expected Outcome**: `clippy` is configured for strictness (e.g., `cargo clippy -- -D warnings` or via `Cargo.toml`/`clippy.toml`). All `clippy` checks pass in pre-commit hooks and CI.
+    -   **Implementation Steps**:
+        - Configure clippy for strict checks
+        - Add linting to CI
+        - Add linting to pre-commit hooks
+        - Fix existing linting issues
+    -   **Dependencies**: Part of Implement CI Pipeline and Setup Local Pre-commit Hooks.
 
-### Code Quality & Architecture
+### User-Facing Features
 
-- **[Enhancement]**: Implement File Length Enforcement
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Code Quality, Maintainability). Long files are harder to understand, maintain, and often violate the single responsibility principle. Setting reasonable length limits encourages better code organization.
-  - **Expected Outcome**: Tooling in place to flag files that exceed reasonable length limits. Linting configuration that warns at 500 lines and errors at 1000 lines.
-  - **Implementation Steps**:
-    - Configure linter (e.g., clippy or custom tool) to warn at 500 lines
-    - Configure error at 1000 lines
-    - Integrate with CI pipeline
-  - **Dependencies**: Implement CI Pipeline.
+-   **[Feature]**: Encryption for Journal Files (at rest)
+    -   **Complexity**: Complex
+    -   **Rationale**: Enhances user privacy and data security by protecting sensitive journal entries from unauthorized access (User Value Prioritization #3).
+    -   **Expected Outcome**: Option to encrypt journal files (e.g., using a library like `age` or `ring`). Requires a password or key to decrypt and access entries. Clear CLI commands/options for managing encrypted journals.
+    -   **Implementation Steps**:
+        - Research encryption approaches for files at rest
+        - Add encryption/decryption to file operations
+        - Add password/key management
+        - Update CLI to support encrypted journals
+        - Document encrypted journal usage
+    -   **Dependencies**: Implement Externalized Configuration Management, Bolster Security Practices.
 
-- **[Refactor]**: Improve Error Handling and Eliminate Panics
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Error Handling, Robustness) and Rust Appendix (Result, no panics for recoverable errors). Current `unwrap()`/`expect()` usage leads to fragile application behavior. Replacing these with proper `Result` propagation is critical for application stability and user experience.
-  - **Expected Outcome**: All `unwrap()` and `expect()` calls on `Result` and `Option` types in recoverable code paths are replaced with robust error handling (e.g., `?` operator, `match`, `if let`). Custom error types (e.g., using `thiserror`) are introduced for better error context. `main` function returns a `Result` and prints user-friendly error messages.
-  - **Dependencies**: None.
-
-- **[Refactor]**: Enhance Modularity and Separation of Concerns
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Modularity, Separation of Concerns). The current single-file structure (as per `glance.md`) mixes CLI parsing, file I/O, date logic, and process execution, hindering testability and maintainability.
-  - **Expected Outcome**: Application logic is extracted from `main.rs` into well-defined modules (e.g., `src/cli.rs`, `src/journal.rs`, `src/config.rs`, `src/errors.rs`). Each module has clear responsibilities and a well-defined public API. `main.rs` becomes a thin orchestrator.
-  - **Dependencies**: None (but facilitates testing and error handling improvements).
-
-### Testing & Verification
-
-- **[Enhancement]**: Implement Comprehensive Automated Testing Strategy
-  - **Complexity**: Complex
-  - **Rationale**: Aligns with Dev Philosophy (Design for Testability, Testing Strategy). Lack of automated tests (as noted in `glance.md`) makes changes risky and hinders refactoring. A robust testing strategy is fundamental for verifying correctness, preventing regressions, and enabling safe code evolution.
-  - **Expected Outcome**:
-    - Unit tests for core logic (e.g., date calculations, filename generation, helper functions) using `#[cfg(test)]` modules.
-    - Integration tests in the `tests/` directory simulating CLI execution (e.g., using `assert_cmd`, `tempfile`) and verifying file system interactions for all commands and options.
-    - Doc tests (`///`) for public API elements.
-    - `cargo test --all-features` integrated into the CI pipeline.
-    - Initial test coverage reporting established (e.g., using `cargo-tarpaulin`), aiming for a meaningful baseline (e.g., >80%).
-  - **Dependencies**: Enhance Modularity and Separation of Concerns (makes unit testing easier), Implement CI Pipeline.
+-   **[Feature]**: Support for Cross-Device Sync
+    -   **Complexity**: Complex
+    -   **Rationale**: Enables users to maintain their journal across multiple devices, enhancing the utility and accessibility of the tool.
+    -   **Expected Outcome**: Journal entries can be synchronized between multiple devices, ensuring consistency and availability of entries regardless of which device is used.
+    -   **Implementation Steps**:
+        - Design sync mechanism (e.g., Git-based, cloud storage)
+        - Implement sync commands in CLI
+        - Add conflict resolution strategy
+        - Document sync setup and usage
+        - Consider combining with encryption for secure sync
+    -   **Dependencies**: Implement Externalized Configuration Management. Consider with "Encryption for Journal Files" for secure sync.
 
 ## Medium Priority
 
-### Code Architecture & Design
-
-- **[Fix]**: API Design: Awkward Test-Only Struct Fields and Public Methods
-  - **Complexity**: Medium
-  - **Rationale**: Making fields and methods conditionally public with `#[cfg(test)]` complicates the API and exposes internals unnecessarily.
-  - **Expected Outcome**: Cleaner API without test-only public fields. Test-specific functionality moved to appropriate test modules.
-  - **Implementation Steps**:
-    - Remove `#[cfg(test)] pub(crate) config: Config` field from `JournalService`
-    - Move test-only parsing/validation logic into dedicated test modules
-    - Replace `Config::new()` with `Config::default()` in tests
-    - Move test-only convenience methods into appropriate test modules
-
-- **[Fix]**: Modularity: Misplaced CLI Argument Interpretation Logic
-  - **Complexity**: Simple
-  - **Rationale**: Logic for interpreting `CliArgs` and converting to `DateSpecifier` is in `main.rs` but should be in the `cli` module.
-  - **Expected Outcome**: `get_date_specifier_from_args` and related logic moved to the appropriate module.
-  - **Implementation Steps**:
-    - Move logic to `src/cli/mod.rs`
-    - Consider making it a method on `CliArgs`
-    - Update all call sites
-
-- **[Fix]**: Error Design: Fragile `Clone` Implementation for `AppError::Io`
-  - **Complexity**: Medium
-  - **Rationale**: The manual `Clone` implementation for `AppError::Io` is lossy and discards potentially valuable error details.
-  - **Expected Outcome**: A more robust error design that preserves error details when cloned.
-  - **Implementation Steps**:
-    - Evaluate if `AppError` genuinely needs to be `Clone`
-    - Consider wrapping `std::io::Error` in an `Arc` for efficient, non-lossy cloning
-    - Or store only the needed error components directly
-
-- **[Enhancement]**: Missing MSRV (Minimum Supported Rust Version) Enforcement
-  - **Complexity**: Simple
-  - **Rationale**: Without an explicitly defined and CI-enforced MSRV, contributors might use newer Rust features, breaking compatibility.
-  - **Expected Outcome**: Defined MSRV in `Cargo.toml` and CI enforcement of this version.
-  - **Implementation Steps**:
-    - Define MSRV in `Cargo.toml` using `rust-version` field
-    - Add CI job using the specified MSRV toolchain
-
 ### Configuration & Usability
 
-- **[Feature]**: Implement Externalized Configuration Management
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Configuration Management). Hardcoded paths and reliance solely on `$EDITOR` (per `glance.md`) limit user flexibility. Externalized configuration improves usability and adaptability.
-  - **Expected Outcome**: Journal directory path, default editor fallback, and potentially other settings (e.g., date formats) are configurable via environment variables (e.g., `PONDER_DIR`) and/or a configuration file (e.g., XDG compliant `~/.config/ponder/config.toml`). Sensible defaults are used if no configuration is found. Configuration loading logic is centralized and documented.
-  - **Dependencies**: Enhance Modularity and Separation of Concerns.
+-   **[Feature]**: Implement Externalized Configuration Management
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Configuration Management" philosophy. Hardcoded paths and sole reliance on `$EDITOR` limit user flexibility. Externalized configuration improves usability, adaptability, and is a prerequisite for features like multiple journals or encryption.
+    -   **Expected Outcome**: Journal directory path, default editor fallback, and potentially other settings (e.g., date formats, reminisce intervals) are configurable via environment variables (e.g., `PONDER_DIR`, `PONDER_EDITOR`) and/or a configuration file (e.g., XDG compliant `~/.config/ponder/config.toml`). Sensible defaults are used if no configuration is found. Configuration loading logic is centralized and documented.
+    -   **Implementation Steps**:
+        - Define configuration file format
+        - Implement config file loading
+        - Add environment variable support
+        - Set sensible defaults
+        - Document configuration options
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns. Enables "Encryption for Journal Files", "Journaling Templates", "Support for Multiple Journals".
 
-- **[Enhancement]**: Improve CLI Argument Parsing and Help Messages
-  - **Complexity**: Simple
-  - **Rationale**: Clear and helpful CLI is essential for usability and discoverability of features, directly impacting user satisfaction.
-  - **Expected Outcome**: Review and enhance `clap` struct definitions for clarity and consistency. Ensure all options and subcommands have comprehensive, user-friendly help messages. Add examples to help text where appropriate. Standardize argument naming conventions.
-  - **Dependencies**: None.
+-   **[Enhancement]**: Improve CLI Argument Parsing and Help Messages
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with "API Design" (for CLIs) and improves "Enhanced usability" (#4 user value). Clear CLI is essential for user experience and feature discoverability.
+    -   **Expected Outcome**: `clap` struct definitions are reviewed and enhanced for clarity and consistency. All options and subcommands have comprehensive, user-friendly help messages, including examples where appropriate. Argument naming follows standard conventions. Redundant wrappers like `CliArgs::parse()` are removed.
+    -   **Implementation Steps**:
+        - Review and enhance clap configuration
+        - Add detailed help messages and examples
+        - Standardize argument naming
+        - Remove redundant wrappers
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns.
 
 ### Security & Robustness
 
-- **[Enhancement]**: Bolster Security Practices
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Security Considerations) and Rust Appendix (`cargo audit`). Proactively addresses security, ensures supply chain integrity, and improves robustness of file operations.
-  - **Expected Outcome**:
-    - `cargo audit` integrated into the CI pipeline to scan for dependency vulnerabilities, failing the build on high/critical issues.
-    - All file path constructions use `std::path::PathBuf` for cross-platform compatibility and safety.
-    - Application robustly checks for and creates the notes directory (`std::fs::create_dir_all`) if it doesn't exist before attempting file operations.
-    - Defensive handling and validation of critical environment variables (e.g., `HOME`, `EDITOR`).
-  - **Dependencies**: Implement CI Pipeline.
+-   **[Enhancement]**: Bolster Security Practices (Dependency Audit, Secure File Handling)
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Security Considerations" and Rust Appendix (`cargo audit`). Proactively addresses security, ensures supply chain integrity, and improves robustness of file operations.
+    -   **Expected Outcome**:
+        -   `cargo audit` integrated into the CI pipeline (covered by "Implement CI Pipeline").
+        -   All file path constructions use `std::path::PathBuf` for cross-platform compatibility and safety.
+        -   Application robustly checks for and creates the notes directory (`std::fs::create_dir_all`) if it doesn't exist before attempting file operations.
+        -   Defensive handling and validation of critical environment variables (e.g., `HOME`, `EDITOR`, `PONDER_DIR`).
+    -   **Implementation Steps**:
+        - Add cargo-audit to CI pipeline
+        - Review and fix file path handling
+        - Add directory existence checks/creation
+        - Implement validation for environment variables
+    -   **Dependencies**: Implement CI Pipeline for Automated Checks.
+
+-   **[Enhancement]**: Implement Custom `Debug` for Sensitive Structs & Secure Logging
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Logging Strategy" ("What NOT to Log") and "Security Considerations". Prevents accidental leakage of sensitive data (paths, editor commands, config values) in logs.
+    -   **Expected Outcome**: Structs like `CliArgs`, `Config`, and any error types containing paths or commands have custom `std::fmt::Debug` implementations that redact or summarize sensitive fields. Logs are reviewed to ensure no PII or sensitive operational data is inadvertently exposed.
+    -   **Implementation Steps**:
+        - Identify structs containing potentially sensitive data
+        - Implement custom Debug trait for these structs
+        - Ensure path information is redacted/sanitized
+        - Test logging to verify sensitive data is properly handled
+        - Document approach for future struct additions
+    -   **Dependencies**: Implement Structured, Contextual Logging with `tracing`.
 
 ### Documentation & Developer Experience
 
-- **[Enhancement]**: Improve Code and Project Documentation
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Documentation Approach). Comprehensive documentation is vital for maintainability, onboarding new contributors (human or AI), and user adoption.
-  - **Expected Outcome**:
-    - Rustdoc comments (`///`) added to all public functions, structs, enums, and modules.
-    - Inline comments (`//`) explain non-obvious logic ("the why").
-    - `README.md` expanded with detailed installation instructions, build steps, comprehensive usage examples for all CLI options, configuration details, and a brief architecture overview.
-    - `CONTRIBUTING.md` created, detailing the development workflow, code style, testing requirements, and pull request process.
-  - **Implementation Steps**:
-    - Comprehensive README.md with:
-      - Project description and purpose
-      - Features list
-      - Installation instructions
-      - Usage examples with code
-      - Development setup guide
-      - Contribution guidelines
-    - Verify MIT LICENSE file has correct year and copyright holder
-    - Create CONTRIBUTING.md with:
-      - Development workflow documentation
-      - Branch and PR conventions
-      - Code style and testing requirements
-  - **Dependencies**: Enhance Modularity and Separation of Concerns (documentation is easier with clear modules).
+-   **[Enhancement]**: Improve Code and Project Documentation (Comprehensive)
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Documentation Approach" philosophy. Essential for maintainability, onboarding new contributors, and user adoption.
+    -   **Expected Outcome**:
+        -   `README.md`: Fully updated per Dev Philosophy (Title, Purpose, Badges, Features, Installation, Build, Test, Usage, Configuration, Architecture, Contributing, License).
+        -   `CONTRIBUTING.md`: Created, detailing development workflow, coding style, testing strategy, and pull request process.
+        -   Rustdoc comments (`///`) for all public API elements (modules, functions, structs, enums, traits).
+        -   Inline comments (`//`) explaining "the why" for non-obvious logic or important decisions.
+    -   **Implementation Steps**:
+        - Update README.md with comprehensive sections
+        - Create CONTRIBUTING.md with workflow guidelines
+        - Add rustdoc comments to public APIs
+        - Add inline comments for non-obvious logic
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns.
 
-- **[Enhancement]**: Adopt Conventional Commits and Automate Changelog Generation
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Semantic Versioning, Automation). Standardized commit messages improve project history readability and enable automated changelog generation, streamlining the release process.
-  - **Expected Outcome**: Project adopts the Conventional Commits specification. Commit message linting (e.g., `commitlint`) is integrated into pre-commit hooks or CI. Tooling (e.g., `git-cliff`) is implemented to automatically generate/update `CHANGELOG.md` from commit messages.
-  - **Implementation Steps**:
-    - Add commitlint configuration
-    - Document commit message standards
-    - Setup automated versioning based on commits
-    - Configure CHANGELOG generation
-  - **Dependencies**: Implement CI Pipeline, Setup Local Pre-commit Hooks.
-
-- **[Enhancement]**: Specify Rust Edition and MSRV in `Cargo.toml`
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Rust Appendix (Tooling and Environment). Clearly defines the project's language features and supported Rust versions, improving clarity for contributors and ensuring build consistency.
-  - **Expected Outcome**: `Cargo.toml` explicitly defines the Rust edition (e.g., `edition = "2021"`) and a Minimum Supported Rust Version (MSRV) is documented and potentially enforced in CI.
-  - **Dependencies**: None.
+-   **[Enhancement]**: Adopt Conventional Commits and Automate Changelog Generation
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Semantic Versioning and Release Automation" philosophy. Improves commit history readability and enables automated changelog generation and versioning.
+    -   **Expected Outcome**: Project adopts Conventional Commits standard. Commit message linting (e.g., `commitlint`) integrated into pre-commit hooks. Tooling (e.g., `git-cliff` or `standard-version`) configured to generate/update `CHANGELOG.md` from commit history.
+    -   **Implementation Steps**:
+        - Add commitlint configuration
+        - Document commit message standards
+        - Setup automated versioning based on commits
+        - Configure CHANGELOG generation
+    -   **Dependencies**: Setup Local Pre-commit Hooks.
 
 ### Code Quality & Maintainability
 
-- **[Refactor]**: Replace Magic Strings and Numbers with Constants
-  - **Complexity**: Simple
-  - **Rationale**: Aligns with Dev Philosophy (Code Quality, Maintainability). Using named constants instead of literal "magic" values improves code readability, maintainability, and reduces the risk of typos or inconsistent behavior.
-  - **Expected Outcome**: All magic values (e.g., fallback editor name, `RETRO_DAYS_OFFSET`, reminisce intervals) are replaced with well-named constants, defined at an appropriate scope (e.g., within a `constants` module or relevant configuration struct).
-  - **Dependencies**: Enhance Modularity and Separation of Concerns (provides logical places for constants).
+-   **[Fix]**: Awkward Test-Only Public Struct Fields and Public Methods
+    -   **Complexity**: Medium
+    -   **Rationale**: Making fields and methods conditionally public with `#[cfg(test)] pub` complicates the API, exposes internals unnecessarily, and can be avoided with better test design.
+    -   **Expected Outcome**: Cleaner API without test-only public fields/methods. Test-specific functionality (e.g., `Config::default()` for tests) moved to appropriate test modules or test helper functions.
+    -   **Implementation Steps**:
+        - Remove `#[cfg(test)] pub(crate) config: Config` field from `JournalService`
+        - Move test-only parsing/validation logic into dedicated test modules
+        - Replace `Config::new()` with `Config::default()` in tests
+        - Move test-only convenience methods into appropriate test modules
+    -   **Dependencies**: Replace Mock-Based Internal Tests with Behavior-Driven Integration Tests.
 
-### Observability & Logging
+-   **[Fix]**: Fragile `Clone` Implementation for `AppError::Io`
+    -   **Complexity**: Medium
+    -   **Rationale**: The current manual `Clone` implementation for `AppError::Io` is lossy. Error details should be preserved if cloning is necessary, or cloning should be reconsidered.
+    -   **Expected Outcome**: `AppError::Io` correctly handles cloning (e.g., by storing `io::ErrorKind` and a `String` message, or wrapping the original `std::io::Error` in an `Arc` if full fidelity is needed and cloning `AppError` is essential). Alternatively, `AppError` no longer derives `Clone` if not truly required.
+    -   **Implementation Steps**:
+        - Evaluate if `AppError` genuinely needs to be `Clone`
+        - Consider wrapping `std::io::Error` in an `Arc` for efficient, non-lossy cloning
+        - Or store only the needed error components directly
+    -   **Dependencies**: Standardize Error Handling, Eliminate Panics, and Prevent Double Logging.
 
-- **[Enhancement]**: Implement Structured Logging
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Logging Strategy, Structured Logging) and Rust Appendix (log/tracing). `println!` is insufficient for operational logging. Structured logging improves debuggability and observability, especially for errors and complex application flows.
-  - **Expected Outcome**: The `log` crate facade (or `tracing`) is adopted. A logging implementation (e.g., `env_logger`, `fern`, `tracing-subscriber`) is configured, potentially outputting JSON in CI/production environments. Log levels are configurable (e.g., via `RUST_LOG`). Key events, errors, and decisions are logged with appropriate context.
-  - **Dependencies**: Improve Error Handling (structured logs are excellent for reporting errors).
+-   **[Refactor]**: Replace Magic Strings and Numbers with Constants
+    -   **Complexity**: Simple
+    -   **Rationale**: Improves code readability, maintainability, and reduces the risk of typos or inconsistencies by using named constants.
+    -   **Expected Outcome**: Key literal values (e.g., default editor name, directory names, file extensions, reminisce default offsets) are defined as well-named constants in appropriate scopes (e.g., a `constants.rs` module or within relevant modules).
+    -   **Implementation Steps**:
+        - Identify magic constants and strings
+        - Create appropriately scoped constants
+        - Replace literals with constants throughout the code
+        - Document constants where appropriate
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns (provides logical places for constants).
 
 ## Low Priority
 
-### Code Cleanup & Refinements
+### Usability Enhancements & Minor Features
 
-- **[Fix]**: Redundancy: Unnecessary Wrapper for `CliArgs::parse_from`
-  - **Complexity**: Simple
-  - **Rationale**: The `CliArgs::parse()` method is a thin wrapper around functionality already provided by `clap::Parser`. This adds an unnecessary layer.
-  - **Expected Outcome**: Simplified code using the derived `CliArgs::parse()` method directly.
-  - **Implementation Steps**:
-    - Remove custom `CliArgs::parse()` method
-    - Use the method derived by `clap::Parser` in `main.rs`
+-   **[Feature]**: Journaling Templates
+    -   **Complexity**: Medium
+    -   **Rationale**: Improves user efficiency and consistency for structured entries (User Value Prioritization #4).
+    -   **Expected Outcome**: Users can define text-based templates (e.g., stored in the Ponder configuration directory). A CLI option (e.g., `ponder new --template <template_name>`) populates the new journal entry with the content of the specified template.
+    -   **Implementation Steps**:
+        - Define template format and storage location
+        - Add template loading functionality
+        - Update CLI to include template options
+        - Add documentation for templates feature
+    -   **Dependencies**: Implement Externalized Configuration Management.
 
-- **[Fix]**: Clarity: Magic Constants for Reminisce Intervals
-  - **Complexity**: Simple
-  - **Rationale**: Magic constants for reminisce intervals could be better co-located or encapsulated for improved context.
-  - **Expected Outcome**: Constants grouped within a more specific scope for better context.
-  - **Implementation Steps**:
-    - Group constants within a private `reminisce_intervals` module
-    - Or move them directly within the `get_dates` method if not used elsewhere
+-   **[Feature]**: Enhanced Reminisce Mode with Configurable Intervals
+    -   **Complexity**: Medium
+    -   **Rationale**: Increases user value by making the "reminisce" feature more flexible and powerful, allowing users to tailor it to their preferred reflection cadences (User Value Prioritization #4).
+    -   **Expected Outcome**: Users can configure reminisce intervals (e.g., "1 week ago", "1 month ago", "3 months ago", "1 year ago") via CLI options or the configuration file. The tool can open multiple past entries if they exist for the specified intervals.
+    -   **Implementation Steps**:
+        - Add configuration options for reminisce intervals
+        - Modify reminisce logic to use configured intervals
+        - Update CLI to support interval customization
+        - Document reminisce configuration options
+    -   **Dependencies**: Implement Externalized Configuration Management.
 
-- **[Fix]**: Linting: Redundant `clippy.toml` Deny List Entries
-  - **Complexity**: Simple
-  - **Rationale**: Several entries in the clippy deny list are redundant as they're covered by `clippy::all`.
-  - **Expected Outcome**: Simplified `clippy.toml` with focused deny list.
-  - **Implementation Steps**:
-    - Simplify the deny list to primarily use `clippy::all`
-    - Only explicitly list lints not covered by `clippy::all` or needing emphasis
+### Code Quality & Developer Experience
 
-- **[Fix]**: Test Hygiene: Unnecessary `#[allow(dead_code)]` in Mock Editor
-  - **Complexity**: Simple
-  - **Rationale**: Methods marked with `#[allow(dead_code)]` are actually used in tests, making the attributes unnecessary and misleading.
-  - **Expected Outcome**: Clean code without unnecessary attributes.
-  - **Implementation Steps**:
-    - Remove the `#[allow(dead_code)]` attributes from the methods
+-   **[Enhancement]**: Specify Rust Edition and MSRV (Minimum Supported Rust Version) in `Cargo.toml` & CI
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with Rust Appendix (Tooling and Environment). Clearly defines the project's language features and supported Rust versions, ensuring build consistency for contributors.
+    -   **Expected Outcome**: `Cargo.toml` explicitly defines the `edition` (e.g., "2021") and `rust-version` (e.g., "1.70"). CI includes a job that builds/tests using this specific MSRV.
+    -   **Implementation Steps**:
+        - Define MSRV in `Cargo.toml` using `rust-version` field
+        - Add CI job using the specified MSRV toolchain
+    -   **Dependencies**: Implement CI Pipeline for Automated Checks.
 
-- **[Enhancement]**: Documentation: Incomplete README for Core Developer Workflow
-  - **Complexity**: Simple
-  - **Rationale**: The README lacks critical information for contributors regarding local development and quality checks.
-  - **Expected Outcome**: Enhanced README with comprehensive information for contributors.
-  - **Implementation Steps**:
-    - Add instructions for running all automated tests
-    - Add instructions for running linters and format checks
-    - Add a CI status badge
+-   **[Enhancement]**: Enforce File and Function Length Guidelines
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with Dev Philosophy ("Adhere to Length Guidelines", "Maintainability"). Promotes better code organization, readability, and discourages overly complex components.
+    -   **Expected Outcome**: `clippy.toml` configured to warn on functions exceeding a defined line limit (e.g., 100 lines) and files exceeding another limit (e.g., 500 lines). These checks are part of the CI linting stage. Existing violations are identified for refactoring.
+    -   **Implementation Steps**:
+        - Configure linter to warn at 500 lines for files
+        - Configure linter to warn at 100 lines for functions
+        - Integrate with CI pipeline
+        - Refactor any existing violations
+    -   **Dependencies**: Enforce Strict Code Linting.
 
-### Core Application Logic
+-   **[Refactor]**: Review and Minimize Crate Dependencies
+    -   **Complexity**: Medium
+    -   **Rationale**: Aligns with "Disciplined Dependency Management" philosophy. Reduces build times, binary size, attack surface, and cognitive load.
+    -   **Expected Outcome**: Unused or unnecessary dependencies are removed. Remaining dependencies are audited for necessity and security. Tools like `cargo-machete` or `cargo-udeps` may be used for auditing.
+    -   **Implementation Steps**:
+        - Audit all direct dependencies in Cargo.toml
+        - Remove unused dependencies
+        - Consider consolidating dependencies with overlapping functionality
+        - Document why each dependency is needed
+        - Configure cargo-audit to check for vulnerabilities
+    -   **Dependencies**: None.
 
-- **[Feature]**: Enhanced Reminisce Mode with Configurable Intervals
-  - **Complexity**: Medium
-  - **Rationale**: Increases user value by making the "reminisce" feature more flexible and powerful, allowing users to tailor it to their preferred reflection cadences.
-  - **Expected Outcome**: Users can configure reminisce intervals (e.g., 1 week, 1 month, 3 months, 1 year ago) via CLI options or the configuration file. The tool can open multiple past entries if they exist for the specified intervals.
-  - **Dependencies**: Implement Externalized Configuration Management.
+### Minor Cleanups & Refinements
 
-- **[Feature]**: Journaling Templates
-  - **Complexity**: Medium
-  - **Rationale**: Improves user efficiency and consistency for structured journal entries (e.g., daily stand-ups, gratitude logs, decision records).
-  - **Expected Outcome**: Users can define simple text templates (e.g., stored in the configuration directory). A CLI option (e.g., `ponder new --template <n>`) populates the new journal entry with the content of the specified template.
-  - **Dependencies**: Implement Externalized Configuration Management.
+-   **[Fix]**: Redundancy: Unnecessary Wrapper for `CliArgs::parse_from`
+    -   **Complexity**: Simple
+    -   **Rationale**: The `CliArgs::parse()` method is a thin wrapper around functionality already provided by `clap::Parser::parse_from` (or `CliArgs::parse()` if `derive(Parser)` is used). This adds an unnecessary layer.
+    -   **Expected Outcome**: Simplified code using the derived `CliArgs::parse()` method (from `clap::Parser`) directly in `main.rs`.
+    -   **Implementation Steps**:
+        - Remove custom `CliArgs::parse()` method
+        - Use the method derived by `clap::Parser` in `main.rs`
+    -   **Dependencies**: None.
 
-### Research & Innovation
+-   **[Fix]**: Update Copyright Year in LICENSE File
+    -   **Complexity**: Simple
+    -   **Rationale**: General project maintenance to keep legal information current.
+    -   **Expected Outcome**: The LICENSE file reflects the correct current year or range of years.
+    -   **Implementation Steps**:
+        - Update copyright year to current year
+        - Verify copyright holder information is accurate
+        - Consider using a date range format (e.g., "2023-2025")
+    -   **Dependencies**: None.
 
-- **[Research]**: Explore Async Rust for I/O Operations
-  - **Complexity**: Medium
-  - **Rationale**: Investigate potential performance/responsiveness benefits of asynchronous I/O for file operations, especially if Ponder were to handle larger files, a higher volume of notes, or integrate network-based features in the future. This aligns with exploring technical excellence while avoiding premature optimization.
-  - **Expected Outcome**: A research spike report summarizing findings on whether async Rust (e.g., Tokio) would provide tangible benefits for Ponder's current and foreseeable scope, versus the added complexity.
-  - **Dependencies**: None.
-
-- **[Research]**: Explore Cross-Platform Compatibility Enhancements
-  - **Complexity**: Medium
-  - **Rationale**: While Rust offers good cross-platform support, proactively investigating and addressing potential edge cases (e.g., path differences, editor launching nuances, specific OS APIs) ensures a smoother experience for users on all major platforms (Linux, macOS, Windows).
-  - **Expected Outcome**: A report identifying potential cross-platform compatibility issues and best practices for mitigating them. Testing strategy expanded to cover multiple OS environments if feasible.
-  - **Dependencies**: Implement Comprehensive Automated Testing Strategy.
-
-### Release Management
-
-- **[Enhancement]**: Automate Release Process (Semantic Release)
-  - **Complexity**: Medium
-  - **Rationale**: Aligns with Dev Philosophy (Automation, Semantic Versioning). Streamlines the release process, ensures consistent versioning based on commit history, and reduces manual effort and potential for error.
-  - **Expected Outcome**: A fully automated release process (e.g., using GitHub Actions with tools compatible with Conventional Commits) that triggers on merges to the main branch, automatically bumps the version, creates Git tags, generates release notes, and potentially publishes release artifacts (e.g., to GitHub Releases).
-  - **Dependencies**: Adopt Conventional Commits and Automate Changelog Generation, Implement CI Pipeline.
+-   **[Fix]**: Audit for `unsafe` Code Blocks and Ensure Compliance with Safety Philosophy
+    -   **Complexity**: Simple
+    -   **Rationale**: Aligns with Rust Appendix ("Unsafe Code"). Ensures any use of `unsafe` is absolutely necessary, minimal, and thoroughly justified and documented.
+    -   **Expected Outcome**: Codebase is audited for `unsafe` blocks. Any `unsafe` block is necessary, its scope is minimized, and it's documented with a `// SAFETY: ...` comment explaining why it's safe and correct.
+    -   **Implementation Steps**:
+        - Search codebase for `unsafe` keyword
+        - Evaluate necessity of each instance
+        - Replace with safe alternatives where possible
+        - Document any remaining unsafe code with detailed safety explanations
+        - Consider encapsulating unsafe code in safe abstractions
+    -   **Dependencies**: None.
 
 ## Future Considerations
 
 ### Advanced Features
 
-- **[Feature]**: Tagging and Searching Journal Entries
-  - **Complexity**: Complex
-  - **Rationale**: Significantly enhances the utility of the journal by allowing users to organize, categorize, and efficiently retrieve entries based on tags or keywords.
-  - **Expected Outcome**: Ability to add tags to entries (e.g., inline syntax like `#projectX @meeting` or via metadata). CLI commands to search entries by tags, keywords, or date ranges.
-  - **Dependencies**: May require Research: Alternative Data Storage Formats/Systems.
+-   **[Feature]**: Tagging and Searching Journal Entries
+    -   **Complexity**: Complex
+    -   **Rationale**: Significantly enhances the utility of the journal by allowing users to organize, categorize, and efficiently retrieve entries based on tags or keywords (User Value Prioritization #5).
+    -   **Expected Outcome**: Ability to add tags to entries (e.g., inline syntax like `#projectX @meeting` within Markdown, or via metadata if storage changes). CLI commands to search entries by tags, keywords, or date ranges.
+    -   **Implementation Steps**:
+        - Define tagging syntax and storage approach
+        - Implement tag parsing and extraction
+        - Add search functionality by tag/keyword
+        - Update CLI with tag/search commands
+        - Document tagging and search features
+    -   **Dependencies**: May require "Research: Alternative Data Storage Formats/Systems".
 
-- **[Feature]**: Support for Multiple Journals
-  - **Complexity**: Medium
-  - **Rationale**: Allows users to separate different types of journaling (e.g., work, personal, project-specific) into distinct collections, improving organization and focus.
-  - **Expected Outcome**: Users can configure and switch between multiple journal directories or named journal contexts via CLI commands or configuration.
-
-- **[Feature]**: Encryption for Journal Files
-  - **Complexity**: Complex
-  - **Rationale**: Enhances user privacy and data security by protecting sensitive journal entries from unauthorized access.
-  - **Expected Outcome**: Option to encrypt journal files (e.g., using age or a similar library) that require a password or key to decrypt and access.
-  - **Dependencies**: Bolster Security Practices, Implement Externalized Configuration Management.
+-   **[Feature]**: Support for Multiple Journals
+    -   **Complexity**: Medium
+    -   **Rationale**: Allows users to separate different types of journaling (e.g., work, personal, project-specific) into distinct collections, improving organization and focus (User Value Prioritization #5).
+    -   **Expected Outcome**: Users can configure and switch between multiple journal directories or named journal "contexts" via CLI commands or configuration settings.
+    -   **Implementation Steps**:
+        - Add journal profile/context configuration
+        - Implement context switching in CLI
+        - Update file operations to respect current context
+        - Document multiple journal setup and usage
+    -   **Dependencies**: Implement Externalized Configuration Management.
 
 ### Data & Storage Strategy
 
-- **[Research]**: Alternative Data Storage Formats/Systems
-  - **Complexity**: Medium
-  - **Rationale**: Explore alternatives to plain text files (e.g., Markdown with frontmatter, SQLite, a simple document database) to better support advanced features like rich metadata, tagging, complex queries, and potentially versioning.
-  - **Expected Outcome**: A recommendation on a data storage strategy based on feature goals (especially tagging/searching), complexity, performance considerations, and ease of migration.
-  - **Dependencies**: Tagging and Searching Journal Entries (as a driver for this research).
+-   **[Research]**: Alternative Data Storage Formats/Systems
+    -   **Complexity**: Medium
+    -   **Rationale**: Explore options beyond plain Markdown files to better support advanced features like rich metadata, tagging, and efficient searching, while balancing simplicity.
+    -   **Expected Outcome**: A research report summarizing potential storage strategies (e.g., Markdown with YAML frontmatter, SQLite, a simple index file) and their trade-offs in terms of complexity, performance, and feature enablement for Ponder.
+    -   **Implementation Steps**:
+        - Research storage options (frontmatter, database, etc.)
+        - Evaluate tradeoffs for each option
+        - Create proof-of-concept implementations
+        - Document findings and recommendations
+    -   **Dependencies**: Drives decisions for "Tagging and Searching Journal Entries".
 
 ### Innovation & Extensibility
 
-- **[PoC]**: Plugin System for Extensibility
-  - **Complexity**: Complex
-  - **Rationale**: Allow users or third-party developers to extend Ponder's functionality with custom commands, entry formats, pre/post processing hooks, or integrations, fostering a richer ecosystem.
-  - **Expected Outcome**: A proof-of-concept demonstrating a basic plugin architecture (e.g., external scripts called via hooks, dynamically loaded WASM modules, or a simple RPC mechanism). Define a basic plugin API.
+-   **[Research]**: Explore Async Rust for I/O Operations
+    -   **Complexity**: Medium
+    -   **Rationale**: Investigate potential performance/responsiveness benefits of using asynchronous I/O for file operations, versus the added complexity, for future needs or if performance becomes a concern.
+    -   **Expected Outcome**: A research spike report summarizing findings on the applicability and trade-offs of async Rust (e.g., using `tokio`) for Ponder's file operations.
+    -   **Implementation Steps**:
+        - Research async I/O in Rust
+        - Evaluate performance benefits vs. complexity
+        - Create proof-of-concept implementation
+        - Document findings for future reference
+    -   **Dependencies**: None.
+
+-   **[PoC]**: Plugin System for Extensibility
+    -   **Complexity**: Complex
+    -   **Rationale**: Allow community contributions and custom workflows by enabling users or third-party developers to extend Ponder's functionality (e.g., custom export formats, integration with other tools).
+    -   **Expected Outcome**: A proof-of-concept demonstrating a basic plugin architecture and API (e.g., via external scripts, WASM, or a defined Rust trait interface if compiled in).
+    -   **Implementation Steps**:
+        - Design plugin architecture and API
+        - Implement core plugin loading infrastructure
+        - Create example plugins
+        - Document plugin development process
+    -   **Dependencies**: Enhance Modularity and Separation of Concerns.
 
 ### Operational Excellence & User Experience
 
-- **[Enhancement]**: Comprehensive Observability (Metrics & Tracing)
-  - **Complexity**: Medium
-  - **Rationale**: While less critical for a simple CLI, if Ponder evolves or integrates with other services, having metrics (e.g., command execution times, error rates) and distributed tracing could be valuable for performance analysis and debugging.
-  - **Expected Outcome**: If deemed necessary based on complexity or integration points, basic metrics collection (e.g., using `metrics` crate or `tracing` ecosystem) for key operations. For a CLI, this might involve local aggregation or conditional reporting.
+-   **[Enhancement]**: Backup and Recovery Mechanisms
+    -   **Complexity**: Medium
+    -   **Rationale**: Provides users with a simple way to back up their journal data, increasing trust and data safety.
+    -   **Expected Outcome**: CLI command(s) to export all journal entries into a portable format (e.g., a ZIP archive of Markdown files, a single concatenated Markdown file). Potential for simple import functionality.
+    -   **Implementation Steps**:
+        - Implement export to archive functionality
+        - Add CLI commands for backup/export
+        - Consider import functionality
+        - Document backup/restore procedures
+    -   **Dependencies**: Implement Externalized Configuration Management.
 
-- **[Enhancement]**: Backup and Recovery Mechanisms
-  - **Complexity**: Medium
-  - **Rationale**: Provide users with simple ways to back up their journal entries to prevent data loss, enhancing trust and reliability.
-  - **Expected Outcome**: A CLI command to export all journal entries into a compressed archive. Potentially explore simple integration with user-specified backup locations or cloud storage (as a very advanced step).
-  - **Dependencies**: Implement Externalized Configuration Management.
+-   **[Enhancement]**: Automate Release Process (Semantic Release)
+    -   **Complexity**: Medium
+    -   **Rationale**: Streamlines the release process, ensures consistent versioning based on Conventional Commits, and automates the creation of release artifacts and publishing.
+    -   **Expected Outcome**: An automated process (e.g., using GitHub Actions with tools like `semantic-release` or equivalent Rust ecosystem tools) for version bumping, Git tagging, changelog updating, and potentially publishing binaries to GitHub Releases.
+    -   **Implementation Steps**:
+        - Set up CI workflow for release automation
+        - Configure version bumping based on commit history
+        - Automate release artifacts creation
+        - Set up automatic publishing to GitHub Releases
+    -   **Dependencies**: Adopt Conventional Commits and Automate Changelog Generation, Implement CI Pipeline for Automated Checks.
