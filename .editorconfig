@@ -1,0 +1,34 @@
+# EditorConfig is supported by most popular editors
+# https://editorconfig.org
+
+# Top-most EditorConfig file
+root = true
+
+# Universal settings for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Markdown files - don't trim trailing whitespace (affects line breaks)
+[*.md]
+trim_trailing_whitespace = false
+
+# YAML files often use 2-space indentation
+[*.{yml,yaml}]
+indent_size = 2
+
+# Git configuration files
+[.git*]
+indent_style = tab
+
+# TOML files
+[*.toml]
+indent_size = 2
+
+# Makefile - requires tabs
+[Makefile]
+indent_style = tab

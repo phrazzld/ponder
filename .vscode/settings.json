@@ -1,0 +1,34 @@
+{
+    // Format on save
+    "editor.formatOnSave": true,
+    
+    // Rust-specific settings
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.rulers": [100]
+    },
+    
+    // Rust Analyzer settings
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.checkOnSave.allTargets": true,
+    "rust-analyzer.rustfmt.extraArgs": ["--config-path=.rustfmt.toml"],
+    
+    // Enforce LF line-endings
+    "files.eol": "\n",
+    
+    // Trim trailing whitespace
+    "files.trimTrailingWhitespace": true,
+    
+    // Ensure final newline
+    "files.insertFinalNewline": true,
+    
+    // Exclude specific directories from search
+    "search.exclude": {
+        "target/": true
+    },
+    
+    // File associations
+    "files.associations": {
+        "*.rs": "rust"
+    }
+}

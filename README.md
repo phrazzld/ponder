@@ -117,9 +117,47 @@ We welcome contributions to Ponder! If you'd like to contribute:
 2. Create a new branch for your feature (`git checkout -b feature/my-new-feature`)
 3. Add tests for your changes
 4. Make your changes and ensure all tests pass (`cargo test`)
-5. Run `cargo fmt` and `cargo clippy` to ensure code quality
+5. Ensure your code is properly formatted and passes linting checks
 6. Commit your changes following the Conventional Commits specification
 7. Submit a pull request
+
+### Development Setup
+
+To set up your development environment:
+
+```bash
+# Clone the repository
+git clone https://github.com/phrazzld/ponder.git
+cd ponder
+
+# Install pre-commit hooks (recommended)
+pip install pre-commit
+pre-commit install
+```
+
+### Code Formatting and Linting
+
+We use automated tools to ensure consistent code style:
+
+- **rustfmt**: Automatically formats Rust code
+  ```bash
+  cargo fmt
+  ```
+
+- **clippy**: Provides linting and code improvement suggestions
+  ```bash
+  cargo clippy --all-targets -- -D warnings
+  ```
+
+- **pre-commit hooks**: Automatically run formatters and linters before each commit
+  - The hooks will run automatically when you commit changes
+  - To run them manually: `pre-commit run --all-files`
+
+The repository includes:
+- `.rustfmt.toml` - Configuration for rustfmt
+- `.pre-commit-config.yaml` - Configuration for pre-commit hooks
+- `.vscode/settings.json` - Settings for VS Code users
+- `.editorconfig` - Settings for various editors
 
 Please check out the open issues for tasks that need help, or feel free to propose new features or improvements.
 
