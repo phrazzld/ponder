@@ -2,11 +2,56 @@
 
 ## High Priority
 
+### Testing & Code Quality Issues
+
+- **[Fix]**: Test Strategy: Violation of Mocking Policy and Over-Reliance on Internal Mocks
+  - **Complexity**: Complex
+  - **Rationale**: The current testing strategy for `JournalService` relies heavily on mocking internal collaborators like `Editor` and `JournalIO`, violating the development philosophy. Tests are coupled to implementation details rather than observable behavior.
+  - **Expected Outcome**: Refactored `JournalService` with more pure, easily testable logic. Integration tests using real or in-memory implementations where possible. Mocks reserved only for true external boundaries.
+  - **Implementation Steps**:
+    - Refactor `JournalService` to extract more pure logic
+    - Implement real or in-memory filesystem implementations for `JournalIO`
+    - Redesign tests to focus on observable behavior
+    - Reserve mocks only for true external boundaries
+
+- **[Fix]**: Security: Inadequate Log Redaction for Sensitive Information
+  - **Complexity**: Medium
+  - **Rationale**: Logging full `CliArgs` and `Config` at DEBUG level can leak potentially sensitive information, violating the logging guidelines in the development philosophy.
+  - **Expected Outcome**: Safe `Debug` implementations for `CliArgs` and `Config` that redact or summarize sensitive fields. Careful consideration of what paths and commands are logged.
+  - **Implementation Steps**:
+    - Implement custom `Debug` formatting for sensitive structs
+    - Redact or summarize sensitive fields
+    - Log only specific, non-sensitive fields instead of entire structures
+
+- **[Fix]**: Observability: Missing Mandatory Context Fields in Structured Logs
+  - **Complexity**: Medium
+  - **Rationale**: Structured logs are missing required context fields like `service_name`, `correlation_id`, and `module/function`, hampering log analysis and debugging.
+  - **Expected Outcome**: Enhanced logging setup with all mandatory context fields included in every log entry.
+  - **Implementation Steps**:
+    - Add static `service_name` to logs
+    - Generate and include `correlation_id` for each invocation
+    - Include `module_path` and line numbers in logs
+    - Ensure `error_details` are captured for ERROR level logs
+
+- **[Fix]**: Error Handling: Inconsistent Error Propagation and Context
+  - **Complexity**: Medium
+  - **Rationale**: Errors are logged at lower levels and then propagated, leading to potential double logging and cluttered logs. The context added via logging is not part of the error value itself.
+  - **Expected Outcome**: Consistent error propagation without intermediate logging. Better error context through enhanced error types. A single, comprehensive logging point for unhandled errors.
+  - **Implementation Steps**:
+    - Remove intermediate logging within `.map_err` blocks
+    - Use `context` methods from crates like `anyhow` for better error context
+    - Establish a single logging point for unhandled errors
+    - Handle potential `env_logger::init()` errors
+
 ### Developer Workflow & Automation
 
 - **[Enhancement]**: Implement CI Pipeline for Automated Checks
   - **Complexity**: Medium
   - **Rationale**: Aligns with Dev Philosophy (Automation, Quality Gates, CI/CD). Ensures consistent code quality, catches regressions early, automates repetitive tasks (formatting, linting, testing), and provides rapid feedback. Critical for maintaining a healthy codebase and enabling confident development.
+  - **Updates Needed**: 
+    - Add test coverage enforcement using `cargo-tarpaulin` or similar tool
+    - Add dependency vulnerability scanning with `cargo audit`
+    - Fail build on coverage drops or security vulnerabilities
   - **Expected Outcome**: A fully automated CI pipeline (e.g., GitHub Actions) that runs on every push and pull request, executing checks for code formatting (`cargo fmt --check`), strict linting (`cargo clippy -- -D warnings`), automated tests (`cargo test --all-features`), and dependency vulnerability scanning (`cargo audit`). Builds fail on any violation.
   - **Implementation Steps**:
     - Create `.github/workflows` directory
@@ -81,6 +126,44 @@
   - **Dependencies**: Enhance Modularity and Separation of Concerns (makes unit testing easier), Implement CI Pipeline.
 
 ## Medium Priority
+
+### Code Architecture & Design
+
+- **[Fix]**: API Design: Awkward Test-Only Struct Fields and Public Methods
+  - **Complexity**: Medium
+  - **Rationale**: Making fields and methods conditionally public with `#[cfg(test)]` complicates the API and exposes internals unnecessarily.
+  - **Expected Outcome**: Cleaner API without test-only public fields. Test-specific functionality moved to appropriate test modules.
+  - **Implementation Steps**:
+    - Remove `#[cfg(test)] pub(crate) config: Config` field from `JournalService`
+    - Move test-only parsing/validation logic into dedicated test modules
+    - Replace `Config::new()` with `Config::default()` in tests
+    - Move test-only convenience methods into appropriate test modules
+
+- **[Fix]**: Modularity: Misplaced CLI Argument Interpretation Logic
+  - **Complexity**: Simple
+  - **Rationale**: Logic for interpreting `CliArgs` and converting to `DateSpecifier` is in `main.rs` but should be in the `cli` module.
+  - **Expected Outcome**: `get_date_specifier_from_args` and related logic moved to the appropriate module.
+  - **Implementation Steps**:
+    - Move logic to `src/cli/mod.rs`
+    - Consider making it a method on `CliArgs`
+    - Update all call sites
+
+- **[Fix]**: Error Design: Fragile `Clone` Implementation for `AppError::Io`
+  - **Complexity**: Medium
+  - **Rationale**: The manual `Clone` implementation for `AppError::Io` is lossy and discards potentially valuable error details.
+  - **Expected Outcome**: A more robust error design that preserves error details when cloned.
+  - **Implementation Steps**:
+    - Evaluate if `AppError` genuinely needs to be `Clone`
+    - Consider wrapping `std::io::Error` in an `Arc` for efficient, non-lossy cloning
+    - Or store only the needed error components directly
+
+- **[Enhancement]**: Missing MSRV (Minimum Supported Rust Version) Enforcement
+  - **Complexity**: Simple
+  - **Rationale**: Without an explicitly defined and CI-enforced MSRV, contributors might use newer Rust features, breaking compatibility.
+  - **Expected Outcome**: Defined MSRV in `Cargo.toml` and CI enforcement of this version.
+  - **Implementation Steps**:
+    - Define MSRV in `Cargo.toml` using `rust-version` field
+    - Add CI job using the specified MSRV toolchain
 
 ### Configuration & Usability
 
@@ -167,6 +250,48 @@
   - **Dependencies**: Improve Error Handling (structured logs are excellent for reporting errors).
 
 ## Low Priority
+
+### Code Cleanup & Refinements
+
+- **[Fix]**: Redundancy: Unnecessary Wrapper for `CliArgs::parse_from`
+  - **Complexity**: Simple
+  - **Rationale**: The `CliArgs::parse()` method is a thin wrapper around functionality already provided by `clap::Parser`. This adds an unnecessary layer.
+  - **Expected Outcome**: Simplified code using the derived `CliArgs::parse()` method directly.
+  - **Implementation Steps**:
+    - Remove custom `CliArgs::parse()` method
+    - Use the method derived by `clap::Parser` in `main.rs`
+
+- **[Fix]**: Clarity: Magic Constants for Reminisce Intervals
+  - **Complexity**: Simple
+  - **Rationale**: Magic constants for reminisce intervals could be better co-located or encapsulated for improved context.
+  - **Expected Outcome**: Constants grouped within a more specific scope for better context.
+  - **Implementation Steps**:
+    - Group constants within a private `reminisce_intervals` module
+    - Or move them directly within the `get_dates` method if not used elsewhere
+
+- **[Fix]**: Linting: Redundant `clippy.toml` Deny List Entries
+  - **Complexity**: Simple
+  - **Rationale**: Several entries in the clippy deny list are redundant as they're covered by `clippy::all`.
+  - **Expected Outcome**: Simplified `clippy.toml` with focused deny list.
+  - **Implementation Steps**:
+    - Simplify the deny list to primarily use `clippy::all`
+    - Only explicitly list lints not covered by `clippy::all` or needing emphasis
+
+- **[Fix]**: Test Hygiene: Unnecessary `#[allow(dead_code)]` in Mock Editor
+  - **Complexity**: Simple
+  - **Rationale**: Methods marked with `#[allow(dead_code)]` are actually used in tests, making the attributes unnecessary and misleading.
+  - **Expected Outcome**: Clean code without unnecessary attributes.
+  - **Implementation Steps**:
+    - Remove the `#[allow(dead_code)]` attributes from the methods
+
+- **[Enhancement]**: Documentation: Incomplete README for Core Developer Workflow
+  - **Complexity**: Simple
+  - **Rationale**: The README lacks critical information for contributors regarding local development and quality checks.
+  - **Expected Outcome**: Enhanced README with comprehensive information for contributors.
+  - **Implementation Steps**:
+    - Add instructions for running all automated tests
+    - Add instructions for running linters and format checks
+    - Add a CI status badge
 
 ### Core Application Logic
 

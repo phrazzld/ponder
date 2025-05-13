@@ -523,6 +523,7 @@ impl JournalService {
         // Check for existing entries on each date
         for date in dates {
             let path = self.io.generate_path_for_naive_date(date)?;
+            
             if self.io.file_exists(&path) {
                 paths.push(path);
             }
