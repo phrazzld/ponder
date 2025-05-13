@@ -9,8 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Speed up Rust compilation & improve CI performance
-  RUSTC_WRAPPER: sccache
-  SCCACHE_GHA_ENABLED: "true"
   RUSTFLAGS: "-C debuginfo=0"
   CARGO_INCREMENTAL: 0
 
@@ -40,7 +38,8 @@ jobs:
       with:
         components: clippy
     
-    - uses: mozilla-actions/sccache-action@v0.0.3
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
     
     - name: Enforce strict clippy
       run: cargo clippy --all-targets -- -D warnings
@@ -55,9 +54,7 @@ jobs:
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
     
-    - uses: mozilla-actions/sccache-action@v0.0.3
-    
-    - name: Rust cache
+    - name: Rust cargo cache
       uses: Swatinem/rust-cache@v2
     
     - name: Build
