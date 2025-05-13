@@ -25,7 +25,7 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 ## Usage Example
 
-```rust
+```rust,no_run
 use ponder::{Config, JournalService, DateSpecifier};
 use ponder::journal::io::FileSystemIO;
 use ponder::editor::SystemEditor;
