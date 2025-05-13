@@ -8,38 +8,22 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Speed up Rust compilation & improve CI performance
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTFLAGS: "-C debuginfo=0"
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Install stable toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt, clippy
-    
-    - name: Build
-      run: cargo build --verbose
-    
-    - name: Run tests
-      run: cargo test --verbose
-
   formatting:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
     - uses: actions/checkout@v3
     
     - name: Install stable toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        profile: minimal
-        toolchain: stable
-        override: true
         components: rustfmt
     
     - name: Check formatting
@@ -47,16 +31,39 @@ jobs:
 
   clippy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
     - uses: actions/checkout@v3
     
     - name: Install stable toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        profile: minimal
-        toolchain: stable
-        override: true
         components: clippy
+    
+    - uses: mozilla-actions/sccache-action@v0.0.3
     
     - name: Enforce strict clippy
       run: cargo clippy --all-targets -- -D warnings
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [formatting, clippy]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - uses: mozilla-actions/sccache-action@v0.0.3
+    
+    - name: Rust cache
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build
+      run: cargo build --verbose
+      timeout-minutes: 5
+    
+    - name: Run tests
+      run: cargo test --verbose
+      timeout-minutes: 5
