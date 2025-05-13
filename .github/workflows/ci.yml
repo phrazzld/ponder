@@ -1,0 +1,66 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  # Speed up Rust compilation & improve CI performance
+  RUSTFLAGS: "-C debuginfo=0"
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Enforce strict clippy
+      run: cargo clippy --all-targets -- -D warnings
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [formatting, clippy]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Build
+      run: cargo build --verbose
+      timeout-minutes: 5
+    
+    - name: Run tests
+      run: cargo test --verbose
+      timeout-minutes: 5

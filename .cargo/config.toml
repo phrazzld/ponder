@@ -1,0 +1,5 @@
+[build]
+# rustc options that apply to all profiles
+rustflags = [
+]
+

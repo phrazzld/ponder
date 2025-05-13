@@ -1,0 +1,29 @@
+# Rust formatting configuration
+# See full options at: https://rust-lang.github.io/rustfmt/
+
+# Use 4 spaces for indentation (default)
+indent_style = "Block"
+tab_spaces = 4
+
+# Line width
+max_width = 100
+
+# Ensure consistent formatting of imports
+imports_layout = "HorizontalVertical"
+imports_granularity = "Crate"
+reorder_imports = true
+
+# Code organization
+reorder_modules = true
+
+# Comments
+wrap_comments = true
+comment_width = 100
+
+# Misc
+format_strings = true
+format_macro_bodies = true
+format_macro_matchers = true
+
+# Use standard Rust 2021 edition
+edition = "2021"

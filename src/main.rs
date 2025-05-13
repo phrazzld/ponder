@@ -1,152 +1,292 @@
-use chrono::prelude::*;
-use chrono::Months;
-use clap::{App, Arg};
-use std::env;
-use std::fs::OpenOptions;
-use std::io::{Error, Read, Write};
-use std::process::Command;
+/*!
+# Ponder - A Simple Journaling Tool
 
-fn main() -> Result<(), Error> {
-    let matches = App::new("ponder")
-        .arg(
-            Arg::with_name("retro")
-                .short('r')
-                .long("retro")
-                .help("Opens entries from the past week excluding today"),
-        )
-        .arg(
-            Arg::with_name("reminisce")
-                .short('m')
-                .long("reminisce")
-                .help("Opens entries from significant past intervals"),
-        )
-        .get_matches();
+Ponder is a command-line tool for maintaining a journal of daily reflections.
+It helps you create and manage markdown-formatted journal entries, with support
+for creating entries for today, viewing past entries, and more.
 
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+This file contains the main application flow, coordinating the various components
+to implement the journal functionality.
 
-    if matches.is_present("reminisce") {
-        let mut filenames = Vec::new();
-        let now = Local::now();
-        let today = now.naive_local().date();
+## Features
 
-        let mut dates = Vec::new();
+- Create and edit today's journal entry
+- Review entries from the past week (retro mode)
+- Review entries from significant past time intervals (reminisce mode)
+- Open entries for specific dates
+- Configurable editor and journal directory
 
-        // Add specific month intervals
-        if let Some(date) = today.checked_sub_months(Months::new(1)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(3)) {
-            dates.push(date);
-        }
-        if let Some(date) = today.checked_sub_months(Months::new(6)) {
-            dates.push(date);
-        }
+## Usage
 
-        // Add every year ago for the past hundred years
-        for year in 1..=100 {
-            if let Some(date) = today.checked_sub_months(Months::new(12 * year)) {
-                dates.push(date);
+```
+ponder [OPTIONS]
+
+Options:
+  -r, --retro                   Opens entries from the past week excluding today
+  -m, --reminisce               Opens entries from significant past intervals (1 month ago, 3 months ago, etc.)
+  -d, --date <DATE>             Opens an entry for a specific date (format: YYYY-MM-DD or YYYYMMDD)
+  -v, --verbose                 Enable verbose output
+  -h, --help                    Print help information
+  -V, --version                 Print version information
+```
+
+## Configuration
+
+The application can be configured with the following environment variables:
+- `PONDER_EDITOR` or `EDITOR`: The editor to use for opening journal entries (defaults to "vim")
+- `PONDER_DIR`: The directory to store journal entries (defaults to "~/Documents/rubberducks")
+*/
+
+mod cli;
+mod config;
+mod editor;
+mod errors;
+mod journal;
+
+use cli::CliArgs;
+use config::Config;
+use editor::SystemEditor;
+use errors::AppResult;
+use journal::io::FileSystemIO;
+use journal::{DateSpecifier, JournalService};
+use log::{debug, error, info};
+
+/// The main entry point for the ponder application.
+///
+/// This function coordinates the overall application flow:
+/// 1. Initializes logging
+/// 2. Parses command-line arguments
+/// 3. Loads and validates configuration
+/// 4. Ensures the journal directory exists
+/// 5. Sets up the journal service with its dependencies
+/// 6. Determines which entries to open based on CLI arguments
+/// 7. Opens the appropriate journal entries
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the application ran successfully,
+/// or an AppError if an error occurred at any point in the flow.
+///
+/// # Errors
+///
+/// This function can return various types of errors, including:
+/// - Configuration errors (missing or invalid configuration)
+/// - I/O errors (file not found, permission denied, etc.)
+/// - Journal logic errors (invalid date format, etc.)
+/// - Editor errors (failed to launch editor)
+fn main() -> AppResult<()> {
+    // Initialize structured JSON logging
+    env_logger::Builder::from_default_env()
+        .format(|buf, record| {
+            use std::io::Write;
+
+            // Create JSON structure with timestamp, level, and message
+            let timestamp = chrono::Local::now().to_rfc3339();
+            writeln!(
+                buf,
+                "{{\"timestamp\":\"{}\",\"level\":\"{}\",\"message\":\"{}\"}}",
+                timestamp,
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
+
+    info!("Starting ponder");
+
+    // Parse command-line arguments
+    let args = CliArgs::parse();
+    debug!("CLI arguments: {:?}", args);
+
+    // Set up verbose logging if requested
+    if args.verbose {
+        debug!("Verbose mode enabled");
+    }
+
+    // Load and validate configuration
+    info!("Loading configuration");
+    let config = Config::load().map_err(|e| {
+        error!("Configuration error: {}", e);
+        e
+    })?;
+
+    config.validate().map_err(|e| {
+        error!("Invalid configuration: {}", e);
+        e
+    })?;
+
+    // Ensure journal directory exists
+    debug!("Journal directory: {:?}", config.journal_dir);
+    config.ensure_journal_dir().map_err(|e| {
+        error!("Failed to create journal directory: {}", e);
+        e
+    })?;
+
+    // Initialize I/O, editor, and journal service
+    info!("Initializing journal service");
+    let io = Box::new(FileSystemIO {
+        journal_dir: config.journal_dir.clone(),
+    });
+
+    let editor = Box::new(SystemEditor {
+        editor_cmd: config.editor.clone(),
+    });
+
+    let journal_service = JournalService::new(config, io, editor).map_err(|e| {
+        error!("Failed to initialize journal service: {}", e);
+        e
+    })?;
+
+    // Determine which entry type to open based on CLI arguments
+    let date_spec = get_date_specifier_from_args(&args)?;
+
+    // Open the appropriate journal entries
+    info!("Opening journal entries");
+    journal_service.open_entries(&date_spec).map_err(|e| {
+        error!("Failed to open journal entries: {}", e);
+        e
+    })?;
+
+    info!("Journal entries opened successfully");
+    Ok(())
+}
+
+/// Converts CLI arguments to a DateSpecifier.
+///
+/// This helper function examines the CLI arguments and determines the
+/// appropriate DateSpecifier to use for journal entry selection.
+///
+/// # Parameters
+///
+/// * `args` - The parsed command-line arguments
+///
+/// # Returns
+///
+/// A Result containing either the appropriate DateSpecifier or an AppError
+/// if a date string couldn't be parsed.
+///
+/// # Errors
+///
+/// Returns an error if the date string (from `--date` option) is invalid or
+/// in an unsupported format.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::cli::CliArgs;
+/// use ponder::journal::DateSpecifier;
+///
+/// // No flags specified - defaults to today
+/// let args = CliArgs {
+///     retro: false,
+///     reminisce: false,
+///     date: None,
+///     verbose: false,
+/// };
+/// let date_spec = get_date_specifier_from_args(&args).unwrap();
+/// assert_eq!(date_spec, DateSpecifier::Today);
+/// ```
+fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
+    if args.retro {
+        Ok(DateSpecifier::Retro)
+    } else if args.reminisce {
+        Ok(DateSpecifier::Reminisce)
+    } else if let Some(date_str) = &args.date {
+        // Parse the date string
+        match DateSpecifier::from_args(false, false, Some(date_str)) {
+            Ok(date_spec) => Ok(date_spec),
+            Err(e) => {
+                error!("Invalid date format: {}", e);
+                Err(e)
             }
         }
+    } else {
+        // Default to today if no options are specified
+        Ok(DateSpecifier::Today)
+    }
+}
 
-        // Remove duplicates and sort the dates
-        dates.sort();
-        dates.dedup();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Datelike;
+    use errors::AppError;
 
-        // Collect filenames for existing entries
-        for date in dates {
-            let filename = generate_filename_for_naivedate(date);
-            if std::fs::metadata(&filename).is_ok() {
-                filenames.push(filename);
-            }
-        }
+    #[test]
+    fn test_get_date_specifier_from_retro_args() {
+        let args = CliArgs {
+            retro: true,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
 
-        filenames.reverse();
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Retro);
+    }
 
-        if !filenames.is_empty() {
-            Command::new(&editor)
-                .args(&filenames)
-                .status()
-                .expect("Failed to open files");
+    #[test]
+    fn test_get_date_specifier_from_reminisce_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: true,
+            date: None,
+            verbose: false,
+        };
+
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Reminisce);
+    }
+
+    #[test]
+    fn test_get_date_specifier_from_date_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("2023-01-15".to_string()),
+            verbose: false,
+        };
+
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        if let DateSpecifier::Specific(date) = date_spec {
+            assert_eq!(date.year(), 2023);
+            assert_eq!(date.month(), 1);
+            assert_eq!(date.day(), 15);
         } else {
-            eprintln!("No entries found for reminisce intervals");
+            panic!("Expected DateSpecifier::Specific");
         }
-    } else if matches.is_present("retro") {
-        // Retrieve entries from the past week and open each
-        let mut filenames = Vec::new();
-        for i in (1..=7).rev() {
-            let date = Local::now() - chrono::Duration::days(i);
-            let filename = generate_filename_for_date(date);
-            if std::fs::metadata(&filename).is_ok() {
-                filenames.push(filename);
+    }
+
+    #[test]
+    fn test_get_date_specifier_from_invalid_date_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("invalid-date".to_string()),
+            verbose: false,
+        };
+
+        let result = get_date_specifier_from_args(&args);
+        assert!(result.is_err());
+
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("Invalid date format"));
             }
+            _ => panic!("Expected Journal error"),
         }
-        if !filenames.is_empty() {
-            Command::new(&editor)
-                .args(&filenames)
-                .status()
-                .expect("Failed to open files");
-        }
-    } else {
-        let filename = generate_filename_for_date(Local::now());
-        let mut file = create_or_open_file(&filename).unwrap();
-        append_date_time(&mut file).unwrap();
-        Command::new(editor)
-            .arg(filename)
-            .status()
-            .expect("Failed to open file");
     }
 
-    Ok(())
-}
+    #[test]
+    fn test_get_date_specifier_from_default_args() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
 
-fn generate_filename_for_date(date: DateTime<Local>) -> String {
-    format!(
-        "{}/Documents/rubberducks/{}.md",
-        env::var("HOME").unwrap(),
-        date.format("%Y%m%d")
-    )
-}
-
-fn generate_filename_for_naivedate(date: NaiveDate) -> String {
-    format!(
-        "{}/Documents/rubberducks/{:04}{:02}{:02}.md",
-        env::var("HOME").unwrap(),
-        date.year(),
-        date.month(),
-        date.day()
-    )
-}
-
-fn create_or_open_file(filename: &String) -> Result<std::fs::File, Error> {
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .append(true)
-        .open(filename)?;
-    Ok(file)
-}
-
-fn append_date_time(file: &mut std::fs::File) -> Result<(), Error> {
-    let now = chrono::Local::now();
-    // If file is empty, append today's date in YYYY MMM, DD format as the header
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-
-    if contents.is_empty() {
-        writeln!(file, "# {}", now.format("%B %d, %Y: %A"))?;
-        writeln!(
-            file,
-            "\n#journal [[{} {}]] [[year {}]]",
-            now.format("%B").to_string().to_lowercase(),
-            now.format("%Y"),
-            now.format("%Y")
-        )?;
-        writeln!(file, "\n## {}\n\n", now.format("%H:%M:%S"))?;
-    } else {
-        writeln!(file, "\n\n## {}\n\n", now.format("%H:%M:%S"))?;
+        let date_spec = get_date_specifier_from_args(&args).unwrap();
+        assert_eq!(date_spec, DateSpecifier::Today);
     }
-
-    Ok(())
 }
