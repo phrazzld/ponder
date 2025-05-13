@@ -2,6 +2,9 @@
 
 ## High Priority
 
+- support encrypted notes
+- support cross-device sync
+
 ### Testing & Code Quality Issues
 
 - **[Fix]**: Test Strategy: Violation of Mocking Policy and Over-Reliance on Internal Mocks
@@ -48,7 +51,7 @@
 - **[Enhancement]**: Implement CI Pipeline for Automated Checks
   - **Complexity**: Medium
   - **Rationale**: Aligns with Dev Philosophy (Automation, Quality Gates, CI/CD). Ensures consistent code quality, catches regressions early, automates repetitive tasks (formatting, linting, testing), and provides rapid feedback. Critical for maintaining a healthy codebase and enabling confident development.
-  - **Updates Needed**: 
+  - **Updates Needed**:
     - Add test coverage enforcement using `cargo-tarpaulin` or similar tool
     - Add dependency vulnerability scanning with `cargo audit`
     - Fail build on coverage drops or security vulnerabilities
