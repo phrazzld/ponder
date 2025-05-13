@@ -33,10 +33,9 @@ fn set_up_test_env() -> (Config, tempfile::TempDir) {
 fn test_journal_service_basic_flow() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
-    
+
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
         journal_dir: journal_dir.clone(),
@@ -66,10 +65,9 @@ fn test_journal_service_basic_flow() -> AppResult<()> {
 fn test_journal_service_specific_date() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
-    
+
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
         journal_dir: journal_dir.clone(),
@@ -100,10 +98,9 @@ fn test_journal_service_specific_date() -> AppResult<()> {
 fn test_journal_service_retro() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
-    
+
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
         journal_dir: journal_dir.clone(),
@@ -129,10 +126,9 @@ fn test_journal_service_retro() -> AppResult<()> {
 fn test_journal_service_reminisce() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env();
 
-
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
-    
+
     // Set up the required dependencies
     let io = Box::new(FileSystemIO {
         journal_dir: journal_dir.clone(),

@@ -47,7 +47,7 @@ fn test_cli_reminisce_flag() {
     cmd.arg("--reminisce");
 
     // Since no reminisce entries will exist in the test directory,
-    // And we're now using structured logging instead of println, 
+    // And we're now using structured logging instead of println,
     // we just need to check that the command succeeds
     cmd.assert().success();
 }
