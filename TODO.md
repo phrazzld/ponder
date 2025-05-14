@@ -94,7 +94,7 @@
 
 ## Main Refactoring
 
-- [ ] **T008 · Refactor · P0: Refactor `main.rs` to use new journal_logic API**
+- [x] **T008 · Refactor · P0: Refactor `main.rs` to use new journal_logic API**
     - **Context:** PLAN.md, Detailed Build Steps, Step 6
     - **Action:**
         1. Remove instantiation and usage of `JournalService`, `FileSystemIO`, and `SystemEditor`.
