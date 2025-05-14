@@ -56,7 +56,7 @@
         1. Unit tests for date-to-path and file operations pass.
     - **Depends‑on:** [T001]
 
-- [ ] **T005 · Feature · P1: Implement editor launch logic**
+- [x] **T005 · Feature · P1: Implement editor launch logic**
     - **Context:** PLAN.md, Detailed Build Steps, Step 4; Architecture Blueprint (Private helpers)
     - **Action:**
         1. Implement the private helper function `fn launch_editor(editor_cmd: &str, files_to_open: &[PathBuf]) -> AppResult<()>` using `std::process::Command`.

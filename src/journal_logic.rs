@@ -14,6 +14,7 @@ use chrono::{Duration, Local, Months, NaiveDate};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 // Constants for date calculations
 const REMINISCE_ONE_MONTH_AGO: u32 = 1;
@@ -388,5 +389,40 @@ fn read_file_content(path: &Path) -> AppResult<String> {
 /// to permission issues, disk space, or other filesystem errors.
 fn append_to_file(file: &mut File, content: &str) -> AppResult<()> {
     file.write_all(content.as_bytes())?;
+    Ok(())
+}
+
+/// Launches an external editor to open files.
+///
+/// This function launches the specified editor command, passing the file paths
+/// as arguments to the command. It's used to open journal entry files for editing.
+///
+/// # Parameters
+///
+/// * `editor_cmd` - The editor command to execute (e.g., "vim", "code", "nano")
+/// * `files_to_open` - A slice of file paths to open in the editor
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the editor was launched successfully,
+/// or an AppError if there was a problem launching the editor.
+///
+/// # Errors
+///
+/// Returns `AppError::Editor` if the editor command failed to execute.
+/// This could happen if:
+/// - The editor command is not found
+/// - The process cannot be spawned
+/// - One of the file paths is invalid
+fn launch_editor(editor_cmd: &str, files_to_open: &[PathBuf]) -> AppResult<()> {
+    if files_to_open.is_empty() {
+        return Ok(());
+    }
+
+    Command::new(editor_cmd)
+        .args(files_to_open)
+        .status()
+        .map_err(|e| AppError::Editor(format!("Failed to launch editor: {}", e)))?;
+
     Ok(())
 }
