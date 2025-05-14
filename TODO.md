@@ -27,7 +27,7 @@
         1. `cargo check` passes.
     - **Depends‑on:** [T001]
 
-- [ ] **T003 · Feature · P1: Implement `ensure_journal_directory_exists`**
+- [x] **T003 · Feature · P1: Implement `ensure_journal_directory_exists`**
     - **Context:** PLAN.md, Detailed Build Steps, Step 5; Architecture Blueprint (Public Interfaces)
     - **Action:**
         1. Implement `pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()>` in `src/journal_logic.rs`.

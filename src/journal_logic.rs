@@ -11,7 +11,8 @@
 use crate::config::Config;
 use crate::errors::{AppError, AppResult};
 use chrono::{Duration, Local, Months, NaiveDate};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 // Constants for date calculations
 const REMINISCE_ONE_MONTH_AGO: u32 = 1;
@@ -241,5 +242,41 @@ impl DateSpecifier {
 /// ```
 pub fn open_journal_entries(config: &Config, date_spec: &DateSpecifier) -> AppResult<()> {
     // This is a stub implementation that will be completed in a future task
+    Ok(())
+}
+
+/// Ensures the journal directory exists, creating it if necessary.
+///
+/// This function checks if the specified directory exists and creates it
+/// (including all parent directories) if it doesn't exist yet.
+///
+/// # Parameters
+///
+/// * `journal_dir` - Path to the journal directory
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the directory exists or was successfully created,
+/// or an AppError if directory creation failed.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if the directory creation fails due to permission issues,
+/// invalid paths, or other filesystem errors.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::journal_logic::ensure_journal_directory_exists;
+/// use std::path::PathBuf;
+///
+/// let journal_dir = PathBuf::from("/path/to/journal");
+/// ensure_journal_directory_exists(&journal_dir).expect("Failed to create journal directory");
+/// ```
+pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
+    if !journal_dir.exists() {
+        fs::create_dir_all(journal_dir)?;
+    }
+    
     Ok(())
 }
