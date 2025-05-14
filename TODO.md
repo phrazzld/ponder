@@ -16,7 +16,7 @@
         2. Unit tests for date parsing (if any) run and pass.
     - **Depends‑on:** none
 
-- [ ] **T002 · Feature · P0: Implement `open_journal_entries` function signature**
+- [x] **T002 · Feature · P0: Implement `open_journal_entries` function signature**
     - **Context:** PLAN.md, Detailed Build Steps, Step 2; Architecture Blueprint (Public Interfaces)
     - **Action:**
         1. Define the public function signature `pub fn open_journal_entries(config: &Config, date_spec: &DateSpecifier) -> AppResult<()>` in `src/journal_logic.rs`.

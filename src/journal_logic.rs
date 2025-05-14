@@ -8,6 +8,7 @@
 //! This module uses direct filesystem operations and process spawning
 //! instead of trait abstractions for simplicity.
 
+use crate::config::Config;
 use crate::errors::{AppError, AppResult};
 use chrono::{Duration, Local, Months, NaiveDate};
 use std::path::PathBuf;
@@ -200,4 +201,45 @@ impl DateSpecifier {
             }
         }
     }
+}
+
+/// Opens journal entries based on the provided date specifier.
+///
+/// This function handles the opening of journal entries based on different date specifications:
+/// - `DateSpecifier::Today`: Opens today's entry, creating it if it doesn't exist.
+/// - `DateSpecifier::Retro`: Opens entries from the past week (if they exist).
+/// - `DateSpecifier::Reminisce`: Opens entries from significant past dates (if they exist).
+/// - `DateSpecifier::Specific(date)`: Opens an entry for a specific date, creating it if needed.
+///
+/// # Parameters
+///
+/// * `config` - Configuration settings containing journal directory and editor command
+/// * `date_spec` - The date specifier determining which journal entries to open
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the operation completed successfully, or an AppError if there was a problem.
+///
+/// # Errors
+///
+/// May return the following errors:
+/// - `AppError::Io` for file system operation failures
+/// - `AppError::Editor` for editor launch failures
+/// - `AppError::Journal` for journal-specific logic errors
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::config::Config;
+/// use ponder::journal_logic::DateSpecifier;
+/// use ponder::journal_logic::open_journal_entries;
+///
+/// let config = Config::load().expect("Failed to load config");
+/// 
+/// // Open today's journal entry
+/// open_journal_entries(&config, &DateSpecifier::Today).expect("Failed to open journal");
+/// ```
+pub fn open_journal_entries(config: &Config, date_spec: &DateSpecifier) -> AppResult<()> {
+    // This is a stub implementation that will be completed in a future task
+    Ok(())
 }
