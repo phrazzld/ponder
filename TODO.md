@@ -68,7 +68,7 @@
         1. Integration test or manual run verifies correct editor launch.
     - **Depends‑on:** [T001]
 
-- [ ] **T006 · Feature · P1: Implement date header append logic**
+- [x] **T006 · Feature · P1: Implement date header append logic**
     - **Context:** PLAN.md, Detailed Build Steps, Step 5; Architecture Blueprint (Private helpers)
     - **Action:**
         1. Implement the private helper function `fn append_date_header_if_needed(path: &Path) -> AppResult<()>`.

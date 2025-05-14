@@ -59,6 +59,8 @@ pub mod editor;
 pub mod errors;
 /// Core journal functionality
 pub mod journal;
+/// Direct journal functionality (new implementation)
+pub mod journal_logic;
 
 // Re-export important types for convenience
 pub use cli::CliArgs;

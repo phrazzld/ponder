@@ -10,11 +10,66 @@
 
 use crate::config::Config;
 use crate::errors::{AppError, AppResult};
-use chrono::{Duration, Local, Months, NaiveDate};
+use chrono::{Datelike, Duration, Local, Months, NaiveDate};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    
+    #[test]
+    fn test_append_date_header_if_needed_empty_file() {
+        // Create a temporary directory that will be deleted when the test finishes
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file_path = temp_dir.path().join("test_entry.md");
+        
+        // Create empty file by opening and closing it
+        File::create(&file_path).expect("Failed to create test file");
+        
+        // Append date header to the empty file
+        append_date_header_if_needed(&file_path).expect("Failed to append date header");
+        
+        // Read the file content
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        
+        // Verify that the file now contains a formatted header
+        assert!(content.starts_with("# "));
+        assert!(content.contains("\n\n## "));
+        
+        // Verify specific format elements (month, year, time format)
+        let now = Local::now();
+        let expected_year = now.format("%Y").to_string();
+        assert!(content.contains(&expected_year));
+        
+        // File should also contain a time header with HH:MM:SS format
+        assert!(content.contains(":"));
+    }
+    
+    #[test]
+    fn test_append_date_header_if_needed_nonempty_file() {
+        // Create a temporary directory that will be deleted when the test finishes
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file_path = temp_dir.path().join("test_entry.md");
+        
+        // Create file with content
+        fs::write(&file_path, "Existing content").expect("Failed to create test file");
+        
+        // Append date header to the non-empty file (should not change the file)
+        append_date_header_if_needed(&file_path).expect("Failed to append date header");
+        
+        // Read the file content
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+        
+        // Verify that the file still contains only the original content
+        assert_eq!(content, "Existing content");
+        assert!(!content.contains("# "));
+        assert!(!content.contains("## "));
+    }
+}
 
 // Constants for date calculations
 const REMINISCE_ONE_MONTH_AGO: u32 = 1;
@@ -424,5 +479,58 @@ fn launch_editor(editor_cmd: &str, files_to_open: &[PathBuf]) -> AppResult<()> {
         .status()
         .map_err(|e| AppError::Editor(format!("Failed to launch editor: {}", e)))?;
 
+    Ok(())
+}
+
+/// Appends a date/time header to a journal file if it's empty.
+///
+/// This function checks if a journal file is empty and, if it is, adds a
+/// formatted date-time header. The header consists of a primary header with
+/// the full date and day of the week, followed by a secondary header with the time.
+///
+/// # Parameters
+///
+/// * `path` - The path to the journal file to check and modify
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the operation completed successfully, or an AppError if there was a problem.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if the file couldn't be created, opened, read, or written to
+/// due to permission issues, invalid paths, or other filesystem errors.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::journal_logic::append_date_header_if_needed;
+/// use std::path::PathBuf;
+///
+/// let path = PathBuf::from("/path/to/journal/20230115.md");
+/// append_date_header_if_needed(&path).expect("Failed to append date header");
+/// ```
+pub fn append_date_header_if_needed(path: &Path) -> AppResult<()> {
+    // Create or open the file
+    let mut file = create_or_open_entry_file(path)?;
+    
+    // Read the file content to check if it's empty
+    let content = read_file_content(path)?;
+    
+    // Only append a header if the file is empty
+    if content.is_empty() {
+        let now = Local::now();
+        
+        // Format the date and time headers
+        let entry = format!(
+            "# {}\n\n## {}\n\n",
+            now.format("%B %d, %Y: %A"),  // Example: "January 15, 2023: Sunday"
+            now.format("%H:%M:%S")        // Example: "14:30:45"
+        );
+        
+        // Append the formatted header to the file
+        append_to_file(&mut file, &entry)?;
+    }
+    
     Ok(())
 }

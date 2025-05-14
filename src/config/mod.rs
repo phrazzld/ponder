@@ -298,10 +298,14 @@ mod tests {
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
 
+        // Set EDITOR to nano for this test
+        env::set_var("EDITOR", "nano");
+        
         // Run the test
         let config = Config::load().unwrap();
 
         // Restore environment
+        env::remove_var("EDITOR");
         if let Some(val) = orig_editor {
             env::set_var("EDITOR", val);
         }
@@ -309,7 +313,7 @@ mod tests {
             env::set_var("PONDER_EDITOR", val);
         }
 
-        assert_eq!(config.editor, "vim");
+        assert_eq!(config.editor, "nano");
     }
 
     #[test]
