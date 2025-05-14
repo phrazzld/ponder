@@ -11,7 +11,8 @@
 use crate::config::Config;
 use crate::errors::{AppError, AppResult};
 use chrono::{Duration, Local, Months, NaiveDate};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 // Constants for date calculations
@@ -278,5 +279,114 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
         fs::create_dir_all(journal_dir)?;
     }
     
+    Ok(())
+}
+
+/// Generates a file path for a journal entry for the specified date.
+///
+/// This function creates a PathBuf for a journal entry file by combining
+/// the journal directory path with a filename derived from the date.
+/// The filename format is YYYYMMDD.md.
+///
+/// # Parameters
+///
+/// * `journal_dir` - Path to the journal directory
+/// * `date` - The date for which to generate the path
+///
+/// # Returns
+///
+/// A PathBuf containing the full path to the journal entry file.
+fn get_entry_path_for_date(journal_dir: &Path, date: NaiveDate) -> PathBuf {
+    let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
+    journal_dir.join(filename)
+}
+
+/// Checks if a file exists at the specified path.
+///
+/// # Parameters
+///
+/// * `path` - The path to check
+///
+/// # Returns
+///
+/// `true` if the file exists, `false` otherwise.
+fn file_exists(path: &Path) -> bool {
+    path.exists()
+}
+
+/// Creates a new file or opens an existing file at the specified path.
+///
+/// This function opens a file with read and append permissions, creating
+/// it if it doesn't exist yet. This is used to open journal entry files
+/// for reading or appending content.
+///
+/// # Parameters
+///
+/// * `path` - The path to the file to create or open
+///
+/// # Returns
+///
+/// A Result containing either the opened File or an AppError
+/// if file creation/opening failed.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if the file couldn't be created or opened due
+/// to permission issues, invalid paths, or other filesystem errors.
+fn create_or_open_entry_file(path: &Path) -> AppResult<File> {
+    let file = OpenOptions::new()
+        .read(true)
+        .create(true)
+        .append(true)
+        .open(path)?;
+    Ok(file)
+}
+
+/// Reads the content of a file as a string.
+///
+/// This function opens the file at the specified path and reads its
+/// entire content into a String.
+///
+/// # Parameters
+///
+/// * `path` - The path to the file to read
+///
+/// # Returns
+///
+/// A Result containing either the file content as a String
+/// or an AppError if file reading failed.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if the file couldn't be opened or read due
+/// to permission issues, invalid paths, or other filesystem errors.
+fn read_file_content(path: &Path) -> AppResult<String> {
+    let mut content = String::new();
+    let mut file = File::open(path)?;
+    file.read_to_string(&mut content)?;
+    Ok(content)
+}
+
+/// Appends content to a file.
+///
+/// This function appends the specified content to an already opened file.
+/// It's typically used to add text to journal entry files.
+///
+/// # Parameters
+///
+/// * `file` - The file to append to (must be opened with write permissions)
+/// * `content` - The content to append (as a string)
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the content was appended successfully,
+/// or an AppError if the append operation failed.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if the file couldn't be written to due
+/// to permission issues, disk space, or other filesystem errors.
+fn append_to_file(file: &mut File, content: &str) -> AppResult<()> {
+    file.write_all(content.as_bytes())?;
     Ok(())
 }

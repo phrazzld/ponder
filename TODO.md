@@ -40,7 +40,7 @@
         1. Manual: Run the application with a non-existent journal directory path to confirm it's created.
     - **Depends‑on:** [T001]
 
-- [ ] **T004 · Feature · P1: Implement filesystem helper functions**
+- [x] **T004 · Feature · P1: Implement filesystem helper functions**
     - **Context:** PLAN.md, Detailed Build Steps, Step 3; Architecture Blueprint (Private helpers)
     - **Action:**
         1. Implement the private helper function `fn get_entry_path_for_date(journal_dir: &Path, date: NaiveDate) -> PathBuf`.
