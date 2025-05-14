@@ -80,7 +80,7 @@
         1. Filesystem test confirms header presence in new files.
     - **Depends‑on:** [T004]
 
-- [ ] **T007 · Feature · P0: Complete `open_journal_entries` implementation**
+- [x] **T007 · Feature · P0: Complete `open_journal_entries` implementation**
     - **Context:** PLAN.md, Detailed Build Steps, Step 2-5
     - **Action:**
         1. Complete the implementation of `open_journal_entries` function to replicate the logic from `JournalService::open_entries`.

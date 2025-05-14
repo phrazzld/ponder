@@ -69,6 +69,73 @@ mod tests {
         assert!(!content.contains("# "));
         assert!(!content.contains("## "));
     }
+    
+    #[test]
+    fn test_open_journal_entries_today() {
+        // This test uses the MockCommand Pattern
+        // Instead of actually launching an editor, we'll check if the function
+        // correctly prepares to launch the editor with the right file
+        
+        // Create a temporary directory
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let journal_dir = temp_dir.path().to_path_buf();
+        
+        // Create a test config that we can verify against
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: journal_dir.clone(),
+        };
+        
+        // Call the function with Today date specifier
+        // Note: Since we can't easily mock the editor launch,
+        // this test will fail at the actual Command execution,
+        // but we can check that all the preparation is correct
+        let result = open_journal_entries(&config, &DateSpecifier::Today);
+        
+        // We expect the function to fail when trying to launch the non-existent editor
+        assert!(result.is_err());
+        
+        // Verify a file was created for today
+        let today = Local::now().naive_local().date();
+        let expected_path = get_entry_path_for_date(&journal_dir, today);
+        assert!(expected_path.exists());
+        
+        // Verify the file has a header
+        let content = fs::read_to_string(expected_path).expect("Failed to read file");
+        assert!(content.starts_with("# "));
+        assert!(content.contains("\n\n## "));
+    }
+    
+    #[test]
+    fn test_open_journal_entries_specific_date() {
+        // Create a temporary directory
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let journal_dir = temp_dir.path().to_path_buf();
+        
+        // Create a test config
+        let config = Config {
+            editor: "test-editor".to_string(),
+            journal_dir: journal_dir.clone(),
+        };
+        
+        // Specific date for testing
+        let test_date = NaiveDate::from_ymd_opt(2023, 5, 15).unwrap();
+        
+        // Call the function with Specific date specifier
+        let result = open_journal_entries(&config, &DateSpecifier::Specific(test_date));
+        
+        // We expect the function to fail when trying to launch the non-existent editor
+        assert!(result.is_err());
+        
+        // Verify a file was created for the specific date
+        let expected_path = get_entry_path_for_date(&journal_dir, test_date);
+        assert!(expected_path.exists());
+        
+        // Verify the file has a header
+        let content = fs::read_to_string(expected_path).expect("Failed to read file");
+        assert!(content.starts_with("# "));
+        assert!(content.contains("\n\n## "));
+    }
 }
 
 // Constants for date calculations
@@ -298,8 +365,76 @@ impl DateSpecifier {
 /// open_journal_entries(&config, &DateSpecifier::Today).expect("Failed to open journal");
 /// ```
 pub fn open_journal_entries(config: &Config, date_spec: &DateSpecifier) -> AppResult<()> {
-    // This is a stub implementation that will be completed in a future task
-    Ok(())
+    match date_spec {
+        DateSpecifier::Today => {
+            // Get today's date and generate path
+            let today = Local::now().naive_local().date();
+            let path = get_entry_path_for_date(&config.journal_dir, today);
+            
+            // Add date header if needed (this also creates the file if it doesn't exist)
+            append_date_header_if_needed(&path)?;
+            
+            // Launch editor with today's entry
+            launch_editor(&config.editor, &[path])
+        }
+        
+        DateSpecifier::Retro => {
+            // Get dates from past week
+            let dates = date_spec.get_dates();
+            
+            // Find existing entries
+            let mut paths = Vec::new();
+            for date in dates {
+                let path = get_entry_path_for_date(&config.journal_dir, date);
+                if file_exists(&path) {
+                    paths.push(path);
+                }
+            }
+            
+            // If no entries found, log a message and return
+            if paths.is_empty() {
+                log::info!("No entries found for the past week");
+                return Ok(());
+            }
+            
+            // Launch editor with all found entries
+            launch_editor(&config.editor, &paths)
+        }
+        
+        DateSpecifier::Reminisce => {
+            // Get reminisce dates (1 month ago, 3 months ago, 6 months ago, yearly anniversaries)
+            let dates = date_spec.get_dates();
+            
+            // Find existing entries
+            let mut paths = Vec::new();
+            for date in dates {
+                let path = get_entry_path_for_date(&config.journal_dir, date);
+                if file_exists(&path) {
+                    paths.push(path);
+                }
+            }
+            
+            // If no entries found, log a message and return
+            if paths.is_empty() {
+                log::info!("No entries found for reminisce intervals");
+                return Ok(());
+            }
+            
+            // Launch editor with all found entries
+            launch_editor(&config.editor, &paths)
+        }
+        
+        DateSpecifier::Specific(date) => {
+            // Generate path for specific date
+            let path = get_entry_path_for_date(&config.journal_dir, *date);
+            
+            // Add date header if needed (also creates the file if it doesn't exist)
+            append_date_header_if_needed(&path)?;
+            
+            // Launch editor with specific entry
+            launch_editor(&config.editor, &[path])
+        }
+    }
 }
 
 /// Ensures the journal directory exists, creating it if necessary.
