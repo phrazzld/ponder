@@ -39,7 +39,6 @@ The application can be configured with the following environment variables:
 
 mod cli;
 mod config;
-mod editor;
 mod errors;
 mod journal;
 mod journal_logic;

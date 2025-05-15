@@ -110,7 +110,7 @@
 
 ## Codebase Cleanup
 
-- [ ] **T009 · Refactor · P0: Remove obsolete trait abstractions and related code**
+- [x] **T009 · Refactor · P0: Remove obsolete trait abstractions and related code**
     - **Context:** PLAN.md, Detailed Build Steps, Step 7
     - **Action:**
         1. Delete the `JournalIO` trait definition and `MockJournalIO` implementation.
@@ -126,7 +126,7 @@
         2. No trait or struct is findable by search.
     - **Depends‑on:** [T008]
 
-- [ ] **T010 · Refactor · P1: Update `src/lib.rs` to reflect new module structure**
+- [x] **T010 · Refactor · P1: Update `src/lib.rs` to reflect new module structure**
     - **Context:** PLAN.md, Detailed Build Steps, Step 8
     - **Action:**
         1. Remove `pub mod journal;` and `pub mod editor;` if they are no longer needed.
@@ -142,7 +142,7 @@
 
 ## Testing
 
-- [ ] **T011 · Test · P0: Remove obsolete unit tests relying on trait mocks**
+- [x] **T011 · Test · P0: Remove obsolete unit tests relying on trait mocks**
     - **Context:** PLAN.md, Detailed Build Steps, Step 9 (first bullet)
     - **Action:**
         1. Delete unit tests in `src/journal/io/tests.rs` and any in `src/journal/tests.rs` that depend on mocks.
@@ -153,7 +153,7 @@
         1. `cargo test` passes (excluding integration tests for now).
     - **Depends‑on:** [T009]
 
-- [ ] **T012 · Test · P0: Review and verify integration tests**
+- [x] **T012 · Test · P0: Review and verify integration tests**
     - **Context:** PLAN.md, Detailed Build Steps, Step 9 (second/third bullets)
     - **Action:**
         1. Review `tests/cli_tests.rs`, `tests/journal_integration_tests.rs` for compatibility.
@@ -169,7 +169,7 @@
 
 ## Code Quality
 
-- [ ] **T013 · Chore · P1: Code formatting and linting**
+- [x] **T013 · Chore · P1: Code formatting and linting**
     - **Context:** PLAN.md, Detailed Build Steps, Step 10
     - **Action:**
         1. Run `cargo fmt` on the codebase.
@@ -184,7 +184,7 @@
 
 ## Documentation
 
-- [ ] **T014 · Chore · P2: Update documentation for new architecture**
+- [x] **T014 · Chore · P2: Update documentation for new architecture**
     - **Context:** PLAN.md, Documentation section
     - **Action:**
         1. Revise `README.md` to remove references to trait-based architecture and highlight the simpler direct approach.

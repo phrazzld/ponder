@@ -103,11 +103,10 @@ Ponder follows a modular architecture with clear separation of concerns:
 
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
-- `editor`: Editor abstraction for opening journal files
 - `errors`: Error handling infrastructure
-- `journal`: Core journal functionality with dependency injection
+- `journal_logic`: Core journal functionality
 
-The codebase is designed with testability in mind, using dependency injection and trait-based abstractions to allow for easy mocking and testing.
+The codebase is designed with simplicity and maintainability in mind, using direct function calls and standard library features rather than abstractions. This approach improves readability and makes the code easier to reason about.
 
 ## Contributing 🤝
 
