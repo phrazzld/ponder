@@ -15,7 +15,7 @@
         2. Locally run `cargo test --package ponder --test config` to confirm tests pass.
     - **Depends‑on:** none
 
-- [ ] **T016 · Refactor · P0: apply clippy suggestion for `io::Error` construction in `errors` tests**
+- [x] **T016 · Refactor · P0: apply clippy suggestion for `io::Error` construction in `errors` tests**
     - **Context:** PLAN.md - Resolution Steps / Issue 2: Clippy `io::Error` suggestion for simpler construction
     - **Action:**
         1. In `src/errors.rs`, around line 145, replace `Err(io::Error::new(io::ErrorKind::Other, "test error"));` with `Err(io::Error::other("test error"));`.
