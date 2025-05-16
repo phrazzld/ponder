@@ -65,7 +65,7 @@
         1. Inspect CI logs from PR #5 (Run ID: `15069522992`) or a similar recent failing build to confirm `clippy` strictness.
     - **Depends‑on:** none
 
-- [ ] **T020 · Chore · P2: update PR template with checklist for API deprecation self-review**
+- [x] **T020 · Chore · P2: update PR template with checklist for API deprecation self-review**
     - **Context:** PLAN.md - Prevention Measures / 3. Promote Thorough Self-Review During Refactoring
     - **Action:**
         1. Modify the project's Pull Request template (e.g., `.github/PULL_REQUEST_TEMPLATE.md`).
