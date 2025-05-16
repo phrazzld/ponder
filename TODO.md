@@ -29,7 +29,7 @@
     - **Depends‑on:** none
 
 ## Developer Workflow & Quality Gates
-- [ ] **T017 · Chore · P1: implement pre-commit hooks for `cargo fmt` and `clippy`**
+- [x] **T017 · Chore · P1: implement pre-commit hooks for `cargo fmt` and `clippy`**
     - **Context:** PLAN.md - Prevention Measures / 1. Enforce Mandatory Local Linting via Pre-commit Hooks
     - **Action:**
         1. Configure pre-commit hooks to execute `cargo fmt --check`.
