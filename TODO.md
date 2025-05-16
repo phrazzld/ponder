@@ -54,7 +54,7 @@
         1. A developer new to the project can follow the `CONTRIBUTING.md` instructions to successfully set up and run pre-commit hooks.
     - **Depends‑on:** [T017]
 
-- [ ] **T019 · Chore · P2: verify CI workflow enforces strict `clippy` settings**
+- [x] **T019 · Chore · P2: verify CI workflow enforces strict `clippy` settings**
     - **Context:** PLAN.md - Prevention Measures / 2. Maintain Strict CI/CD Quality Gates
     - **Action:**
         1. Review the CI workflow configuration files (e.g., GitHub Actions YAML).
