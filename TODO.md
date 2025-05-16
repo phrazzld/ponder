@@ -44,7 +44,7 @@
         3. Correct issues and confirm a successful commit with hooks enabled.
     - **Depends‑on:** none
 
-- [ ] **T018 · Chore · P1: document pre-commit hook setup and usage in `CONTRIBUTING.md`**
+- [x] **T018 · Chore · P1: document pre-commit hook setup and usage in `CONTRIBUTING.md`**
     - **Context:** PLAN.md - Prevention Measures / 1. Enforce Mandatory Local Linting via Pre-commit Hooks
     - **Action:**
         1. Add clear, step-by-step instructions to `CONTRIBUTING.md` explaining how developers can install and use the project's pre-commit hooks.
