@@ -4,3 +4,5 @@
 **/.claude/settings.local.json
 **/glance.md
 /docs/
+!/docs/DEVELOPMENT_SETUP.md
+thinktank_**/

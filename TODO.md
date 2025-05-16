@@ -76,7 +76,7 @@
         1. Create a new draft Pull Request and confirm the updated template content is present.
     - **Depends‑on:** none
 
-- [ ] **T021 · Chore · P3: document IDE setup for `rustfmt` and `clippy` integration**
+- [x] **T021 · Chore · P3: document IDE setup for `rustfmt` and `clippy` integration**
     - **Context:** PLAN.md - Prevention Measures / 4. Developer Education and Tooling Integration
     - **Action:**
         1. Provide guidance and example configurations in `CONTRIBUTING.md` or a dedicated `DEVELOPMENT_SETUP.md` file for integrating `rustfmt` and `clippy` (with project-aligned settings) into common IDEs/editors (e.g., VS Code with `rust-analyzer`).

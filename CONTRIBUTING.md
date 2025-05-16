@@ -115,6 +115,10 @@ git commit --no-verify -m "commit message"
 - Consider using `cargo check` during development for faster feedback
 - The hooks run full checks to match CI behavior
 
+## IDE Setup
+
+For detailed instructions on configuring your IDE with `rustfmt` and `clippy` integration for real-time feedback and automatic code formatting, see [Development Environment Setup](docs/DEVELOPMENT_SETUP.md).
+
 ## Code Standards
 
 All code, including tests, must meet our quality standards:
