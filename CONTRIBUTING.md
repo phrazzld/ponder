@@ -128,6 +128,18 @@ All code, including tests, must meet our quality standards:
 - Include appropriate tests for new functionality
 - Follow the patterns established in the existing codebase
 
+### Test Code Standards
+
+Test code is held to the same quality standards as production code. This means:
+
+- Test code must pass all formatting checks (`cargo fmt`)
+- Test code must pass all linting checks (`cargo clippy`)
+- Test code must use current, non-deprecated APIs
+- Test code should be well-structured and maintainable
+- Test code should follow the same naming conventions and patterns as production code
+
+Treat your tests as first-class code—they are essential for maintaining project quality and should be as clean and well-written as the code they test.
+
 ## Submitting Changes
 
 1. Fork the repository

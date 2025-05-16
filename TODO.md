@@ -86,7 +86,7 @@
         1. A developer can follow the documentation to set up their IDE for real-time feedback.
     - **Depends‑on:** none
 
-- [ ] **T022 · Chore · P2: document test code quality standards in `CONTRIBUTING.md`**
+- [x] **T022 · Chore · P2: document test code quality standards in `CONTRIBUTING.md`**
     - **Context:** PLAN.md - Prevention Measures / 5. Documentation of Standards for Test Code
     - **Action:**
         1. Update `CONTRIBUTING.md` to explicitly state that test code is held to the same quality standards (linting, style, use of current APIs) as production code.
