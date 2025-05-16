@@ -1,5 +1,101 @@
 # Todo
 
+## CI Fixes (PR #5)
+- [x] **T015 · Bugfix · P0: update deprecated `ensure_journal_dir` call in `config` tests**
+    - **Context:** PLAN.md - Resolution Steps / Issue 1: Use of deprecated method `config::Config::ensure_journal_dir`
+    - **Action:**
+        1. In the test module of `src/config/mod.rs`, ensure `use crate::journal_logic;` is present.
+        2. Around line 475, replace `config.ensure_journal_dir().unwrap();` with `journal_logic::ensure_journal_directory_exists(&config.journal_dir).unwrap();`.
+    - **Done‑when:**
+        1. `cargo clippy --all-targets -- -D warnings` no longer reports the deprecation warning for `ensure_journal_dir` in `src/config/mod.rs`.
+        2. Tests in `src/config/mod.rs` (e.g., `cargo test --package ponder --test config`) pass.
+        3. The CI `clippy` check for PR #5 passes related to this issue.
+    - **Verification:**
+        1. Locally run `cargo clippy --all-targets -- -D warnings` to confirm the specific error is resolved.
+        2. Locally run `cargo test --package ponder --test config` to confirm tests pass.
+    - **Depends‑on:** none
+
+- [ ] **T016 · Refactor · P0: apply clippy suggestion for `io::Error` construction in `errors` tests**
+    - **Context:** PLAN.md - Resolution Steps / Issue 2: Clippy `io::Error` suggestion for simpler construction
+    - **Action:**
+        1. In `src/errors.rs`, around line 145, replace `Err(io::Error::new(io::ErrorKind::Other, "test error"));` with `Err(io::Error::other("test error"));`.
+    - **Done‑when:**
+        1. `cargo clippy --all-targets -- -D warnings` no longer reports the suggestion for `io::Error` construction in `src/errors.rs`.
+        2. Tests in `src/errors.rs` (e.g., `cargo test --package ponder --test errors`) pass.
+        3. The CI `clippy` check for PR #5 passes related to this issue.
+    - **Verification:**
+        1. Locally run `cargo clippy --all-targets -- -D warnings` to confirm the specific clippy suggestion is resolved.
+        2. Locally run `cargo test --package ponder --test errors` to confirm tests pass.
+    - **Depends‑on:** none
+
+## Developer Workflow & Quality Gates
+- [ ] **T017 · Chore · P1: implement pre-commit hooks for `cargo fmt` and `clippy`**
+    - **Context:** PLAN.md - Prevention Measures / 1. Enforce Mandatory Local Linting via Pre-commit Hooks
+    - **Action:**
+        1. Configure pre-commit hooks to execute `cargo fmt --check`.
+        2. Configure pre-commit hooks to execute `cargo clippy --all-targets -- -D warnings`.
+    - **Done‑when:**
+        1. Pre-commit hooks are configured and functional within the project repository.
+        2. Attempting to commit code that fails `cargo fmt --check` is blocked by the hooks.
+        3. Attempting to commit code that fails `cargo clippy --all-targets -- -D warnings` is blocked by the hooks.
+    - **Verification:**
+        1. Intentionally introduce a formatting issue; verify `git commit` is blocked by `cargo fmt --check`.
+        2. Intentionally introduce a clippy warning; verify `git commit` is blocked by `cargo clippy`.
+        3. Correct issues and confirm a successful commit with hooks enabled.
+    - **Depends‑on:** none
+
+- [ ] **T018 · Chore · P1: document pre-commit hook setup and usage in `CONTRIBUTING.md`**
+    - **Context:** PLAN.md - Prevention Measures / 1. Enforce Mandatory Local Linting via Pre-commit Hooks
+    - **Action:**
+        1. Add clear, step-by-step instructions to `CONTRIBUTING.md` explaining how developers can install and use the project's pre-commit hooks.
+    - **Done‑when:**
+        1. `CONTRIBUTING.md` contains comprehensive documentation for setting up and using the pre-commit hooks.
+    - **Verification:**
+        1. A developer new to the project can follow the `CONTRIBUTING.md` instructions to successfully set up and run pre-commit hooks.
+    - **Depends‑on:** [T017]
+
+- [ ] **T019 · Chore · P2: verify CI workflow enforces strict `clippy` settings**
+    - **Context:** PLAN.md - Prevention Measures / 2. Maintain Strict CI/CD Quality Gates
+    - **Action:**
+        1. Review the CI workflow configuration files (e.g., GitHub Actions YAML).
+        2. Confirm that `clippy` is executed with strict settings (e.g., `-D warnings` or equivalent) and that identified lints cause the CI build to fail.
+    - **Done‑when:**
+        1. The CI configuration is verified to enforce strict `clippy` checks that fail the build on any lint.
+    - **Verification:**
+        1. Inspect CI logs from PR #5 (Run ID: `15069522992`) or a similar recent failing build to confirm `clippy` strictness.
+    - **Depends‑on:** none
+
+- [ ] **T020 · Chore · P2: update PR template with checklist for API deprecation self-review**
+    - **Context:** PLAN.md - Prevention Measures / 3. Promote Thorough Self-Review During Refactoring
+    - **Action:**
+        1. Modify the project's Pull Request template (e.g., `.github/PULL_REQUEST_TEMPLATE.md`).
+        2. Add a checklist item: "For PRs involving API deprecations or significant API changes: All usages of the old API (including in tests) have been identified and updated."
+    - **Done‑when:**
+        1. The Pull Request template includes the new checklist item for refactoring self-review.
+    - **Verification:**
+        1. Create a new draft Pull Request and confirm the updated template content is present.
+    - **Depends‑on:** none
+
+- [ ] **T021 · Chore · P3: document IDE setup for `rustfmt` and `clippy` integration**
+    - **Context:** PLAN.md - Prevention Measures / 4. Developer Education and Tooling Integration
+    - **Action:**
+        1. Provide guidance and example configurations in `CONTRIBUTING.md` or a dedicated `DEVELOPMENT_SETUP.md` file for integrating `rustfmt` and `clippy` (with project-aligned settings) into common IDEs/editors (e.g., VS Code with `rust-analyzer`).
+    - **Done‑when:**
+        1. Project documentation includes clear instructions for IDE integration of `rustfmt` and `clippy`.
+    - **Verification:**
+        1. A developer can follow the documentation to set up their IDE for real-time feedback.
+    - **Depends‑on:** none
+
+- [ ] **T022 · Chore · P2: document test code quality standards in `CONTRIBUTING.md`**
+    - **Context:** PLAN.md - Prevention Measures / 5. Documentation of Standards for Test Code
+    - **Action:**
+        1. Update `CONTRIBUTING.md` to explicitly state that test code is held to the same quality standards (linting, style, use of current APIs) as production code.
+    - **Done‑when:**
+        1. `CONTRIBUTING.md` clearly articulates that test code must meet production-level quality standards.
+    - **Verification:**
+        1. Review `CONTRIBUTING.md` to confirm the addition and clarity of the test code standards.
+    - **Depends‑on:** none
+
 ## Journal Logic Implementation
 
 - [x] **T001 · Refactor · P0: Create `src/journal_logic.rs` and relocate `DateSpecifier`**

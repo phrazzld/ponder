@@ -277,6 +277,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::journal_logic;
     use std::env;
     use tempfile::tempdir;
 
@@ -472,7 +473,7 @@ mod tests {
         assert!(!dir_path.exists());
 
         // Should create the directory
-        config.ensure_journal_dir().unwrap();
+        journal_logic::ensure_journal_directory_exists(&config.journal_dir).unwrap();
 
         // Now it should exist
         assert!(dir_path.exists());
