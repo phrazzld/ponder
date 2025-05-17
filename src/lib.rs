@@ -47,8 +47,6 @@ pub mod cli;
 pub mod config;
 /// Error types and utilities for error handling
 pub mod errors;
-/// Core journal functionality (deprecated, use journal_logic instead)
-pub mod journal;
 /// Journal functionality (new implementation)
 pub mod journal_logic;
 

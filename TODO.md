@@ -348,7 +348,7 @@
         2. Confirm all tests pass in CI after this change and prerequisite fixes.
     - **Depends‑on:** [T001, T002]
 
-- [ ] **T004 · chore · P2: verify complete removal of old trait-based abstractions**
+- [x] **T004 · chore · P2: verify complete removal of old trait-based abstractions**
     - **Context:** CI Resolution Plan, Action Items: 4. Verify Complete Code Cleanup
     - **Action:**
         1. Conduct a thorough search of the codebase for any remaining references to old trait-based abstractions.
