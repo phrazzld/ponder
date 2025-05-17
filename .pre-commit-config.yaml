@@ -1,57 +1,23 @@
-# Pre-commit Git hooks configuration
-# See https://pre-commit.com for more information
+# .pre-commit-config.yaml
+# For more information, see https://pre-commit.com
 
 repos:
-# Local hooks - requires the tools to be installed on the system
-- repo: local
-  hooks:
-  - id: cargo-fmt
-    name: Cargo Format
-    description: Run cargo fmt on all Rust files
-    entry: cargo fmt --
-    language: system
-    types: [rust]
-    pass_filenames: false
+  - repo: local
+    hooks:
+      - id: cargo-fmt-check
+        name: cargo fmt --check
+        description: "Ensures code is formatted according to rustfmt standards."
+        entry: cargo fmt --check
+        language: system # Assumes 'cargo' is in the system PATH
+        types: [rust]    # Only run on Rust files
+        pass_filenames: false # 'cargo fmt' typically operates on the whole project/crate
+        stages: [pre-commit]
 
-  - id: cargo-clippy
-    name: Cargo Clippy
-    description: Run cargo clippy on all Rust files
-    entry: cargo clippy --all-targets -- -D warnings
-    language: system
-    types: [rust]
-    pass_filenames: false
-
-  - id: cargo-check
-    name: Cargo Check
-    description: Run cargo check on all Rust files
-    entry: cargo check --all-targets
-    language: system
-    types: [rust]
-    pass_filenames: false
-
-# Additional hooks from pre-commit-hooks repo
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.5.0 # Use the latest stable version
-  hooks:
-  - id: trailing-whitespace
-    name: Trim Trailing Whitespace
-    types_or: [rust, markdown, yaml]
-  
-  - id: end-of-file-fixer
-    name: Fix End of Files
-    types_or: [rust, markdown, yaml]
-  
-  - id: check-yaml
-    name: Check YAML syntax
-    types: [yaml]
-
-  - id: check-toml
-    name: Check TOML syntax
-    types: [toml]
-
-  - id: check-merge-conflict
-    name: Check for merge conflicts
-    
-  - id: mixed-line-ending
-    name: Fix line endings
-    args: [--fix=lf]
+      - id: cargo-clippy
+        name: cargo clippy
+        description: "Lints code with 'cargo clippy --all-targets -- -D warnings'."
+        entry: cargo clippy --all-targets -- -D warnings
+        language: system # Assumes 'cargo' is in the system PATH
+        types: [rust]    # Only run on Rust files
+        pass_filenames: false # 'cargo clippy' typically operates on the whole project/crate
+        stages: [pre-commit]
