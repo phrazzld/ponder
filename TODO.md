@@ -316,7 +316,7 @@
         3. Confirm that CI test failures previously attributed to missing `PONDER_EDITOR` are resolved or change nature.
     - **Depends‑on:** none
 
-- [ ] **T002 · refactor · P0: audit and refactor error handling in `journal_logic.rs`**
+- [x] **T002 · refactor · P0: audit and refactor error handling in `journal_logic.rs`**
     - **Context:** CI Resolution Plan, Action Items: 2. Audit Error Handling in journal_logic.rs; Root Causes: 2. Unhandled Errors in OS Interactions
     - **Action:**
         1. In `src/journal_logic.rs`, review key functions (`launch_editor`, `create_or_open_entry_file`, `read_file_content`, `append_to_file`) for `.unwrap()` and `.expect()` calls related to OS interactions.
