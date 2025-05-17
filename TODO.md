@@ -331,7 +331,7 @@
         3. Observe CI logs after merging T001 and this change to ensure no panics.
     - **Depends‑on:** none
 
-- [ ] **T003 · test · P1: enhance integration test robustness with explicit environment variables**
+- [x] **T003 · test · P1: enhance integration test robustness with explicit environment variables**
     - **Context:** CI Resolution Plan, Action Items: 3. Enhance Integration Test Robustness; Root Causes: 3. Test Environment Assumptions
     - **Action:**
         1. Audit all integration tests in `tests/*.rs` that use `assert_cmd`.
