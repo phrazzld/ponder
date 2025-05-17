@@ -293,24 +293,70 @@
         2. README.md does not mention old abstractions.
     - **Depends‑on:** [T013]
 
-## Clarifications & Assumptions
+## CI Resolution
+- [x] **T001 · chore · P0: update ci workflow to set required environment variables**
+    - **Context:** CI Resolution Plan, Action Items: 1. Fix CI Environment Configuration; Root Causes: 1. Missing PONDER_EDITOR Environment Variable
+    - **Action:**
+        1. Modify `.github/workflows/ci.yml` as per the plan:
+           ```yaml
+           - name: Run tests
+             run: cargo test --verbose
+             env:
+               PONDER_EDITOR: echo
+               PONDER_DIR: /tmp/ponder_ci_tests
+               RUST_BACKTRACE: 1
+           ```
+    - **Done‑when:**
+        1. The `.github/workflows/ci.yml` file is updated with the specified environment variables.
+        2. The CI pipeline successfully passes the test step, utilizing these new environment variables.
+        3. CI logs confirm that tests run with `PONDER_EDITOR=echo`, `PONDER_DIR=/tmp/ponder_ci_tests`, and `RUST_BACKTRACE=1`.
+    - **Verification:**
+        1. Push the changes to `.github/workflows/ci.yml` and observe a CI run.
+        2. Check the CI logs for the "Run tests" step to confirm the environment variables are correctly set and utilized.
+        3. Confirm that CI test failures previously attributed to missing `PONDER_EDITOR` are resolved or change nature.
+    - **Depends‑on:** none
 
-- [ ] **Issue: Should DateSpecifier remain a public type or become an internal helper?**
-    - **Context:** PLAN.md, Architecture Blueprint and Build Step 1
-    - **Blocking?:** no
+- [ ] **T002 · refactor · P0: audit and refactor error handling in `journal_logic.rs`**
+    - **Context:** CI Resolution Plan, Action Items: 2. Audit Error Handling in journal_logic.rs; Root Causes: 2. Unhandled Errors in OS Interactions
+    - **Action:**
+        1. In `src/journal_logic.rs`, review key functions (`launch_editor`, `create_or_open_entry_file`, `read_file_content`, `append_to_file`) for `.unwrap()` and `.expect()` calls related to OS interactions.
+        2. Replace these calls using the `?` operator or `map_err()` to convert OS errors to `AppError`, ensuring robust error propagation.
+    - **Done‑when:**
+        1. All identified `.unwrap()` and `.expect()` calls in the specified functions within `src/journal_logic.rs` are replaced with proper error handling.
+        2. The code compiles successfully and relevant unit tests pass.
+        3. CI tests pass without panics originating from `journal_logic.rs` due to unhandled OS errors.
+    - **Verification:**
+        1. Manually review `src/journal_logic.rs` to confirm no `.unwrap()` or `.expect()` calls remain on OS interactions in the targeted functions.
+        2. Run `cargo test --verbose` locally, ensuring tests covering these functions pass and errors are handled gracefully (e.g., by simulating OS error conditions if possible in unit tests).
+        3. Observe CI logs after merging T001 and this change to ensure no panics.
+    - **Depends‑on:** none
 
-- [ ] **Issue: Confirm if any code outside main.rs consumes JournalService directly**
-    - **Context:** PLAN.md, Build Steps 6 and 7
-    - **Blocking?:** no
+- [ ] **T003 · test · P1: enhance integration test robustness with explicit environment variables**
+    - **Context:** CI Resolution Plan, Action Items: 3. Enhance Integration Test Robustness; Root Causes: 3. Test Environment Assumptions
+    - **Action:**
+        1. Audit all integration tests in `tests/*.rs` that use `assert_cmd`.
+        2. Modify these tests to explicitly set `PONDER_EDITOR` and `PONDER_DIR` using `cmd.env()`:
+           ```rust
+           cmd.env("PONDER_EDITOR", "echo");
+           cmd.env("PONDER_DIR", temp_dir.path()); // Ensure temp_dir is properly set up
+           ```
+    - **Done‑when:**
+        1. All relevant integration tests in `tests/*.rs` explicitly set `PONDER_EDITOR` and `PONDER_DIR`.
+        2. All integration tests pass both locally (using `PONDER_EDITOR=echo cargo test`) and in the CI environment.
+    - **Verification:**
+        1. Run integration tests locally with minimal/conflicting global environment variables (e.g., `PONDER_EDITOR=some_failing_command cargo test`) to ensure tests use their explicitly set variables.
+        2. Confirm all tests pass in CI after this change and prerequisite fixes.
+    - **Depends‑on:** [T001, T002]
 
-- [ ] **Issue: Is there a need to merge journal_logic.rs into journal.rs and delete journal_logic.rs?**
-    - **Context:** PLAN.md, Build Step 7 (file structure option)
-    - **Blocking?:** no
+- [ ] **T004 · chore · P2: verify complete removal of old trait-based abstractions**
+    - **Context:** CI Resolution Plan, Action Items: 4. Verify Complete Code Cleanup
+    - **Action:**
+        1. Conduct a thorough search of the codebase for any remaining references to old trait-based abstractions.
+        2. Identify and remove any lingering mock implementations or `#[cfg(test)] pub` items that were specifically part of the old trait-based mocking system and are no longer needed.
+    - **Done‑when:**
+        1. The codebase is confirmed to be free of the specified old trait-based abstractions, their associated mocks, and unnecessary test-specific public modifiers related to them.
+        2. The full test suite (`cargo test --all-targets --all-features`) passes locally and in CI, indicating no regressions from this cleanup.
+    - **Verification:**
+        1. Perform manual code review and use search tools (e.g., `grep`, IDE search) for old trait names, mock module names, and specific `#[cfg(test)] pub` patterns related to the removed abstractions.
+    - **Depends‑on:** [T002, T003]
 
-- [ ] **Issue: Clarify if any additional integration tests are needed for new edge-cases**
-    - **Context:** PLAN.md, Testing Strategy
-    - **Blocking?:** no
-
-- [ ] **Issue: Handling of retro/reminisce entries not found edge case**
-    - **Context:** PLAN.md, Error & Edge-Case Strategy
-    - **Blocking?:** no - The plan states it's "likely by creating new empty files as per current logic".
