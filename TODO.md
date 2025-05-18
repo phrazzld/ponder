@@ -10,7 +10,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: All tests pass, new branch created
 
 ## Module Structure Setup
-- [ ] **T002**: Create new module directories
+- [x] **T002**: Create new module directories
   - Create: `src/errors/`, `src/journal_core/`, `src/journal_io/`
   - **Verification**: Directories exist via `ls src/`
 
