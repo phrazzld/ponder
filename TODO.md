@@ -29,7 +29,7 @@
         1. Using a valid `PONDER_EDITOR` (e.g., a path to a test script that simply exits with status 0), trigger an action that launches the editor. Verify the script is executed without unexpected arguments or shell interpretation, by checking for expected side-effects of the script or its exit code.
     - **Depends‑on:** [T001]
 
-- [ ] **T003 · chore · P1: update documentation for editor command restrictions and workarounds**
+- [x] **T003 · chore · P1: update documentation for editor command restrictions and workarounds**
     - **Context:** PLAN.md / Detailed Remedies / cr‑01 Command Injection Vulnerability via Editor Configuration / Steps / 3. Update Documentation
     - **Action:**
         1. Update `README.md` and any relevant configuration guides to clearly state that `PONDER_EDITOR`/`EDITOR` must be a single command or an absolute/relative path to an executable, without any embedded spaces or arguments.

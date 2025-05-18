@@ -39,7 +39,7 @@ Ponder is a simple journaling CLI tool built in Rust with a modular architecture
 
 - **`src/cli/`**: Command-line interface using clap. Handles argument parsing and creates `DateSpecifier` from user input.
 
-- **`src/config/`**: Configuration management. Loads settings from environment variables (`PONDER_DIR`, `PONDER_EDITOR`, `EDITOR`) with defaults. Validates configuration and ensures paths are properly expanded.
+- **`src/config/`**: Configuration management. Loads settings from environment variables (`PONDER_DIR`, `PONDER_EDITOR`, `EDITOR`) with defaults. Validates configuration and ensures paths are properly expanded. Note: Editor commands are strictly validated for security - they must be single commands without spaces, arguments, or shell metacharacters.
 
 - **`src/journal_logic.rs`**: Core functionality. This is the main entry point for journal operations. Contains:
   - `open_journal_entries()`: Main function that orchestrates opening journal entries
@@ -85,7 +85,7 @@ main.rs
   - `journal_integration_tests.rs`: Tests full journal operations
   - `config_tests.rs`: Tests configuration loading
 
-Tests use `tempfile` for isolated filesystem operations and mock the `EDITOR` environment variable for testing.
+Tests use `tempfile` for isolated filesystem operations and mock the `EDITOR` environment variable for testing. Note: Test configurations should use simple editor commands like `echo` or `true` without arguments to pass validation.
 
 ## Pre-commit and CI
 
