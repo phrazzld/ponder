@@ -328,6 +328,7 @@ impl Config {
 mod tests {
     use super::*;
     use crate::journal_logic;
+    use serial_test::serial;
     use std::env;
     use tempfile::tempdir;
 
@@ -346,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_default_editor() {
         // Fully reset environment variables
         setup();
@@ -378,6 +380,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_editor_env() {
         // Fully reset environment variables
         setup();
@@ -418,6 +421,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_custom_dir() {
         setup();
 
@@ -596,6 +600,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_config_with_invalid_editor() {
         // Store original values
         let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
