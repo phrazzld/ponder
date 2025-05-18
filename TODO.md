@@ -16,7 +16,7 @@
     - **Depends‑on:** none
 
 ## Developer Documentation & Guidelines
-- [ ] **T002 · Chore · P2: update contributing guidelines for global state test isolation**
+- [x] **T002 · Chore · P2: update contributing guidelines for global state test isolation**
     - **Context:** Prevention Measures > 1. Update Guidelines; Next Steps > 3. Update team documentation
     - **Action:**
         1. Edit the project's contributing documentation (e.g., `CONTRIBUTING.md`).

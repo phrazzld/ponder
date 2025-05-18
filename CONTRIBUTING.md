@@ -140,6 +140,34 @@ Test code is held to the same quality standards as production code. This means:
 
 Treat your tests as first-class code—they are essential for maintaining project quality and should be as clean and well-written as the code they test.
 
+### Test Isolation Requirements
+
+Rust runs tests in parallel by default to improve test execution speed. While this is generally beneficial, it can cause issues for tests that modify global state. Tests that manipulate shared resources must be properly isolated to prevent race conditions and flaky test failures.
+
+**Tests requiring isolation include those that:**
+- Modify environment variables (e.g., `env::set_var`, `env::remove_var`)
+- Change global settings or configuration
+- Access shared filesystem resources
+- Interact with system-wide state
+
+**Required solution:** Use the `#[serial]` attribute from the `serial_test` crate for any test that modifies global state.
+
+**Example:**
+```rust
+use serial_test::serial;
+
+#[test]
+#[serial]
+fn test_with_env_vars() {
+    // This test modifies environment variables and must run serially
+    env::set_var("MY_CONFIG", "test_value");
+    // ... test logic ...
+    env::remove_var("MY_CONFIG");
+}
+```
+
+**Rationale:** When tests run in parallel, one test's modifications to global state can interfere with another test's expectations. For example, if Test A sets an environment variable while Test B is reading it, Test B may see an unexpected value and fail intermittently. The `#[serial]` attribute ensures these tests run one at a time, preventing such interference.
+
 ## Submitting Changes
 
 1. Fork the repository
