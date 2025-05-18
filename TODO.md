@@ -1,67 +1,134 @@
-# Todo
+# TODO
 
-## Config Module Test Fixes
-- [x] **T001 · Bugfix · P0: apply #[serial] attribute to fix config test interference**
-    - **Context:** Root Cause Analysis; Resolution Steps > 1. Fix Test Interference by Enforcing Serial Execution
-    - **Action:**
-        1. In `src/config/mod.rs`, add `use serial_test::serial;` to the tests module imports.
-        2. Add the `#[serial]` attribute to these test functions: `test_load_with_default_editor`, `test_load_with_editor_env`, `test_load_with_custom_dir`, and `test_load_config_with_invalid_editor`.
-    - **Done‑when:**
-        1. Code changes are implemented in `src/config/mod.rs`.
-        2. `cargo test` passes locally multiple times consistently for the `config::tests` module.
-        3. CI build job passes successfully after changes are pushed.
-    - **Verification:**
-        1. Run `cargo test -- --test-threads=1 && cargo test -- --test-threads=X` (where X > 1) locally multiple times, ensuring all tests in `config::tests` pass consistently.
-        2. Push changes to a PR branch and monitor the CI build job to confirm it passes.
-    - **Depends‑on:** none
+Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.md
 
-## Developer Documentation & Guidelines
-- [x] **T002 · Chore · P2: update contributing guidelines for global state test isolation**
-    - **Context:** Prevention Measures > 1. Update Guidelines; Next Steps > 3. Update team documentation
-    - **Action:**
-        1. Edit the project's contributing documentation (e.g., `CONTRIBUTING.md`).
-        2. Add a guideline stating that tests modifying global state (e.g., environment variables) must use `#[serial]` to ensure isolation and prevent parallel execution issues.
-    - **Done‑when:**
-        1. Contributing documentation is updated with the new guideline.
-        2. The rationale for using `#[serial]` is briefly explained.
-    - **Depends‑on:** none
+## Prerequisites
+- [x] **T001**: Ensure clean working directory and create feature branch
+  - Verify git status is clean on main branch
+  - Run `cargo test --all-features` to ensure baseline
+  - Create branch: `git checkout -b feat/refactor-module-boundaries`
+  - **Verification**: All tests pass, new branch created
 
-- [ ] **T003 · Chore · P2: add pr checklist item for global state test isolation**
-    - **Context:** Prevention Measures > 2. PR Checklist
-    - **Action:**
-        1. Update the project's Pull Request template.
-        2. Add a checklist item for authors/reviewers to verify that tests modifying global state are properly isolated (e.g., using `#[serial]`).
-    - **Done‑when:**
-        1. PR template includes the new checklist item.
-    - **Depends‑on:** [T002]
+## Module Structure Setup
+- [ ] **T002**: Create new module directories
+  - Create: `src/errors/`, `src/journal_core/`, `src/journal_io/`
+  - **Verification**: Directories exist via `ls src/`
 
-## Team Process & Education
-- [ ] **T004 · Chore · P2: educate team on parallel test execution and #[serial] usage**
-    - **Context:** Prevention Measures > 3. Team Education; Next Steps > 3. Update team documentation
-    - **Action:**
-        1. Prepare and share educational material (e.g., internal wiki page, short presentation) explaining Rust's parallel test execution, associated risks with global state, and the correct usage of `serial_test::serial`.
-    - **Done‑when:**
-        1. Educational material is created and disseminated to the development team.
-        2. Team members acknowledge receipt or understanding.
-    - **Depends‑on:** [T002]
+- [ ] **T003**: Create mod.rs files for new modules  
+  - Create: `src/errors/mod.rs`, `src/journal_core/mod.rs`, `src/journal_io/mod.rs`
+  - **Verification**: Files exist in each directory
 
-- [ ] **T005 · Chore · P2: establish process for regular review of flaky tests**
-    - **Context:** Prevention Measures > 5. Regular Reviews
-    - **Action:**
-        1. Define and document a process for regularly monitoring CI test results for flaky tests.
-        2. Outline steps for investigating identified flaky tests, with a focus on potential race conditions or global state interference.
-    - **Done‑when:**
-        1. A documented process for monitoring and investigating flaky tests is established.
-        2. The process is communicated to the team.
-    - **Depends‑on:** none
+- [ ] **T004**: Update lib.rs module declarations
+  - Remove old declarations: `errors`, `journal_logic`
+  - Add new declarations: `errors`, `journal_core`, `journal_io`
+  - Update re-exports: `CliArgs`, `Config`, `AppError`, `AppResult`, `DateSpecifier`
+  - **Verification**: `cargo check` passes
 
-## Test Infrastructure Enhancements
-- [ ] **T006 · Chore · P3: investigate and propose TestEnvGuard utility for env var management**
-    - **Context:** Prevention Measures > 4. Test Utilities
-    - **Action:**
-        1. Research existing patterns or crates for safer environment variable manipulation in Rust tests.
-        2. Draft a proposal (e.g., internal document, GitHub issue) for a `TestEnvGuard` utility, outlining its potential design, benefits, and an example of use.
-    - **Done‑when:**
-        1. Research findings are documented.
-        2. A proposal for `TestEnvGuard` is created and shared for team review.
-    - **Depends‑on:** none
+- [ ] **T005**: Update main.rs imports
+  - Remove any `mod` declarations
+  - Update all `use` statements to new paths (e.g., `use ponder::errors::AppResult`)
+  - **Verification**: `cargo check` passes
+
+## Errors Module Migration
+- [ ] **T006**: Migrate errors.rs to src/errors/mod.rs
+  - Move content from `src/errors.rs` to `src/errors/mod.rs`
+  - Optional: Refine `AppError` variants for better specificity
+  - **Verification**: Content migrated correctly
+
+- [ ] **T007**: Update error imports throughout codebase
+  - Search and replace all `use crate::errors` paths
+  - Ensure all error imports point to new module
+  - **Verification**: `cargo check` passes
+
+- [ ] **T008**: Delete old errors.rs
+  - Remove `src/errors.rs`
+  - **Verification**: File removed, `cargo check` still passes
+
+## Journal Logic Refactoring
+- [ ] **T009**: Extract DateSpecifier to journal_core
+  - Move `DateSpecifier` enum to `src/journal_core/mod.rs`
+  - Move and rename `from_args` to `from_cli_args(retro: bool, reminisce: bool, date_str: Option<&str>)`
+  - Move and rename `get_dates` to `resolve_dates(&self, reference_date: NaiveDate)`
+  - Ensure no I/O or side effects in journal_core
+  - **Verification**: Pure logic isolated, `cargo check` passes
+
+- [ ] **T010**: Extract I/O functions to journal_io
+  - Move `ensure_journal_directory_exists` with signature `(journal_dir: &Path) -> AppResult<()>`
+  - Move `open_journal_entries` with signature `(config: &config::Config, dates: &[NaiveDate]) -> AppResult<()>`
+  - Move helper functions, make private unless justified
+  - **Verification**: All I/O isolated, `cargo check` passes
+
+- [ ] **T011**: Update journal logic imports
+  - Replace all `use crate::journal_logic` with appropriate new module
+  - **Verification**: No references to old module remain
+
+- [ ] **T012**: Delete journal_logic.rs
+  - Remove `src/journal_logic.rs`
+  - **Verification**: File removed, `cargo check` passes
+
+## Module-Specific Updates
+- [ ] **T013**: Update CLI module
+  - Ensure it only handles argument parsing
+  - Business logic should be invoked from main.rs
+  - **Verification**: Clean separation of concerns
+
+- [ ] **T014**: Update config module
+  - Remove deprecated `Config::ensure_journal_dir` method
+  - Update error imports to `crate::errors`
+  - **Verification**: `cargo check` passes
+
+## Main.rs Orchestration
+- [ ] **T015**: Refactor main.rs flow
+  - Parse CLI args: `let args = CliArgs::parse();`
+  - Load config: `let config = Config::load()?;`
+  - Validate config: `config.validate()?;`
+  - Ensure journal dir: `journal_io::ensure_journal_directory_exists(config.journal_dir())?;`
+  - Create date spec: `let date_spec = journal_core::DateSpecifier::from_cli_args(...)?;`
+  - Resolve dates: `let dates_to_open = date_spec.resolve_dates(Local::now().date_naive());`
+  - Open entries: `journal_io::open_journal_entries(&config, &dates_to_open)?;`
+  - **Verification**: Clean orchestration, `cargo test` passes
+
+## Quality Assurance
+- [ ] **T016**: Run tests after each major change
+  - Run `cargo check` after each file move
+  - Run `cargo test --all-features` after each module completion
+  - Fix any issues immediately
+  - **Verification**: All tests green
+
+- [ ] **T017**: Review public API surface
+  - Audit all `pub` items in each module
+  - Use `pub(crate)` or private visibility where appropriate
+  - Minimize public surface area
+  - **Verification**: Only necessary items are public
+
+## Final Steps
+- [ ] **T018**: Code formatting and linting
+  - Run `cargo fmt`
+  - Run `cargo clippy --all-targets -- -D warnings`
+  - Address all issues
+  - **Verification**: No warnings or errors
+
+- [ ] **T019**: Update documentation
+  - Add module-level docs (`//!`) to all new `mod.rs` files
+  - Update crate-level docs in `lib.rs`
+  - Update architecture sections in README.md and CLAUDE.md
+  - **Verification**: `cargo doc --open` shows complete docs
+
+- [ ] **T020**: Final verification
+  - Run `cargo test --all-features` one final time
+  - Manually test binary with various flags
+  - Verify the new module structure is correct
+  - **Verification**: Everything works as before refactoring
+
+## Testing Updates
+- [ ] **T021**: Update test imports and structure
+  - Fix test imports to use new module paths
+  - Ensure integration tests work with new structure
+  - Maintain or improve test coverage
+  - **Verification**: Coverage targets met
+
+## Notes
+- Perform iterative builds after each significant change
+- Keep changes atomic and testable
+- Maintain backwards compatibility for external API
+- Document any discovered interdependencies or complications
