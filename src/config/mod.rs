@@ -100,6 +100,51 @@ impl Config {
         Self::default()
     }
 
+    /// Validates an editor command string for security.
+    ///
+    /// This function checks that the editor command:
+    /// - Is not empty
+    /// - Contains no shell metacharacters
+    /// - Contains no spaces
+    ///
+    /// # Arguments
+    ///
+    /// * `editor_cmd` - The editor command string to validate
+    ///
+    /// # Returns
+    ///
+    /// A Result containing the validated editor command or an AppError
+    fn validate_editor_command(editor_cmd: &str) -> AppResult<&str> {
+        // Check for empty string
+        if editor_cmd.is_empty() {
+            return Err(AppError::Config(
+                "Editor command cannot be empty".to_string(),
+            ));
+        }
+
+        // Check for spaces
+        if editor_cmd.contains(' ') {
+            return Err(AppError::Config(
+                "Editor command cannot contain spaces. Use a wrapper script or shell alias for editors requiring arguments".to_string(),
+            ));
+        }
+
+        // Check for shell metacharacters
+        const FORBIDDEN_CHARS: &[char] =
+            &['|', '&', ';', '$', '(', ')', '`', '\\', '<', '>', '\'', '"'];
+
+        for &ch in FORBIDDEN_CHARS.iter() {
+            if editor_cmd.contains(ch) {
+                return Err(AppError::Config(format!(
+                    "Editor command cannot contain shell metacharacters: '{}'. Use a wrapper script or shell alias instead",
+                    ch
+                )));
+            }
+        }
+
+        Ok(editor_cmd)
+    }
+
     /// Loads configuration from environment variables with sensible defaults.
     ///
     /// This method reads configuration from environment variables, with fallbacks
@@ -118,7 +163,9 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Returns `AppError::Config` if the journal directory path expansion fails.
+    /// Returns `AppError::Config` if:
+    /// - The journal directory path expansion fails
+    /// - The editor command fails validation (empty, contains spaces or shell metacharacters)
     ///
     /// # Examples
     ///
@@ -132,9 +179,12 @@ impl Config {
     /// ```
     pub fn load() -> AppResult<Self> {
         // Get editor from EDITOR or PONDER_EDITOR env vars, fallback to vim
-        let editor = env::var("PONDER_EDITOR")
+        let editor_raw = env::var("PONDER_EDITOR")
             .or_else(|_| env::var("EDITOR"))
             .unwrap_or_else(|_| "vim".to_string());
+
+        // Validate the editor command
+        let editor = Config::validate_editor_command(&editor_raw)?;
 
         // Get journal directory from PONDER_DIR env var, fallback to ~/Documents/rubberducks
         let journal_dir_str = env::var("PONDER_DIR").unwrap_or_else(|_| {
@@ -156,7 +206,7 @@ impl Config {
         }
 
         let config = Config {
-            editor,
+            editor: editor.to_string(),
             journal_dir,
         };
 
@@ -192,6 +242,15 @@ impl Config {
     /// // Make sure the directory exists
     /// config.ensure_journal_dir().expect("Failed to create journal directory");
     /// ```
+    ///
+    /// # Deprecated
+    ///
+    /// This method is deprecated. Use `journal_logic::ensure_journal_directory_exists` instead.
+    #[deprecated(
+        since = "0.1.2",
+        note = "Use journal_logic::ensure_journal_directory_exists instead"
+    )]
+    #[allow(dead_code)]
     pub fn ensure_journal_dir(&self) -> AppResult<()> {
         if !self.journal_dir.exists() {
             fs::create_dir_all(&self.journal_dir).map_err(|e| {
@@ -268,6 +327,8 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::journal_logic;
+    use serial_test::serial;
     use std::env;
     use tempfile::tempdir;
 
@@ -286,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_default_editor() {
         // Fully reset environment variables
         setup();
@@ -298,10 +360,14 @@ mod tests {
         env::remove_var("EDITOR");
         env::remove_var("PONDER_EDITOR");
 
+        // Set EDITOR to nano for this test
+        env::set_var("EDITOR", "nano");
+
         // Run the test
         let config = Config::load().unwrap();
 
         // Restore environment
+        env::remove_var("EDITOR");
         if let Some(val) = orig_editor {
             env::set_var("EDITOR", val);
         }
@@ -309,10 +375,12 @@ mod tests {
             env::set_var("PONDER_EDITOR", val);
         }
 
-        assert_eq!(config.editor, "vim");
+        // If EDITOR is set to nano, we expect the config to use nano
+        assert_eq!(config.editor, "nano");
     }
 
     #[test]
+    #[serial]
     fn test_load_with_editor_env() {
         // Fully reset environment variables
         setup();
@@ -353,8 +421,12 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_with_custom_dir() {
         setup();
+
+        // Store original environment variable to restore later
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
 
         // Create a temp directory to use as journal dir
         let temp_dir = tempdir().unwrap();
@@ -362,6 +434,13 @@ mod tests {
 
         env::set_var("PONDER_DIR", &dir_path);
         let config = Config::load().unwrap();
+
+        // Restore environment
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        } else {
+            env::remove_var("PONDER_DIR");
+        }
 
         assert_eq!(config.journal_dir, PathBuf::from(dir_path));
     }
@@ -448,9 +527,127 @@ mod tests {
         assert!(!dir_path.exists());
 
         // Should create the directory
-        config.ensure_journal_dir().unwrap();
+        journal_logic::ensure_journal_directory_exists(&config.journal_dir).unwrap();
 
         // Now it should exist
         assert!(dir_path.exists());
+    }
+
+    #[test]
+    fn test_validate_editor_command_valid() {
+        assert_eq!(Config::validate_editor_command("vim").unwrap(), "vim");
+        assert_eq!(Config::validate_editor_command("nano").unwrap(), "nano");
+        assert_eq!(
+            Config::validate_editor_command("/usr/bin/code").unwrap(),
+            "/usr/bin/code"
+        );
+        assert_eq!(
+            Config::validate_editor_command("./my-editor").unwrap(),
+            "./my-editor"
+        );
+    }
+
+    #[test]
+    fn test_validate_editor_command_empty() {
+        let result = Config::validate_editor_command("");
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Config(msg)) => assert!(msg.contains("cannot be empty")),
+            _ => panic!("Expected Config error for empty command"),
+        }
+    }
+
+    #[test]
+    fn test_validate_editor_command_with_spaces() {
+        let result = Config::validate_editor_command("vim --noplugin");
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Config(msg)) => assert!(msg.contains("cannot contain spaces")),
+            _ => panic!("Expected Config error for command with spaces"),
+        }
+    }
+
+    #[test]
+    fn test_validate_editor_command_with_metacharacters() {
+        // Test commands without spaces (so they fail on metacharacters, not spaces)
+        let test_cases = [
+            ("echo>/tmp/file", '>'),
+            ("echo|cat", '|'),
+            ("sh&echo", '&'),
+            ("vim;echo", ';'),
+            ("$(echo)", '$'),
+            ("`echo`", '`'),
+            ("vim&", '&'),
+            ("vim'~/test'", '\''),
+            ("vim\"test\"", '"'),
+            ("vim(test)", '('),
+            ("vim)test", ')'),
+            ("vim\\test", '\\'),
+            ("vim<file", '<'),
+        ];
+
+        for (cmd, char) in test_cases.iter() {
+            let result = Config::validate_editor_command(cmd);
+            assert!(result.is_err());
+            match result {
+                Err(AppError::Config(msg)) => {
+                    assert!(msg.contains("Editor command cannot contain shell metacharacters"));
+                    assert!(msg.contains(&char.to_string()));
+                }
+                _ => panic!("Expected Config error for metacharacter '{}'", char),
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_with_invalid_editor() {
+        // Store original values
+        let orig_ponder_editor = env::var("PONDER_EDITOR").ok();
+        let orig_editor = env::var("EDITOR").ok();
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
+
+        // Clear environment first
+        env::remove_var("PONDER_EDITOR");
+        env::remove_var("EDITOR");
+
+        // Set invalid editor
+        env::set_var("PONDER_EDITOR", "vim --noplugin");
+        env::set_var("PONDER_DIR", "/tmp");
+
+        let result = Config::load();
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Config(msg)) => assert!(msg.contains("cannot contain spaces")),
+            _ => panic!("Expected Config error for invalid editor"),
+        }
+
+        // Test with metacharacters
+        env::set_var("PONDER_EDITOR", "echo>/tmp/pwned");
+        let result = Config::load();
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Config(msg)) => {
+                assert!(msg.contains("Editor command cannot contain shell metacharacters"))
+            }
+            _ => panic!("Expected Config error for metacharacters"),
+        }
+
+        // Restore original values
+        if let Some(val) = orig_ponder_editor {
+            env::set_var("PONDER_EDITOR", val);
+        } else {
+            env::remove_var("PONDER_EDITOR");
+        }
+        if let Some(val) = orig_editor {
+            env::set_var("EDITOR", val);
+        } else {
+            env::remove_var("EDITOR");
+        }
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        } else {
+            env::remove_var("PONDER_DIR");
+        }
     }
 }

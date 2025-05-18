@@ -83,12 +83,58 @@ Ponder can be configured using environment variables:
 | `PONDER_EDITOR` | The editor to use for journal entries | Uses `EDITOR` if set |
 | `EDITOR` | Fallback editor if `PONDER_EDITOR` is not set | `vim` |
 
+### Editor Configuration Security
+
+⚠️ **Important Security Restriction**: For security reasons, `PONDER_EDITOR` and `EDITOR` must be set to a single command or an absolute/relative path to an executable, without any embedded spaces or arguments. This prevents command injection vulnerabilities.
+
+**Valid examples:**
+```bash
+export PONDER_EDITOR="vim"
+export PONDER_EDITOR="/usr/bin/nano"
+export PONDER_EDITOR="./my-editor"
+```
+
+**Invalid examples (will be rejected):**
+```bash
+export PONDER_EDITOR="vim --noplugin"      # Contains spaces and arguments
+export PONDER_EDITOR="code -w"             # Contains spaces and arguments
+export PONDER_EDITOR="echo > /tmp/file"    # Contains shell metacharacters
+```
+
+### Workarounds for Editor Arguments
+
+If you need to pass arguments to your editor, you can use one of these approaches:
+
+#### Method 1: Shell Alias
+Create an alias in your shell configuration file:
+
+```bash
+# In your .bashrc, .zshrc, etc.
+alias ponder-editor='code -w'
+export PONDER_EDITOR="ponder-editor"
+```
+
+#### Method 2: Wrapper Script
+Create a wrapper script that calls your editor with the desired arguments:
+
+```bash
+#!/bin/bash
+# Save as ~/bin/ponder-code (or any location in your PATH)
+exec code -w "$@"
+```
+
+Make it executable:
+```bash
+chmod +x ~/bin/ponder-code
+export PONDER_EDITOR="ponder-code"
+```
+
 ### Example Configuration
 
 ```bash
 # Add to your .bashrc, .zshrc, etc.
 export PONDER_DIR="~/journals"
-export PONDER_EDITOR="code -w"
+export PONDER_EDITOR="vim"  # Simple command without arguments
 ```
 
 ## File Structure 📁
@@ -103,11 +149,10 @@ Ponder follows a modular architecture with clear separation of concerns:
 
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
-- `editor`: Editor abstraction for opening journal files
 - `errors`: Error handling infrastructure
-- `journal`: Core journal functionality with dependency injection
+- `journal_logic`: Core journal functionality
 
-The codebase is designed with testability in mind, using dependency injection and trait-based abstractions to allow for easy mocking and testing.
+The codebase is designed with simplicity and maintainability in mind, using direct function calls and standard library features rather than abstractions. This approach improves readability and makes the code easier to reason about.
 
 ## Contributing 🤝
 

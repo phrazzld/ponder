@@ -5,6 +5,7 @@ use tempfile::tempdir;
 
 use ponder::config::Config;
 use ponder::errors::{AppError, AppResult};
+use ponder::journal_logic;
 
 #[test]
 #[serial]
@@ -141,23 +142,20 @@ fn test_config_validation() -> AppResult<()> {
 
 #[test]
 #[serial]
-fn test_ensure_journal_dir() -> AppResult<()> {
+fn test_ensure_journal_directory_exists() -> AppResult<()> {
     // Create a temporary directory for testing
     let temp_dir = tempdir().unwrap();
     let base_path = temp_dir.path().to_string_lossy().to_string();
     let journal_dir = PathBuf::from(&base_path).join("journals");
 
-    // Create a config with the temporary journal directory
-    let config = Config {
-        editor: "vim".to_string(),
-        journal_dir: journal_dir.clone(),
-    };
+    // We no longer need to create the Config object since we're using
+    // journal_logic::ensure_journal_directory_exists directly
 
     // Directory shouldn't exist yet
     assert!(!journal_dir.exists());
 
-    // Call ensure_journal_dir to create it
-    config.ensure_journal_dir()?;
+    // Call ensure_journal_directory_exists to create it
+    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
 
     // Now the directory should exist
     assert!(journal_dir.exists());

@@ -141,8 +141,7 @@ mod tests {
     #[test]
     fn test_result_combinators() {
         // Test using map_err with AppResult
-        let io_result: Result<(), io::Error> =
-            Err(io::Error::new(io::ErrorKind::Other, "test error"));
+        let io_result: Result<(), io::Error> = Err(io::Error::other("test error"));
         let app_result: AppResult<()> = io_result.map_err(AppError::Io);
 
         assert!(app_result.is_err());

@@ -19,32 +19,24 @@ The codebase follows a modular architecture with clear separation of concerns:
 
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
-- `editor`: Editor abstraction for opening journal files
 - `errors`: Error handling infrastructure
-- `journal`: Core journal functionality with dependency injection
+- `journal_logic`: Core journal functionality
 
 ## Usage Example
 
 ```rust,no_run
-use ponder::{Config, JournalService, DateSpecifier};
-use ponder::journal::io::FileSystemIO;
-use ponder::editor::SystemEditor;
+use ponder::{Config, DateSpecifier};
+use ponder::journal_logic;
 
 fn main() -> ponder::AppResult<()> {
     // Load configuration
     let config = Config::load()?;
 
-    // Create components
-    let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
-    });
-    let editor = Box::new(SystemEditor {
-        editor_cmd: config.editor.clone(),
-    });
+    // Ensure journal directory exists
+    journal_logic::ensure_journal_directory_exists(&config.journal_dir)?;
 
-    // Create service and open today's journal entry
-    let journal_service = JournalService::new(config, io, editor)?;
-    journal_service.open_entries(&DateSpecifier::Today)
+    // Open today's journal entry
+    journal_logic::open_journal_entries(&config, &DateSpecifier::Today)
 }
 ```
 */
@@ -53,16 +45,13 @@ fn main() -> ponder::AppResult<()> {
 pub mod cli;
 /// Configuration loading and management
 pub mod config;
-/// Editor abstraction for opening journal files
-pub mod editor;
 /// Error types and utilities for error handling
 pub mod errors;
-/// Core journal functionality
-pub mod journal;
+/// Journal functionality (new implementation)
+pub mod journal_logic;
 
 // Re-export important types for convenience
 pub use cli::CliArgs;
 pub use config::Config;
-pub use editor::{Editor, SystemEditor};
 pub use errors::{AppError, AppResult};
-pub use journal::{DateSpecifier, JournalService};
+pub use journal_logic::DateSpecifier;

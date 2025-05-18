@@ -39,16 +39,13 @@ The application can be configured with the following environment variables:
 
 mod cli;
 mod config;
-mod editor;
 mod errors;
-mod journal;
+mod journal_logic;
 
 use cli::CliArgs;
 use config::Config;
-use editor::SystemEditor;
 use errors::AppResult;
-use journal::io::FileSystemIO;
-use journal::{DateSpecifier, JournalService};
+use journal_logic::DateSpecifier;
 use log::{debug, error, info};
 
 /// The main entry point for the ponder application.
@@ -117,23 +114,8 @@ fn main() -> AppResult<()> {
 
     // Ensure journal directory exists
     debug!("Journal directory: {:?}", config.journal_dir);
-    config.ensure_journal_dir().map_err(|e| {
+    journal_logic::ensure_journal_directory_exists(&config.journal_dir).map_err(|e| {
         error!("Failed to create journal directory: {}", e);
-        e
-    })?;
-
-    // Initialize I/O, editor, and journal service
-    info!("Initializing journal service");
-    let io = Box::new(FileSystemIO {
-        journal_dir: config.journal_dir.clone(),
-    });
-
-    let editor = Box::new(SystemEditor {
-        editor_cmd: config.editor.clone(),
-    });
-
-    let journal_service = JournalService::new(config, io, editor).map_err(|e| {
-        error!("Failed to initialize journal service: {}", e);
         e
     })?;
 
@@ -142,7 +124,7 @@ fn main() -> AppResult<()> {
 
     // Open the appropriate journal entries
     info!("Opening journal entries");
-    journal_service.open_entries(&date_spec).map_err(|e| {
+    journal_logic::open_journal_entries(&config, &date_spec).map_err(|e| {
         error!("Failed to open journal entries: {}", e);
         e
     })?;
@@ -174,7 +156,7 @@ fn main() -> AppResult<()> {
 ///
 /// ```
 /// use ponder::cli::CliArgs;
-/// use ponder::journal::DateSpecifier;
+/// use ponder::journal_logic::DateSpecifier;
 ///
 /// // No flags specified - defaults to today
 /// let args = CliArgs {
