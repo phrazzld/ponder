@@ -35,7 +35,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Optional: Refine `AppError` variants for better specificity
   - **Verification**: Content migrated correctly
 
-- [ ] **T007**: Update error imports throughout codebase
+- [x] **T007**: Update error imports throughout codebase
   - Search and replace all `use crate::errors` paths
   - Ensure all error imports point to new module
   - **Verification**: `cargo check` passes

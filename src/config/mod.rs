@@ -245,10 +245,10 @@ impl Config {
     ///
     /// # Deprecated
     ///
-    /// This method is deprecated. Use `journal_logic::ensure_journal_directory_exists` instead.
+    /// This method is deprecated. Use `journal_io::ensure_journal_directory_exists` instead.
     #[deprecated(
         since = "0.1.2",
-        note = "Use journal_logic::ensure_journal_directory_exists instead"
+        note = "Use journal_io::ensure_journal_directory_exists instead"
     )]
     #[allow(dead_code)]
     pub fn ensure_journal_dir(&self) -> AppResult<()> {
@@ -327,7 +327,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::journal_logic;
+    use crate::journal_io;
     use serial_test::serial;
     use std::env;
     use tempfile::tempdir;
@@ -527,7 +527,7 @@ mod tests {
         assert!(!dir_path.exists());
 
         // Should create the directory
-        journal_logic::ensure_journal_directory_exists(&config.journal_dir).unwrap();
+        journal_io::ensure_journal_directory_exists(&config.journal_dir).unwrap();
 
         // Now it should exist
         assert!(dir_path.exists());

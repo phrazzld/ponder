@@ -6,7 +6,8 @@ use tempfile::tempdir;
 // We need to import the actual library code
 use ponder::config::Config;
 use ponder::errors::AppResult;
-use ponder::journal_logic::{self, DateSpecifier};
+use ponder::journal_core::DateSpecifier;
+use ponder::journal_io;
 
 // Helper function to set up a test environment
 fn set_up_test_env() -> (Config, tempfile::TempDir) {
@@ -35,10 +36,10 @@ fn test_journal_basic_flow() -> AppResult<()> {
     let journal_dir = config.journal_dir.clone();
 
     // Ensure journal directory exists
-    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Test opening today's entry
-    journal_logic::open_journal_entries(&config, &DateSpecifier::Today)?;
+    journal_io::open_journal_entries(&config, &DateSpecifier::Today)?;
 
     // Verify that a journal file was created for today
     let dir_entries = fs::read_dir(&journal_dir).unwrap();
@@ -58,12 +59,12 @@ fn test_journal_specific_date() -> AppResult<()> {
     let journal_dir = config.journal_dir.clone();
 
     // Ensure journal directory exists
-    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Test opening entry for a specific date
     use chrono::NaiveDate;
     let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
-    journal_logic::open_journal_entries(&config, &DateSpecifier::Specific(specific_date))?;
+    journal_io::open_journal_entries(&config, &DateSpecifier::Specific(specific_date))?;
 
     // Verify that a journal file was created for the specific date
     let expected_file = journal_dir.join("20230115.md");
@@ -82,10 +83,10 @@ fn test_journal_retro() -> AppResult<()> {
     let journal_dir = config.journal_dir.clone();
 
     // Ensure journal directory exists
-    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Since we're just creating the directory, there shouldn't be any retro entries
-    journal_logic::open_journal_entries(&config, &DateSpecifier::Retro)?;
+    journal_io::open_journal_entries(&config, &DateSpecifier::Retro)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 
@@ -101,10 +102,10 @@ fn test_journal_reminisce() -> AppResult<()> {
     let journal_dir = config.journal_dir.clone();
 
     // Ensure journal directory exists
-    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Since we're just creating the directory, there shouldn't be any reminisce entries
-    journal_logic::open_journal_entries(&config, &DateSpecifier::Reminisce)?;
+    journal_io::open_journal_entries(&config, &DateSpecifier::Reminisce)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 
