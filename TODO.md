@@ -24,7 +24,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Update re-exports: `CliArgs`, `Config`, `AppError`, `AppResult`, `DateSpecifier`
   - **Verification**: `cargo check` passes
 
-- [ ] **T005**: Update main.rs imports
+- [x] **T005**: Update main.rs imports
   - Remove any `mod` declarations
   - Update all `use` statements to new paths (e.g., `use ponder::errors::AppResult`)
   - **Verification**: `cargo check` passes

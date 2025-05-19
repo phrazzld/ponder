@@ -37,16 +37,11 @@ The application can be configured with the following environment variables:
 - `PONDER_DIR`: The directory to store journal entries (defaults to "~/Documents/rubberducks")
 */
 
-mod cli;
-mod config;
-mod errors;
-mod journal_logic;
-
-use cli::CliArgs;
-use config::Config;
-use errors::AppResult;
-use journal_logic::DateSpecifier;
 use log::{debug, error, info};
+use ponder::cli::CliArgs;
+use ponder::config::Config;
+use ponder::errors::AppResult;
+use ponder::journal_core::DateSpecifier;
 
 /// The main entry point for the ponder application.
 ///
@@ -114,7 +109,7 @@ fn main() -> AppResult<()> {
 
     // Ensure journal directory exists
     debug!("Journal directory: {:?}", config.journal_dir);
-    journal_logic::ensure_journal_directory_exists(&config.journal_dir).map_err(|e| {
+    ponder::journal_io::ensure_journal_directory_exists(&config.journal_dir).map_err(|e| {
         error!("Failed to create journal directory: {}", e);
         e
     })?;
@@ -124,7 +119,7 @@ fn main() -> AppResult<()> {
 
     // Open the appropriate journal entries
     info!("Opening journal entries");
-    journal_logic::open_journal_entries(&config, &date_spec).map_err(|e| {
+    ponder::journal_io::open_journal_entries(&config, &date_spec).map_err(|e| {
         error!("Failed to open journal entries: {}", e);
         e
     })?;
@@ -156,7 +151,7 @@ fn main() -> AppResult<()> {
 ///
 /// ```
 /// use ponder::cli::CliArgs;
-/// use ponder::journal_logic::DateSpecifier;
+/// use ponder::journal_core::DateSpecifier;
 ///
 /// // No flags specified - defaults to today
 /// let args = CliArgs {
@@ -192,7 +187,8 @@ fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
 mod tests {
     use super::*;
     use chrono::Datelike;
-    use errors::AppError;
+    use ponder::errors::AppError;
+    use ponder::journal_core::DateSpecifier;
 
     #[test]
     fn test_get_date_specifier_from_retro_args() {
