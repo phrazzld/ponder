@@ -30,7 +30,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: `cargo check` passes
 
 ## Errors Module Migration
-- [ ] **T006**: Migrate errors.rs to src/errors/mod.rs
+- [x] **T006**: Migrate errors.rs to src/errors/mod.rs
   - Move content from `src/errors.rs` to `src/errors/mod.rs`
   - Optional: Refine `AppError` variants for better specificity
   - **Verification**: Content migrated correctly
