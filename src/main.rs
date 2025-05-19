@@ -117,9 +117,13 @@ fn main() -> AppResult<()> {
     // Determine which entry type to open based on CLI arguments
     let date_spec = get_date_specifier_from_args(&args)?;
 
+    // Get the dates to open
+    let reference_date = chrono::Local::now().naive_local().date();
+    let dates = date_spec.resolve_dates(reference_date);
+
     // Open the appropriate journal entries
     info!("Opening journal entries");
-    ponder::journal_io::open_journal_entries(&config, &date_spec).map_err(|e| {
+    ponder::journal_io::open_journal_entries(&config, &dates).map_err(|e| {
         error!("Failed to open journal entries: {}", e);
         e
     })?;
@@ -170,7 +174,7 @@ fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
         Ok(DateSpecifier::Reminisce)
     } else if let Some(date_str) = &args.date {
         // Parse the date string
-        match DateSpecifier::from_args(false, false, Some(date_str)) {
+        match DateSpecifier::from_cli_args(false, false, Some(date_str)) {
             Ok(date_spec) => Ok(date_spec),
             Err(e) => {
                 error!("Invalid date format: {}", e);

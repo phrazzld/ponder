@@ -40,19 +40,19 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Ensure all error imports point to new module
   - **Verification**: `cargo check` passes
 
-- [ ] **T008**: Delete old errors.rs
+- [x] **T008**: Delete old errors.rs
   - Remove `src/errors.rs`
   - **Verification**: File removed, `cargo check` still passes
 
 ## Journal Logic Refactoring
-- [ ] **T009**: Extract DateSpecifier to journal_core
+- [x] **T009**: Extract DateSpecifier to journal_core
   - Move `DateSpecifier` enum to `src/journal_core/mod.rs`
   - Move and rename `from_args` to `from_cli_args(retro: bool, reminisce: bool, date_str: Option<&str>)`
   - Move and rename `get_dates` to `resolve_dates(&self, reference_date: NaiveDate)`
   - Ensure no I/O or side effects in journal_core
   - **Verification**: Pure logic isolated, `cargo check` passes
 
-- [ ] **T010**: Extract I/O functions to journal_io
+- [x] **T010**: Extract I/O functions to journal_io
   - Move `ensure_journal_directory_exists` with signature `(journal_dir: &Path) -> AppResult<()>`
   - Move `open_journal_entries` with signature `(config: &config::Config, dates: &[NaiveDate]) -> AppResult<()>`
   - Move helper functions, make private unless justified

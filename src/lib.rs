@@ -26,24 +26,22 @@ The codebase follows a modular architecture with clear separation of concerns:
 ## Usage Example
 
 ```rust,no_run
-use ponder::{Config};
-// TODO: Update example after module migration is complete
-/*
-use ponder::DateSpecifier;
-use ponder::journal_io;
+use ponder::{Config, DateSpecifier, AppResult, journal_io};
+use chrono::Local;
 
-fn main() -> ponder::AppResult<()> {
+fn main() -> AppResult<()> {
     // Load configuration
     let config = Config::load()?;
 
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
-    // Open today's journal entry  
-    journal_io::open_journal_entries(&config, &DateSpecifier::Today)
+    // Open today's journal entry
+    let today = Local::now().naive_local().date();
+    let date_spec = DateSpecifier::Today;
+    let dates = date_spec.resolve_dates(today);
+    journal_io::open_journal_entries(&config, &dates)
 }
-*/
-Ok(())
 ```
 */
 
@@ -62,5 +60,4 @@ pub mod journal_io;
 pub use cli::CliArgs;
 pub use config::Config;
 pub use errors::{AppError, AppResult};
-// DateSpecifier will be re-exported from journal_core once moved
-// pub use journal_core::DateSpecifier;
+pub use journal_core::DateSpecifier;

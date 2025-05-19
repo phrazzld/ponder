@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 // We need to import the actual library code
+use chrono::NaiveDate;
 use ponder::config::Config;
 use ponder::errors::AppResult;
 use ponder::journal_core::DateSpecifier;
@@ -39,7 +40,8 @@ fn test_journal_basic_flow() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Test opening today's entry
-    journal_io::open_journal_entries(&config, &DateSpecifier::Today)?;
+    let today = chrono::Local::now().naive_local().date();
+    journal_io::open_journal_entries(&config, &[today])?;
 
     // Verify that a journal file was created for today
     let dir_entries = fs::read_dir(&journal_dir).unwrap();
@@ -62,9 +64,8 @@ fn test_journal_specific_date() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Test opening entry for a specific date
-    use chrono::NaiveDate;
     let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
-    journal_io::open_journal_entries(&config, &DateSpecifier::Specific(specific_date))?;
+    journal_io::open_journal_entries(&config, &[specific_date])?;
 
     // Verify that a journal file was created for the specific date
     let expected_file = journal_dir.join("20230115.md");
@@ -86,7 +87,10 @@ fn test_journal_retro() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Since we're just creating the directory, there shouldn't be any retro entries
-    journal_io::open_journal_entries(&config, &DateSpecifier::Retro)?;
+    let spec = DateSpecifier::Retro;
+    let reference_date = chrono::Local::now().naive_local().date();
+    let dates = spec.resolve_dates(reference_date);
+    journal_io::open_journal_entries(&config, &dates)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 
@@ -105,7 +109,10 @@ fn test_journal_reminisce() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Since we're just creating the directory, there shouldn't be any reminisce entries
-    journal_io::open_journal_entries(&config, &DateSpecifier::Reminisce)?;
+    let spec = DateSpecifier::Reminisce;
+    let reference_date = chrono::Local::now().naive_local().date();
+    let dates = spec.resolve_dates(reference_date);
+    journal_io::open_journal_entries(&config, &dates)?;
 
     // No assertion needed - we're just checking that it doesn't panic
 
