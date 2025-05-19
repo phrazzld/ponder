@@ -20,24 +20,30 @@ The codebase follows a modular architecture with clear separation of concerns:
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
 - `errors`: Error handling infrastructure
-- `journal_logic`: Core journal functionality
+- `journal_core`: Core journal logic without I/O operations
+- `journal_io`: Journal I/O operations and file management
 
 ## Usage Example
 
 ```rust,no_run
-use ponder::{Config, DateSpecifier};
-use ponder::journal_logic;
+use ponder::{Config};
+// TODO: Update example after module migration is complete
+/*
+use ponder::DateSpecifier;
+use ponder::journal_io;
 
 fn main() -> ponder::AppResult<()> {
     // Load configuration
     let config = Config::load()?;
 
     // Ensure journal directory exists
-    journal_logic::ensure_journal_directory_exists(&config.journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
-    // Open today's journal entry
-    journal_logic::open_journal_entries(&config, &DateSpecifier::Today)
+    // Open today's journal entry  
+    journal_io::open_journal_entries(&config, &DateSpecifier::Today)
 }
+*/
+Ok(())
 ```
 */
 
@@ -47,11 +53,14 @@ pub mod cli;
 pub mod config;
 /// Error types and utilities for error handling
 pub mod errors;
-/// Journal functionality (new implementation)
-pub mod journal_logic;
+/// Core journal functionality
+pub mod journal_core;
+/// Journal I/O operations
+pub mod journal_io;
 
 // Re-export important types for convenience
 pub use cli::CliArgs;
 pub use config::Config;
 pub use errors::{AppError, AppResult};
-pub use journal_logic::DateSpecifier;
+// DateSpecifier will be re-exported from journal_core once moved
+// pub use journal_core::DateSpecifier;

@@ -18,7 +18,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Create: `src/errors/mod.rs`, `src/journal_core/mod.rs`, `src/journal_io/mod.rs`
   - **Verification**: Files exist in each directory
 
-- [ ] **T004**: Update lib.rs module declarations
+- [x] **T004**: Update lib.rs module declarations
   - Remove old declarations: `errors`, `journal_logic`
   - Add new declarations: `errors`, `journal_core`, `journal_io`
   - Update re-exports: `CliArgs`, `Config`, `AppError`, `AppResult`, `DateSpecifier`
