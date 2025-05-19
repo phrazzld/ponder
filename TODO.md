@@ -14,7 +14,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Create: `src/errors/`, `src/journal_core/`, `src/journal_io/`
   - **Verification**: Directories exist via `ls src/`
 
-- [ ] **T003**: Create mod.rs files for new modules  
+- [x] **T003**: Create mod.rs files for new modules  
   - Create: `src/errors/mod.rs`, `src/journal_core/mod.rs`, `src/journal_io/mod.rs`
   - **Verification**: Files exist in each directory
 
