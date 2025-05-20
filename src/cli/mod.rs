@@ -5,11 +5,11 @@
 //! command-line arguments.
 
 use clap::{ArgGroup, Parser};
-
-#[cfg(test)]
 use chrono::NaiveDate;
-#[cfg(test)]
 use std::str::FromStr;
+
+use crate::errors::AppResult;
+use crate::journal_core::DateSpecifier;
 
 /// Command-line arguments for the ponder application.
 ///
@@ -130,9 +130,7 @@ impl CliArgs {
     /// assert!(args.parse_date().unwrap().is_err());
     /// ```
     ///
-    /// Note: This method is primarily used for testing purposes and may be useful
-    /// for applications that need to perform custom date parsing.
-    #[cfg(test)]
+    /// Note: This method is useful for applications that need to perform custom date parsing.
     pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
         self.date.as_ref().map(|date_str| {
             // Try parsing in YYYY-MM-DD format first
@@ -141,6 +139,57 @@ impl CliArgs {
                 NaiveDate::parse_from_str(date_str, "%Y%m%d")
             })
         })
+    }
+
+    /// Converts CLI arguments to a DateSpecifier.
+    ///
+    /// This function examines the CLI arguments and determines the
+    /// appropriate DateSpecifier to use for journal entry selection.
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the appropriate DateSpecifier or an AppError
+    /// if a date string couldn't be parsed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the date string (from `--date` option) is invalid or
+    /// in an unsupported format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ponder::cli::CliArgs;
+    /// use ponder::journal_core::DateSpecifier;
+    ///
+    /// // No flags specified - defaults to today
+    /// let args = CliArgs {
+    ///     retro: false,
+    ///     reminisce: false,
+    ///     date: None,
+    ///     verbose: false,
+    /// };
+    /// let date_spec = args.to_date_specifier().unwrap();
+    /// assert_eq!(date_spec, DateSpecifier::Today);
+    /// ```
+    pub fn to_date_specifier(&self) -> AppResult<DateSpecifier> {
+        if self.retro {
+            Ok(DateSpecifier::Retro)
+        } else if self.reminisce {
+            Ok(DateSpecifier::Reminisce)
+        } else if let Some(date_str) = &self.date {
+            // Parse the date string
+            match DateSpecifier::from_cli_args(false, false, Some(date_str)) {
+                Ok(date_spec) => Ok(date_spec),
+                Err(e) => {
+                    log::error!("Invalid date format: {}", e);
+                    Err(e)
+                }
+            }
+        } else {
+            // Default to today if no options are specified
+            Ok(DateSpecifier::Today)
+        }
     }
 }
 
@@ -262,5 +311,76 @@ mod tests {
         };
 
         assert!(args.parse_date().unwrap().is_err());
+    }
+
+    #[test]
+    fn test_to_date_specifier_retro() {
+        let args = CliArgs {
+            retro: true,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
+
+        let date_spec = args.to_date_specifier().unwrap();
+        assert_eq!(date_spec, DateSpecifier::Retro);
+    }
+
+    #[test]
+    fn test_to_date_specifier_reminisce() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: true,
+            date: None,
+            verbose: false,
+        };
+
+        let date_spec = args.to_date_specifier().unwrap();
+        assert_eq!(date_spec, DateSpecifier::Reminisce);
+    }
+
+    #[test]
+    fn test_to_date_specifier_date() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("2023-01-15".to_string()),
+            verbose: false,
+        };
+
+        let date_spec = args.to_date_specifier().unwrap();
+        if let DateSpecifier::Specific(date) = date_spec {
+            assert_eq!(date.year(), 2023);
+            assert_eq!(date.month(), 1);
+            assert_eq!(date.day(), 15);
+        } else {
+            panic!("Expected DateSpecifier::Specific");
+        }
+    }
+
+    #[test]
+    fn test_to_date_specifier_invalid_date() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("invalid-date".to_string()),
+            verbose: false,
+        };
+
+        let result = args.to_date_specifier();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_to_date_specifier_default() {
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: None,
+            verbose: false,
+        };
+
+        let date_spec = args.to_date_specifier().unwrap();
+        assert_eq!(date_spec, DateSpecifier::Today);
     }
 }

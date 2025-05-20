@@ -67,7 +67,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: File removed, `cargo check` passes
 
 ## Module-Specific Updates
-- [ ] **T013**: Update CLI module
+- [x] **T013**: Update CLI module
   - Ensure it only handles argument parsing
   - Business logic should be invoked from main.rs
   - **Verification**: Clean separation of concerns
@@ -132,3 +132,4 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
 - Keep changes atomic and testable
 - Maintain backwards compatibility for external API
 - Document any discovered interdependencies or complications
+- Fix pre-commit hook formatting issues with rustfmt configuration

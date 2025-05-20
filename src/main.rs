@@ -41,7 +41,6 @@ use log::{debug, error, info};
 use ponder::cli::CliArgs;
 use ponder::config::Config;
 use ponder::errors::AppResult;
-use ponder::journal_core::DateSpecifier;
 
 /// The main entry point for the ponder application.
 ///
@@ -115,7 +114,7 @@ fn main() -> AppResult<()> {
     })?;
 
     // Determine which entry type to open based on CLI arguments
-    let date_spec = get_date_specifier_from_args(&args)?;
+    let date_spec = args.to_date_specifier()?;
 
     // Get the dates to open
     let reference_date = chrono::Local::now().naive_local().date();
@@ -132,143 +131,8 @@ fn main() -> AppResult<()> {
     Ok(())
 }
 
-/// Converts CLI arguments to a DateSpecifier.
-///
-/// This helper function examines the CLI arguments and determines the
-/// appropriate DateSpecifier to use for journal entry selection.
-///
-/// # Parameters
-///
-/// * `args` - The parsed command-line arguments
-///
-/// # Returns
-///
-/// A Result containing either the appropriate DateSpecifier or an AppError
-/// if a date string couldn't be parsed.
-///
-/// # Errors
-///
-/// Returns an error if the date string (from `--date` option) is invalid or
-/// in an unsupported format.
-///
-/// # Examples
-///
-/// ```
-/// use ponder::cli::CliArgs;
-/// use ponder::journal_core::DateSpecifier;
-///
-/// // No flags specified - defaults to today
-/// let args = CliArgs {
-///     retro: false,
-///     reminisce: false,
-///     date: None,
-///     verbose: false,
-/// };
-/// let date_spec = get_date_specifier_from_args(&args).unwrap();
-/// assert_eq!(date_spec, DateSpecifier::Today);
-/// ```
-fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
-    if args.retro {
-        Ok(DateSpecifier::Retro)
-    } else if args.reminisce {
-        Ok(DateSpecifier::Reminisce)
-    } else if let Some(date_str) = &args.date {
-        // Parse the date string
-        match DateSpecifier::from_cli_args(false, false, Some(date_str)) {
-            Ok(date_spec) => Ok(date_spec),
-            Err(e) => {
-                error!("Invalid date format: {}", e);
-                Err(e)
-            }
-        }
-    } else {
-        // Default to today if no options are specified
-        Ok(DateSpecifier::Today)
-    }
-}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::Datelike;
-    use ponder::errors::AppError;
-    use ponder::journal_core::DateSpecifier;
-
-    #[test]
-    fn test_get_date_specifier_from_retro_args() {
-        let args = CliArgs {
-            retro: true,
-            reminisce: false,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Retro);
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_reminisce_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: true,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Reminisce);
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_date_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2023-01-15".to_string()),
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        if let DateSpecifier::Specific(date) = date_spec {
-            assert_eq!(date.year(), 2023);
-            assert_eq!(date.month(), 1);
-            assert_eq!(date.day(), 15);
-        } else {
-            panic!("Expected DateSpecifier::Specific");
-        }
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_invalid_date_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("invalid-date".to_string()),
-            verbose: false,
-        };
-
-        let result = get_date_specifier_from_args(&args);
-        assert!(result.is_err());
-
-        match result {
-            Err(AppError::Journal(msg)) => {
-                assert!(msg.contains("Invalid date format"));
-            }
-            _ => panic!("Expected Journal error"),
-        }
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_default_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Today);
-    }
+    // These tests have been moved to cli/mod.rs and are no longer needed here
 }
