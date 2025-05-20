@@ -150,9 +150,12 @@ Ponder follows a modular architecture with clear separation of concerns:
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
 - `errors`: Error handling infrastructure
-- `journal_logic`: Core journal functionality
+- `journal_core`: Core journal logic without I/O operations
+- `journal_io`: Journal I/O operations and file management
 
 The codebase is designed with simplicity and maintainability in mind, using direct function calls and standard library features rather than abstractions. This approach improves readability and makes the code easier to reason about.
+
+The architecture separates pure logic (in `journal_core`) from I/O operations (in `journal_io`), which improves testability and maintainability. Each module has a clearly defined responsibility, with minimal dependencies between modules.
 
 ## Contributing 🤝
 

@@ -108,7 +108,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Address all issues
   - **Verification**: No warnings or errors
 
-- [ ] **T019**: Update documentation
+- [x] **T019**: Update documentation
   - Add module-level docs (`//!`) to all new `mod.rs` files
   - Update crate-level docs in `lib.rs`
   - Update architecture sections in README.md and CLAUDE.md
