@@ -58,7 +58,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Move helper functions, make private unless justified
   - **Verification**: All I/O isolated, `cargo check` passes
 
-- [ ] **T011**: Update journal logic imports
+- [x] **T011**: Update journal logic imports
   - Replace all `use crate::journal_logic` with appropriate new module
   - **Verification**: No references to old module remain
 
