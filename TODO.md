@@ -114,7 +114,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Update architecture sections in README.md and CLAUDE.md
   - **Verification**: `cargo doc --open` shows complete docs
 
-- [ ] **T020**: Final verification
+- [x] **T020**: Final verification
   - Run `cargo test --all-features` one final time
   - Manually test binary with various flags
   - Verify the new module structure is correct
