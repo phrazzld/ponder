@@ -4,8 +4,8 @@
 //! It defines the CLI structure and provides methods to parse and validate
 //! command-line arguments.
 
-use clap::{ArgGroup, Parser};
 use chrono::NaiveDate;
+use clap::{ArgGroup, Parser};
 use std::str::FromStr;
 
 use crate::errors::AppResult;
@@ -131,6 +131,9 @@ impl CliArgs {
     /// ```
     ///
     /// Note: This method is useful for applications that need to perform custom date parsing.
+    ///
+    /// **Warning**: This method is considered part of the internal API and may change
+    /// in future releases. It is recommended to use the `to_date_specifier()` method instead.
     pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
         self.date.as_ref().map(|date_str| {
             // Try parsing in YYYY-MM-DD format first

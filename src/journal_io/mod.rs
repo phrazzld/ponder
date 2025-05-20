@@ -270,7 +270,7 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
 /// # Errors
 ///
 /// Returns `AppError::Io` if the file couldn't be read or written to.
-pub fn append_date_header_if_needed(path: &Path) -> AppResult<()> {
+pub(crate) fn append_date_header_if_needed(path: &Path) -> AppResult<()> {
     // Create or open the file
     let mut file = create_or_open_entry_file(path)?;
 

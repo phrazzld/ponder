@@ -95,7 +95,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Fix any issues immediately
   - **Verification**: All tests green
 
-- [ ] **T017**: Review public API surface
+- [x] **T017**: Review public API surface
   - Audit all `pub` items in each module
   - Use `pub(crate)` or private visibility where appropriate
   - Minimize public surface area
