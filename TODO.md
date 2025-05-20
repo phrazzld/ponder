@@ -121,7 +121,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: Everything works as before refactoring
 
 ## Testing Updates
-- [ ] **T021**: Update test imports and structure
+- [x] **T021**: Update test imports and structure
   - Fix test imports to use new module paths
   - Ensure integration tests work with new structure
   - Maintain or improve test coverage
