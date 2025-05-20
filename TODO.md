@@ -89,7 +89,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: Clean orchestration, `cargo test` passes
 
 ## Quality Assurance
-- [ ] **T016**: Run tests after each major change
+- [x] **T016**: Run tests after each major change
   - Run `cargo check` after each file move
   - Run `cargo test --all-features` after each module completion
   - Fix any issues immediately
