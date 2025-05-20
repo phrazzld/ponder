@@ -169,6 +169,8 @@ We welcome contributions to Ponder! If you'd like to contribute:
 6. Commit your changes following the Conventional Commits specification
 7. Submit a pull request
 
+For more details, please see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ### Development Setup
 
 To set up your development environment:

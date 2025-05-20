@@ -1,142 +1,119 @@
-# TODO
+# TODO: Post-Refactoring Cleanup
 
-Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.md
+## Critical Fixes (Must Complete)
 
-## Prerequisites
-- [x] **T001**: Ensure clean working directory and create feature branch
-  - Verify git status is clean on main branch
-  - Run `cargo test --all-features` to ensure baseline
-  - Create branch: `git checkout -b feat/refactor-module-boundaries`
-  - **Verification**: All tests pass, new branch created
+- [x] **T001: Fix Documentation References**
+  - Remove all references to deleted `MANIFESTO.md` in `README.md` and `PRD.md`
+  - Update documentation to maintain consistency with current architecture
+  - **Verification**: No broken references remain
 
-## Module Structure Setup
-- [x] **T002**: Create new module directories
-  - Create: `src/errors/`, `src/journal_core/`, `src/journal_io/`
-  - **Verification**: Directories exist via `ls src/`
+- [ ] **T002: Fix `AppError::Io` Clone Implementation**
+  - Location: `src/errors/mod.rs:45-52`
+  - Either remove `Clone` if not needed, OR
+  - Implement lossless clone using `Arc<std::io::Error>`
+  - **Verification**: Error chains are preserved through cloning
 
-- [x] **T003**: Create mod.rs files for new modules  
-  - Create: `src/errors/mod.rs`, `src/journal_core/mod.rs`, `src/journal_io/mod.rs`
-  - **Verification**: Files exist in each directory
+- [ ] **T003: Add Security Tests for Editor Command Injection**
+  - Create `tests/editor_security_tests.rs`
+  - Test malicious values for `PONDER_EDITOR` and `EDITOR` environment variables
+  - Verify validation correctly rejects dangerous commands
+  - **Verification**: All security tests pass in CI
 
-- [x] **T004**: Update lib.rs module declarations
-  - Remove old declarations: `errors`, `journal_logic`
-  - Add new declarations: `errors`, `journal_core`, `journal_io`
-  - Update re-exports: `CliArgs`, `Config`, `AppError`, `AppResult`, `DateSpecifier`
-  - **Verification**: `cargo check` passes
+## High Priority Fixes
 
-- [x] **T005**: Update main.rs imports
-  - Remove any `mod` declarations
-  - Update all `use` statements to new paths (e.g., `use ponder::errors::AppResult`)
-  - **Verification**: `cargo check` passes
+- [ ] **T004: Fix Double Error Logging**
+  - Remove error logging in `src/cli/mod.rs:159-167` (`to_date_specifier`)
+  - Remove duplicate error logging in `main.rs` (multiple locations)
+  - **Verification**: Errors are logged exactly once at the appropriate boundary
 
-## Errors Module Migration
-- [x] **T006**: Migrate errors.rs to src/errors/mod.rs
-  - Move content from `src/errors.rs` to `src/errors/mod.rs`
-  - Optional: Refine `AppError` variants for better specificity
-  - **Verification**: Content migrated correctly
+- [ ] **T005: Improve Error Handling for External Editor**
+  - Refactor `AppError::Editor` to use an enum with specific variants
+  - Update `launch_editor` to map different failure modes to specific error variants
+  - **Verification**: Error messages clearly indicate why editor launch failed
 
-- [x] **T007**: Update error imports throughout codebase
-  - Search and replace all `use crate::errors` paths
-  - Ensure all error imports point to new module
-  - **Verification**: `cargo check` passes
+- [ ] **T006: Implement Custom Debug for Sensitive Data Types**
+  - Add custom `Debug` implementations for `CliArgs` and `Config`
+  - Redact sensitive fields (paths, commands) in debug output
+  - **Verification**: Debug logs don't expose sensitive information
 
-- [x] **T008**: Delete old errors.rs
-  - Remove `src/errors.rs`
-  - **Verification**: File removed, `cargo check` still passes
+- [ ] **T007: Set Secure File Permissions**
+  - Update `ensure_journal_directory_exists()` to set 0o700 permissions
+  - Update file creation to set 0o600 permissions
+  - **Verification**: Created files/directories have correct permissions
 
-## Journal Logic Refactoring
-- [x] **T009**: Extract DateSpecifier to journal_core
-  - Move `DateSpecifier` enum to `src/journal_core/mod.rs`
-  - Move and rename `from_args` to `from_cli_args(retro: bool, reminisce: bool, date_str: Option<&str>)`
-  - Move and rename `get_dates` to `resolve_dates(&self, reference_date: NaiveDate)`
-  - Ensure no I/O or side effects in journal_core
-  - **Verification**: Pure logic isolated, `cargo check` passes
+## Architecture Improvements
 
-- [x] **T010**: Extract I/O functions to journal_io
-  - Move `ensure_journal_directory_exists` with signature `(journal_dir: &Path) -> AppResult<()>`
-  - Move `open_journal_entries` with signature `(config: &config::Config, dates: &[NaiveDate]) -> AppResult<()>`
-  - Move helper functions, make private unless justified
-  - **Verification**: All I/O isolated, `cargo check` passes
+- [ ] **T008: Remove Unnecessary Wrapper Methods**
+  - Remove `CliArgs::to_date_specifier`, move logic to `main.rs`
+  - Remove redundant `CliArgs::parse_args` wrapper
+  - Change `CliArgs::parse_date` visibility to `pub(crate)`
+  - **Verification**: No unnecessary indirection in code flow
 
-- [x] **T011**: Update journal logic imports
-  - Replace all `use crate::journal_logic` with appropriate new module
-  - **Verification**: No references to old module remain
+- [ ] **T009: Decouple Core Logic from App Error Type**
+  - Update `DateSpecifier::from_cli_args` to return `Result<Self, chrono::ParseError>`
+  - Map specific errors to `AppError` at the call site
+  - **Verification**: `journal_core` has no dependencies on application error types
 
-- [x] **T012**: Delete journal_logic.rs
-  - Remove `src/journal_logic.rs`
-  - **Verification**: File removed, `cargo check` passes
+- [ ] **T010: Separate File Initialization from Open Logic**
+  - Refactor `journal_io::open_journal_entries` to only handle opening
+  - Move initialization logic to `main.rs` or a separate function
+  - **Verification**: Clear separation of responsibilities in code
 
-## Module-Specific Updates
-- [x] **T013**: Update CLI module
-  - Ensure it only handles argument parsing
-  - Business logic should be invoked from main.rs
-  - **Verification**: Clean separation of concerns
+- [ ] **T011: Add Defense-in-Depth Path Validation**
+  - Add absolute path check in `journal_io::ensure_journal_directory_exists`
+  - Return error for non-absolute paths as a secondary safety check
+  - **Verification**: Function fails on non-absolute paths
 
-- [x] **T014**: Update config module
-  - Remove deprecated `Config::ensure_journal_dir` method
-  - Update error imports to `crate::errors`
-  - **Verification**: `cargo check` passes
+## Code Quality Improvements
 
-## Main.rs Orchestration
-- [x] **T015**: Refactor main.rs flow
-  - Parse CLI args: `let args = CliArgs::parse();`
-  - Load config: `let config = Config::load()?;`
-  - Validate config: `config.validate()?;`
-  - Ensure journal dir: `journal_io::ensure_journal_directory_exists(config.journal_dir())?;`
-  - Create date spec: `let date_spec = journal_core::DateSpecifier::from_cli_args(...)?;`
-  - Resolve dates: `let dates_to_open = date_spec.resolve_dates(Local::now().date_naive());`
-  - Open entries: `journal_io::open_journal_entries(&config, &dates_to_open)?;`
-  - **Verification**: Clean orchestration, `cargo test` passes
+- [ ] **T012: Add Doc Tests for Public API**
+  - Add comprehensive doc tests for all public items
+  - Include basic usage examples and expected outcomes
+  - **Verification**: `cargo test --doc` passes
 
-## Quality Assurance
-- [x] **T016**: Run tests after each major change
-  - Run `cargo check` after each file move
-  - Run `cargo test --all-features` after each module completion
-  - Fix any issues immediately
-  - **Verification**: All tests green
+- [ ] **T013: Replace Magic Numbers/Strings with Constants**
+  - Define constants for reminisce intervals in `journal_core`
+  - Define constant for file extension in `journal_io`
+  - **Verification**: No hardcoded literals in logic
 
-- [x] **T017**: Review public API surface
-  - Audit all `pub` items in each module
-  - Use `pub(crate)` or private visibility where appropriate
-  - Minimize public surface area
-  - **Verification**: Only necessary items are public
+- [ ] **T014: Fix Documentation References to Old Modules**
+  - Search and replace all references to `journal_logic`
+  - Update with correct module paths (`journal_core`, `journal_io`)
+  - **Verification**: No outdated module references remain
 
-## Final Steps
-- [x] **T018**: Code formatting and linting
-  - Run `cargo fmt`
-  - Run `cargo clippy --all-targets -- -D warnings`
-  - Address all issues
-  - **Verification**: No warnings or errors
+- [ ] **T015: Standardize Date/Time Handling**
+  - Obtain current date once at high level and pass it down
+  - Use consistent method for getting date/time values
+  - **Verification**: Consistent date handling throughout code
 
-- [x] **T019**: Update documentation
-  - Add module-level docs (`//!`) to all new `mod.rs` files
-  - Update crate-level docs in `lib.rs`
-  - Update architecture sections in README.md and CLAUDE.md
-  - **Verification**: `cargo doc --open` shows complete docs
+## Long-Term Improvements (Future Work)
 
-- [x] **T020**: Final verification
-  - Run `cargo test --all-features` one final time
-  - Manually test binary with various flags
-  - Verify the new module structure is correct
-  - **Verification**: Everything works as before refactoring
+- [ ] **T016: Implement Structured Logging**
+  - Migrate from `env_logger` to `tracing` ecosystem
+  - Configure structured JSON logging with all required context fields
+  - Add correlation IDs for each application invocation
+  - **Verification**: Logs include structured, searchable context fields
 
-## Testing Updates
-- [x] **T021**: Update test imports and structure
-  - Fix test imports to use new module paths
-  - Ensure integration tests work with new structure
-  - Maintain or improve test coverage
-  - **Verification**: Coverage targets met
+- [ ] **T017: Add File Locking for Concurrent Access**
+  - Implement advisory locks for journal files
+  - Prevent data corruption from simultaneous writes
+  - **Verification**: No data loss under concurrent access
 
-## Notes
-- Perform iterative builds after each significant change
-- Keep changes atomic and testable
-- Maintain backwards compatibility for external API
-- Document any discovered interdependencies or complications
-- Fix pre-commit hook formatting issues with rustfmt configuration
+- [ ] **T018: Create Centralized Constants Module**
+  - Extract all constants to a dedicated module
+  - Group related constants together
+  - **Verification**: No scattered constants throughout codebase
 
-## Additional Tasks
-- [x] **T022**: Fix rustfmt configuration issues
-  - Update rustfmt.toml to be compatible with stable channel
-  - Ensure import ordering is consistent
-  - Fix blank line handling between functions
-  - **Verification**: pre-commit hooks pass with no warnings
+## Verification Steps
+
+Before submitting PR:
+1. Run all tests: `cargo test --all-features`
+2. Check formatting: `cargo fmt --check`
+3. Run linter: `cargo clippy --all-targets -- -D warnings`
+4. Build release: `cargo build --release`
+5. Manual verification:
+   - Test help output: `cargo run -- --help`
+   - Test today entry: `cargo run`
+   - Test retro: `cargo run -- --retro`
+   - Test reminisce: `cargo run -- --reminisce`
+   - Test specific date: `cargo run -- --date 2023-01-01`

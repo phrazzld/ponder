@@ -538,7 +538,6 @@ ponder/
 - README.md with installation, usage, examples
 - CONTRIBUTING.md for developers
 - SECURITY.md for reporting vulnerabilities
-- MANIFESTO.md stating philosophy
 - Inline code documentation
 
 ### Release Process
