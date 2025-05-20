@@ -37,10 +37,12 @@ The application can be configured with the following environment variables:
 - `PONDER_DIR`: The directory to store journal entries (defaults to "~/Documents/rubberducks")
 */
 
-use log::{debug, error, info};
+use chrono::Local;
+use log::{debug, info};
 use ponder::cli::CliArgs;
 use ponder::config::Config;
 use ponder::errors::AppResult;
+use ponder::journal_io;
 
 /// The main entry point for the ponder application.
 ///
@@ -96,41 +98,26 @@ fn main() -> AppResult<()> {
 
     // Load and validate configuration
     info!("Loading configuration");
-    let config = Config::load().map_err(|e| {
-        error!("Configuration error: {}", e);
-        e
-    })?;
-
-    config.validate().map_err(|e| {
-        error!("Invalid configuration: {}", e);
-        e
-    })?;
+    let config = Config::load()?;
+    config.validate()?;
 
     // Ensure journal directory exists
     debug!("Journal directory: {:?}", config.journal_dir);
-    ponder::journal_io::ensure_journal_directory_exists(&config.journal_dir).map_err(|e| {
-        error!("Failed to create journal directory: {}", e);
-        e
-    })?;
+    journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
     // Determine which entry type to open based on CLI arguments
     let date_spec = args.to_date_specifier()?;
 
     // Get the dates to open
-    let reference_date = chrono::Local::now().naive_local().date();
-    let dates = date_spec.resolve_dates(reference_date);
+    let dates_to_open = date_spec.resolve_dates(Local::now().naive_local().date());
 
     // Open the appropriate journal entries
     info!("Opening journal entries");
-    ponder::journal_io::open_journal_entries(&config, &dates).map_err(|e| {
-        error!("Failed to open journal entries: {}", e);
-        e
-    })?;
+    journal_io::open_journal_entries(&config, &dates_to_open)?;
 
     info!("Journal entries opened successfully");
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

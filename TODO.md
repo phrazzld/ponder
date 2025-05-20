@@ -78,7 +78,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - **Verification**: `cargo check` passes
 
 ## Main.rs Orchestration
-- [ ] **T015**: Refactor main.rs flow
+- [x] **T015**: Refactor main.rs flow
   - Parse CLI args: `let args = CliArgs::parse();`
   - Load config: `let config = Config::load()?;`
   - Validate config: `config.validate()?;`
@@ -133,3 +133,10 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
 - Maintain backwards compatibility for external API
 - Document any discovered interdependencies or complications
 - Fix pre-commit hook formatting issues with rustfmt configuration
+
+## Additional Tasks
+- [ ] **T022**: Fix rustfmt configuration issues
+  - Update rustfmt.toml to be compatible with stable channel
+  - Ensure import ordering is consistent
+  - Fix blank line handling between functions
+  - **Verification**: pre-commit hooks pass with no warnings
