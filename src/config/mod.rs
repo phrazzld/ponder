@@ -212,7 +212,6 @@ impl Config {
         Ok(config)
     }
 
-
     /// Validates that the configuration is usable.
     ///
     /// This method checks if the configuration meets the minimum requirements:
@@ -228,8 +227,8 @@ impl Config {
     /// # Errors
     ///
     /// Returns `AppError::Config` with one of the following messages:
-    /// - "Editor command is empty" if the editor is empty
     /// - "Journal directory path is empty" if the journal directory path is empty
+    /// - "Editor command is empty" if the editor is empty
     /// - "Journal directory must be an absolute path" if the path is relative
     ///
     /// # Examples

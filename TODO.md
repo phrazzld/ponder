@@ -135,7 +135,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
 - Fix pre-commit hook formatting issues with rustfmt configuration
 
 ## Additional Tasks
-- [ ] **T022**: Fix rustfmt configuration issues
+- [x] **T022**: Fix rustfmt configuration issues
   - Update rustfmt.toml to be compatible with stable channel
   - Ensure import ordering is consistent
   - Fix blank line handling between functions
