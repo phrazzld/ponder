@@ -12,6 +12,9 @@ use thiserror::Error;
 /// for different error categories. It uses `thiserror` for deriving the `Error` trait
 /// implementation and formatted error messages.
 ///
+/// Note: This type does not implement `Clone` to avoid losing error context when
+/// cloning `std::io::Error` values.
+///
 /// # Examples
 ///
 /// Creating a configuration error:
@@ -54,17 +57,6 @@ pub enum AppError {
     /// Errors when interacting with the text editor.
     #[error("Editor interaction error: {0}")]
     Editor(String),
-}
-
-impl Clone for AppError {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Config(msg) => Self::Config(msg.clone()),
-            Self::Io(err) => Self::Io(std::io::Error::new(err.kind(), err.to_string())),
-            Self::Journal(msg) => Self::Journal(msg.clone()),
-            Self::Editor(msg) => Self::Editor(msg.clone()),
-        }
-    }
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
