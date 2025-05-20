@@ -62,7 +62,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Replace all `use crate::journal_logic` with appropriate new module
   - **Verification**: No references to old module remain
 
-- [ ] **T012**: Delete journal_logic.rs
+- [x] **T012**: Delete journal_logic.rs
   - Remove `src/journal_logic.rs`
   - **Verification**: File removed, `cargo check` passes
 
