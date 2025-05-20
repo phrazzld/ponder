@@ -13,7 +13,6 @@
 
 use crate::errors::{AppError, AppResult};
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 
 /// Configuration for the ponder application.
@@ -213,53 +212,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Ensures the journal directory exists, creating it if necessary.
-    ///
-    /// This method checks if the configured journal directory exists and creates it
-    /// (including any parent directories) if it doesn't.
-    ///
-    /// # Returns
-    ///
-    /// A Result that is Ok(()) if the directory exists or was successfully created,
-    /// or an AppError if directory creation failed.
-    ///
-    /// # Errors
-    ///
-    /// Returns `AppError::Config` if directory creation fails for any reason
-    /// (e.g., insufficient permissions).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ponder::Config;
-    /// use std::path::PathBuf;
-    ///
-    /// let config = Config {
-    ///     editor: "vim".to_string(),
-    ///     journal_dir: PathBuf::from("/tmp/my_journal"),
-    /// };
-    ///
-    /// // Make sure the directory exists
-    /// config.ensure_journal_dir().expect("Failed to create journal directory");
-    /// ```
-    ///
-    /// # Deprecated
-    ///
-    /// This method is deprecated. Use `journal_io::ensure_journal_directory_exists` instead.
-    #[deprecated(
-        since = "0.1.2",
-        note = "Use journal_io::ensure_journal_directory_exists instead"
-    )]
-    #[allow(dead_code)]
-    pub fn ensure_journal_dir(&self) -> AppResult<()> {
-        if !self.journal_dir.exists() {
-            fs::create_dir_all(&self.journal_dir).map_err(|e| {
-                AppError::Config(format!("Failed to create journal directory: {}", e))
-            })?;
-        }
-
-        Ok(())
-    }
 
     /// Validates that the configuration is usable.
     ///

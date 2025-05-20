@@ -72,7 +72,7 @@ Module Boundary Refactoring Tasks - Synthesized from thinktank analysis of PLAN.
   - Business logic should be invoked from main.rs
   - **Verification**: Clean separation of concerns
 
-- [ ] **T014**: Update config module
+- [x] **T014**: Update config module
   - Remove deprecated `Config::ensure_journal_dir` method
   - Update error imports to `crate::errors`
   - **Verification**: `cargo check` passes
