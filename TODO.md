@@ -43,7 +43,7 @@
 
 ## Architecture Improvements
 
-- [ ] **T008: Remove Unnecessary Wrapper Methods**
+- [x] **T008: Remove Unnecessary Wrapper Methods**
   - Remove `CliArgs::to_date_specifier`, move logic to `main.rs`
   - Remove redundant `CliArgs::parse_args` wrapper
   - Change `CliArgs::parse_date` visibility to `pub(crate)`

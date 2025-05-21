@@ -38,10 +38,12 @@ The application can be configured with the following environment variables:
 */
 
 use chrono::Local;
+use clap::Parser;
 use log::{debug, info};
 use ponder::cli::CliArgs;
 use ponder::config::Config;
 use ponder::errors::AppResult;
+use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 
 /// The main entry point for the ponder application.
@@ -106,7 +108,7 @@ fn main() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
     // Determine which entry type to open based on CLI arguments
-    let date_spec = args.to_date_specifier()?;
+    let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())?;
 
     // Get the dates to open
     let dates_to_open = date_spec.resolve_dates(Local::now().naive_local().date());
