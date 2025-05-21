@@ -66,7 +66,7 @@
 
 ## Code Quality Improvements
 
-- [ ] **T012: Add Doc Tests for Public API**
+- [x] **T012: Add Doc Tests for Public API**
   - Add comprehensive doc tests for all public items
   - Include basic usage examples and expected outcomes
   - **Verification**: `cargo test --doc` passes

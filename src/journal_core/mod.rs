@@ -148,6 +148,33 @@ impl DateSpecifier {
     /// - For Retro: returns dates from the past 7 days relative to the reference date
     /// - For Reminisce: returns dates from 1 month ago, 3 months ago, 6 months ago, and yearly anniversaries
     /// - For Specific: returns the specified date
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ponder::journal_core::DateSpecifier;
+    /// use chrono::NaiveDate;
+    ///
+    /// // Get today's date
+    /// let today = NaiveDate::from_ymd_opt(2023, 6, 15).unwrap();
+    ///
+    /// // Resolve today's entry
+    /// let today_spec = DateSpecifier::Today;
+    /// let today_dates = today_spec.resolve_dates(today);
+    /// assert_eq!(today_dates, vec![today]);
+    ///
+    /// // Resolve retro entries (past 7 days)
+    /// let retro_spec = DateSpecifier::Retro;
+    /// let retro_dates = retro_spec.resolve_dates(today);
+    /// assert_eq!(retro_dates.len(), 7);
+    /// assert_eq!(retro_dates[0], today - chrono::Duration::days(1)); // Yesterday
+    ///
+    /// // Resolve a specific date
+    /// let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+    /// let specific_spec = DateSpecifier::Specific(specific_date);
+    /// let specific_dates = specific_spec.resolve_dates(today);
+    /// assert_eq!(specific_dates, vec![specific_date]);
+    /// ```
     pub fn resolve_dates(&self, reference_date: NaiveDate) -> Vec<NaiveDate> {
         match self {
             DateSpecifier::Today => {

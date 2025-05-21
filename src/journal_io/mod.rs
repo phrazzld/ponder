@@ -16,7 +16,8 @@ use std::process::Command;
 /// Ensures the journal directory exists, creating it if necessary.
 ///
 /// This function checks if the specified directory exists and creates it
-/// (including all parent directories) if it doesn't exist yet.
+/// (including all parent directories) if it doesn't exist yet. On Unix-like
+/// systems, it also sets secure permissions (0o700) on the directory.
 ///
 /// # Parameters
 ///
@@ -33,6 +34,40 @@ use std::process::Command;
 /// - `AppError::Journal` if the provided path is not an absolute path
 /// - `AppError::Io` if the directory creation fails due to permission issues,
 ///   invalid paths, or other filesystem errors
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::journal_io;
+/// use std::path::PathBuf;
+///
+/// let journal_dir = PathBuf::from("/tmp/my_journal");
+///
+/// // Create the journal directory if it doesn't exist
+/// match journal_io::ensure_journal_directory_exists(&journal_dir) {
+///     Ok(()) => println!("Journal directory is ready"),
+///     Err(e) => eprintln!("Failed to ensure journal directory: {}", e),
+/// }
+/// ```
+///
+/// With a relative path (will fail):
+///
+/// ```
+/// use ponder::journal_io;
+/// use ponder::errors::AppError;
+/// use std::path::PathBuf;
+///
+/// // Using a relative path (which will be rejected)
+/// let result = journal_io::ensure_journal_directory_exists(&PathBuf::from("relative/path"));
+/// assert!(result.is_err());
+///
+/// if let Err(err) = result {
+///     match err {
+///         AppError::Journal(msg) => assert!(msg.contains("must be absolute")),
+///         _ => panic!("Expected a Journal error"),
+///     }
+/// }
+/// ```
 pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
     // Validate that the path is absolute as a defense-in-depth measure
     if !journal_dir.is_absolute() {
@@ -75,6 +110,7 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 /// This function creates a journal entry file for the given date if it doesn't
 /// exist, and adds a formatted date header if the file is empty. It handles
 /// the creation and preparation of journal entry files, but doesn't open them.
+/// On Unix-like systems, it also sets secure permissions (0o600) on the file.
 ///
 /// # Parameters
 ///
@@ -88,21 +124,54 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 ///
 /// # Errors
 ///
-/// Returns `AppError::Io` if file or directory operations fail.
+/// Returns:
+/// - `AppError::Journal` if the journal directory path is not absolute
+/// - `AppError::Io` if file or directory operations fail
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use ponder::journal_io;
 /// use std::path::PathBuf;
+/// use chrono::NaiveDate;
+///
+/// // Using an absolute path
+/// let journal_dir = PathBuf::from("/tmp/journal");
+///
+/// // Create the directory first
+/// journal_io::ensure_journal_directory_exists(&journal_dir).expect("Failed to create directory");
+///
+/// // Initialize a journal entry for a specific date
+/// let date = NaiveDate::from_ymd_opt(2023, 6, 15).unwrap();
+/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, date)
+///     .expect("Failed to initialize journal entry");
+///
+/// // The function returns the path to the journal entry
+/// assert_eq!(entry_path, journal_dir.join("20230615.md"));
+/// ```
+///
+/// You can also verify the entry exists after initialization:
+///
+/// ```no_run
+/// use ponder::journal_io;
+/// use std::path::PathBuf;
+/// use std::fs;
 /// use chrono::Local;
 ///
-/// let journal_dir = PathBuf::from("~/journal");
-/// let today = Local::now().naive_local().date();
+/// let journal_dir = PathBuf::from("/tmp/journal");
+/// journal_io::ensure_journal_directory_exists(&journal_dir).expect("Failed to create directory");
 ///
 /// // Initialize today's journal entry
+/// let today = Local::now().naive_local().date();
 /// let entry_path = journal_io::initialize_journal_entry(&journal_dir, today)
 ///     .expect("Failed to initialize journal entry");
+///
+/// // Verify the entry exists
+/// assert!(entry_path.exists());
+///
+/// // You can read the file contents to see the date header
+/// let content = fs::read_to_string(&entry_path).expect("Failed to read entry");
+/// assert!(content.starts_with("# "));  // Header starts with '# '
 /// ```
 pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResult<PathBuf> {
     // Get the path for the journal entry
@@ -138,16 +207,65 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 ///
 /// # Examples
 ///
+/// Opening a single date (today):
+///
 /// ```no_run
 /// use ponder::config::Config;
 /// use ponder::journal_io::open_journal_entries;
 /// use chrono::Local;
 ///
+/// // Load configuration
 /// let config = Config::load().expect("Failed to load config");
+///
+/// // Get today's date
 /// let today = Local::now().naive_local().date();
 ///
 /// // Open today's journal entry
 /// open_journal_entries(&config, &[today]).expect("Failed to open journal");
+/// ```
+///
+/// Opening multiple dates:
+///
+/// ```no_run
+/// use ponder::config::Config;
+/// use ponder::journal_io::open_journal_entries;
+/// use ponder::journal_core::DateSpecifier;
+/// use chrono::Local;
+///
+/// // Load configuration
+/// let config = Config::load().expect("Failed to load config");
+///
+/// // Get today's date
+/// let today = Local::now().naive_local().date();
+///
+/// // Use DateSpecifier to get dates for the past week
+/// let date_spec = DateSpecifier::Retro;
+/// let dates = date_spec.resolve_dates(today);
+///
+/// // Open all existing journal entries from the past week
+/// open_journal_entries(&config, &dates).expect("Failed to open journal entries");
+/// ```
+///
+/// If no journal entries exist for the specified dates when opening multiple entries,
+/// the function will log a message and return Ok:
+///
+/// ```no_run
+/// use ponder::config::Config;
+/// use ponder::journal_io::{open_journal_entries, ensure_journal_directory_exists};
+/// use chrono::NaiveDate;
+///
+/// // Load configuration with a clean test directory
+/// let config = Config {
+///     editor: "vim".to_string(),
+///     journal_dir: std::path::PathBuf::from("/tmp/test_journal"),
+/// };
+///
+/// // Ensure the directory exists
+/// ensure_journal_directory_exists(&config.journal_dir).expect("Failed to create directory");
+///
+/// // Try to open entries from 10 years ago (which likely don't exist)
+/// let old_date = NaiveDate::from_ymd_opt(2013, 1, 1).unwrap();
+/// open_journal_entries(&config, &[old_date, old_date.succ()]).expect("Should succeed with no entries");
 /// ```
 pub fn open_journal_entries(config: &Config, dates: &[NaiveDate]) -> AppResult<()> {
     if dates.is_empty() {

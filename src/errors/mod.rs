@@ -15,6 +15,8 @@ use thiserror::Error;
 ///
 /// # Examples
 ///
+/// Creating and formatting a command not found error:
+///
 /// ```
 /// use ponder::errors::EditorError;
 /// use std::io::{self, ErrorKind};
@@ -26,8 +28,42 @@ use thiserror::Error;
 ///     source: io_error,
 /// };
 ///
+/// // The error message should mention the command and the error
 /// assert!(format!("{}", error).contains("not found"));
 /// assert!(format!("{}", error).contains("vim"));
+/// ```
+///
+/// Creating a permission denied error:
+///
+/// ```
+/// use ponder::errors::EditorError;
+/// use std::io::{self, ErrorKind};
+///
+/// // Create a permission denied error
+/// let io_error = io::Error::new(ErrorKind::PermissionDenied, "permission denied");
+/// let error = EditorError::PermissionDenied {
+///     command: "vim".to_string(),
+///     source: io_error,
+/// };
+///
+/// assert!(format!("{}", error).contains("Permission denied"));
+/// assert!(format!("{}", error).contains("vim"));
+/// ```
+///
+/// Creating a non-zero exit code error:
+///
+/// ```
+/// use ponder::errors::EditorError;
+///
+/// // Create a non-zero exit code error
+/// let error = EditorError::NonZeroExit {
+///     command: "vim".to_string(),
+///     status_code: 1,
+/// };
+///
+/// assert!(format!("{}", error).contains("non-zero status code"));
+/// assert!(format!("{}", error).contains("vim"));
+/// assert!(format!("{}", error).contains("1"));
 /// ```
 #[derive(Debug, Error)]
 pub enum EditorError {
