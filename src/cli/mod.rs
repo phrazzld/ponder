@@ -64,6 +64,14 @@ pub struct CliArgs {
     /// about what it's doing, which can be useful for debugging.
     #[clap(short = 'v', long)]
     pub verbose: bool,
+
+    /// Sets the log output format.
+    ///
+    /// Supported values are:
+    /// - "text" (default): Human-readable output format
+    /// - "json": Structured JSON format, useful for parsing and analysis
+    #[clap(long = "log-format", possible_values = &["text", "json"], default_value = "text")]
+    pub log_format: String,
 }
 
 impl fmt::Debug for CliArgs {
@@ -73,6 +81,7 @@ impl fmt::Debug for CliArgs {
             .field("reminisce", &self.reminisce)
             .field("date", &self.date.as_ref().map(|_| "[REDACTED]"))
             .field("verbose", &self.verbose)
+            .field("log_format", &self.log_format)
             .finish()
     }
 }
@@ -94,6 +103,7 @@ mod tests {
         assert!(!args.reminisce);
         assert!(args.date.is_none());
         assert!(!args.verbose);
+        assert_eq!(args.log_format, "text");
     }
 
     #[test]
@@ -161,6 +171,7 @@ mod tests {
             reminisce: false,
             date: Some("2023-01-15".to_string()),
             verbose: true,
+            log_format: "text".to_string(),
         };
 
         // Format it with debug
@@ -178,4 +189,24 @@ mod tests {
 
     // parse_date test removed as parse_date method was removed
     // The date parsing functionality is now tested in DateSpecifier::from_cli_args tests
+
+    #[test]
+    fn test_log_format_option() {
+        // Test with default value
+        let args = CliArgs::parse_from(vec!["ponder"]);
+        assert_eq!(args.log_format, "text");
+
+        // Test with explicit text value
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", "text"]);
+        assert_eq!(args.log_format, "text");
+
+        // Test with JSON value
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", "json"]);
+        assert_eq!(args.log_format, "json");
+
+        // Test with other flags
+        let args = CliArgs::parse_from(vec!["ponder", "--retro", "--log-format", "json"]);
+        assert!(args.retro);
+        assert_eq!(args.log_format, "json");
+    }
 }

@@ -39,12 +39,14 @@ The application can be configured with the following environment variables:
 
 use chrono::Local;
 use clap::Parser;
-use log::{debug, info};
 use ponder::cli::CliArgs;
 use ponder::config::Config;
 use ponder::errors::{AppError, AppResult};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
+use tracing::{debug, info, info_span};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use uuid::Uuid;
 
 /// The main entry point for the ponder application.
 ///
@@ -74,27 +76,49 @@ fn main() -> AppResult<()> {
     let current_datetime = Local::now();
     let current_date = current_datetime.naive_local().date();
 
-    // Initialize structured JSON logging
-    env_logger::Builder::from_default_env()
-        .format(move |buf, record| {
-            use std::io::Write;
-
-            // Use the timestamp obtained at the start
-            let timestamp = current_datetime.to_rfc3339();
-            writeln!(
-                buf,
-                "{{\"timestamp\":\"{}\",\"level\":\"{}\",\"message\":\"{}\"}}",
-                timestamp,
-                record.level(),
-                record.args()
-            )
-        })
-        .init();
-
-    info!("Starting ponder");
-
-    // Parse command-line arguments
+    // Parse command-line arguments first (needed for log format)
     let args = CliArgs::parse();
+
+    // Generate a correlation ID for this application invocation
+    let correlation_id = Uuid::new_v4().to_string();
+
+    // Determine log format based on CLI args
+    let use_json_logging = args.log_format == "json" || std::env::var("CI").is_ok();
+
+    // Configure tracing subscriber with appropriate filter
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    // Create the subscriber builder with the filter
+    let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
+
+    // Add the appropriate formatter based on the log format
+    if use_json_logging {
+        // JSON logging for CI or when explicitly requested
+        let json_layer = fmt::layer()
+            .json()
+            .with_timer(fmt::time::ChronoUtc::default()) // Use UTC time with RFC 3339 format
+            .with_current_span(true) // Include current span info
+            .with_span_list(true) // Include span hierarchy
+            .flatten_event(true); // Flatten event fields into the JSON object
+        subscriber_builder.with(json_layer).init();
+    } else {
+        // Human-readable logging for development
+        let pretty_layer = fmt::layer().pretty().with_writer(std::io::stderr);
+        subscriber_builder.with(pretty_layer).init();
+    }
+
+    // Create and enter the root span with correlation ID
+    let root_span = info_span!(
+        "app_invocation",
+        service_name = "ponder",
+        correlation_id = %correlation_id
+    );
+    let _guard = root_span.enter();
+
+    // Log the application start with correlation ID
+    info!("Starting ponder");
     debug!("CLI arguments: {:?}", args);
 
     // Set up verbose logging if requested

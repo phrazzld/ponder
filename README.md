@@ -46,6 +46,7 @@ ponder
 | `-m, --reminisce` | Opens entries from significant past time intervals |
 | `-d, --date DATE` | Opens an entry for a specific date (YYYY-MM-DD or YYYYMMDD format) |
 | `-v, --verbose` | Enables verbose output for debugging |
+| `--log-format FORMAT` | Sets the log output format ("text" or "json") |
 | `-h, --help` | Displays help information |
 | `-V, --version` | Displays version information |
 
@@ -82,6 +83,8 @@ Ponder can be configured using environment variables:
 | `PONDER_DIR` | The directory where journal entries are stored | `~/Documents/rubberducks` |
 | `PONDER_EDITOR` | The editor to use for journal entries | Uses `EDITOR` if set |
 | `EDITOR` | Fallback editor if `PONDER_EDITOR` is not set | `vim` |
+| `RUST_LOG` | Controls log filtering and verbosity | `info` |
+| `CI` | When set to any value, forces JSON log format | Not set |
 
 ### Editor Configuration Security
 
@@ -135,7 +138,64 @@ export PONDER_EDITOR="ponder-code"
 # Add to your .bashrc, .zshrc, etc.
 export PONDER_DIR="~/journals"
 export PONDER_EDITOR="vim"  # Simple command without arguments
+export RUST_LOG="debug"     # For more verbose logging
 ```
+
+### Logging Configuration
+
+Ponder uses structured logging with support for both human-readable and JSON output formats:
+
+#### Log Levels
+
+You can control log verbosity using the `RUST_LOG` environment variable:
+
+```bash
+# Show only info, warn, and error logs (default)
+export RUST_LOG=info
+
+# Show debug logs and above
+export RUST_LOG=debug
+
+# Show trace logs (most verbose)
+export RUST_LOG=trace
+
+# Filter logs from specific modules
+export RUST_LOG=ponder::journal_io=debug,info
+```
+
+#### Log Formats
+
+Ponder supports two output formats:
+
+1. **Text** (default): Human-readable output for development
+2. **JSON**: Structured output for parsing and analysis
+
+You can select the format using the `--log-format` CLI option:
+
+```bash
+# Human-readable output
+ponder --log-format text
+
+# JSON output
+ponder --log-format json
+```
+
+Setting the `CI` environment variable will also force JSON output:
+
+```bash
+CI=true ponder
+```
+
+#### Correlation IDs
+
+All logs include a correlation ID that uniquely identifies each application invocation. This makes it easier to trace all operations from a single run of the application.
+
+JSON log entries include:
+- `timestamp`: ISO 8601 timestamp
+- `level`: Log level (`INFO`, `DEBUG`, etc.)
+- `target`: Module path
+- `span`: Contains `correlation_id` and context information
+- `fields`: Contains the log message and other fields
 
 ## File Structure 📁
 

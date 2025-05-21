@@ -12,6 +12,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tracing::{debug, error, info};
 
 /// File extension for journal entries
 const JOURNAL_FILE_EXTENSION: &str = ".md";
@@ -102,7 +103,7 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
                     ),
                 ))
             })?;
-            log::debug!("Set 0o700 permissions on journal directory");
+            debug!("Set 0o700 permissions on journal directory");
         }
     }
     Ok(())
@@ -317,7 +318,7 @@ pub fn open_journal_entries(
 
         // If no entries found, log a message and return
         if paths.is_empty() {
-            log::info!("No existing entries found for the specified dates");
+            info!("No existing entries found for the specified dates");
             return Ok(());
         }
 
@@ -388,7 +389,7 @@ fn create_or_open_entry_file(path: &Path) -> AppResult<File> {
                 format!("Failed to set secure permissions on journal file: {}", e),
             ))
         })?;
-        log::debug!("Set 0o600 permissions on journal file");
+        debug!("Set 0o600 permissions on journal file");
     }
 
     Ok(file)
@@ -467,7 +468,8 @@ fn append_to_file(file: &mut File, content: &str) -> AppResult<()> {
 /// - `EditorError::NonZeroExit` if the editor exits with a non-zero status code
 fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
     let mut command = Command::new(editor);
-    let editor_cmd = editor.to_string(); // Clone for ownership in error types
+    // Clone for ownership in error types and logging
+    let editor_cmd = editor.to_string();
 
     // Add each path as an argument
     for path in paths {
@@ -475,7 +477,7 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
     }
 
     // Execute the command and wait for it to complete
-    log::debug!("Launching editor: {} with {} files", editor, paths.len());
+    debug!("Launching editor: {} with {} files", editor, paths.len());
 
     match command.status() {
         Ok(status) => {
@@ -483,28 +485,77 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
                 Ok(())
             } else {
                 let status_code = status.code().unwrap_or(-1);
-                Err(EditorError::NonZeroExit {
+
+                // Log the error with the editor command and status code
+                error!(
+                    error.type = "EditorError::NonZeroExit",
+                    error.command = %editor_cmd,
+                    error.status_code = status_code,
+                    "Editor exited with non-zero status code"
+                );
+
+                // Create and return the EditorError
+                let err = EditorError::NonZeroExit {
                     command: editor_cmd,
                     status_code,
-                }
-                .into())
+                };
+                Err(err.into())
             }
         }
         Err(e) => {
             // Map the I/O error to a specific EditorError variant based on the error kind
             let specific_error = match e.kind() {
-                std::io::ErrorKind::NotFound => EditorError::CommandNotFound {
-                    command: editor_cmd,
-                    source: e,
-                },
-                std::io::ErrorKind::PermissionDenied => EditorError::PermissionDenied {
-                    command: editor_cmd,
-                    source: e,
-                },
-                _ => EditorError::ExecutionFailed {
-                    command: editor_cmd,
-                    source: e,
-                },
+                std::io::ErrorKind::NotFound => {
+                    let error_string = e.to_string();
+
+                    // Log the error with details
+                    error!(
+                        error.type = "EditorError::CommandNotFound",
+                        error.command = %editor_cmd,
+                        error.message = %error_string,
+                        "Editor command not found"
+                    );
+
+                    // Create the EditorError
+                    EditorError::CommandNotFound {
+                        command: editor_cmd,
+                        source: e,
+                    }
+                }
+                std::io::ErrorKind::PermissionDenied => {
+                    let error_string = e.to_string();
+
+                    // Log the error with details
+                    error!(
+                        error.type = "EditorError::PermissionDenied",
+                        error.command = %editor_cmd,
+                        error.message = %error_string,
+                        "Permission denied when trying to execute editor"
+                    );
+
+                    // Create the EditorError
+                    EditorError::PermissionDenied {
+                        command: editor_cmd,
+                        source: e,
+                    }
+                }
+                _ => {
+                    let error_string = e.to_string();
+
+                    // Log the error with details
+                    error!(
+                        error.type = "EditorError::ExecutionFailed",
+                        error.command = %editor_cmd,
+                        error.message = %error_string,
+                        "Failed to execute editor command"
+                    );
+
+                    // Create the EditorError
+                    EditorError::ExecutionFailed {
+                        command: editor_cmd,
+                        source: e,
+                    }
+                }
             };
 
             Err(specific_error.into())
