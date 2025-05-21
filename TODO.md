@@ -26,7 +26,7 @@
   - Remove duplicate error logging in `main.rs` (multiple locations)
   - **Verification**: Errors are logged exactly once at the appropriate boundary
 
-- [ ] **T005: Improve Error Handling for External Editor**
+- [x] **T005: Improve Error Handling for External Editor**
   - Refactor `AppError::Editor` to use an enum with specific variants
   - Update `launch_editor` to map different failure modes to specific error variants
   - **Verification**: Error messages clearly indicate why editor launch failed

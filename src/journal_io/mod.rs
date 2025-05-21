@@ -4,7 +4,7 @@
 //! including file creation, directory management, and launching external editors.
 
 use crate::config::Config;
-use crate::errors::{AppError, AppResult};
+use crate::errors::{AppError, AppResult, EditorError};
 use chrono::{Datelike, Local, NaiveDate};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -224,10 +224,14 @@ fn append_to_file(file: &mut File, content: &str) -> AppResult<()> {
 ///
 /// # Errors
 ///
-/// Returns `AppError::Editor` if the editor command fails to execute or
-/// returns a non-zero exit status.
+/// Returns `AppError::Editor` with a specific `EditorError` variant depending on what went wrong:
+/// - `EditorError::CommandNotFound` if the editor command doesn't exist
+/// - `EditorError::PermissionDenied` if permission is denied to execute the editor
+/// - `EditorError::ExecutionFailed` for other I/O errors during execution
+/// - `EditorError::NonZeroExit` if the editor exits with a non-zero status code
 fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
     let mut command = Command::new(editor);
+    let editor_cmd = editor.to_string(); // Clone for ownership in error types
 
     // Add each path as an argument
     for path in paths {
@@ -236,19 +240,40 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
 
     // Execute the command and wait for it to complete
     log::debug!("Launching editor: {} with {} files", editor, paths.len());
-    let status = command
-        .status()
-        .map_err(|e| AppError::Editor(format!("Failed to launch editor '{}': {}", editor, e)))?;
 
-    if !status.success() {
-        return Err(AppError::Editor(format!(
-            "Editor '{}' exited with non-zero status: {}",
-            editor,
-            status.code().unwrap_or(-1)
-        )));
+    match command.status() {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                let status_code = status.code().unwrap_or(-1);
+                Err(EditorError::NonZeroExit {
+                    command: editor_cmd,
+                    status_code,
+                }
+                .into())
+            }
+        }
+        Err(e) => {
+            // Map the I/O error to a specific EditorError variant based on the error kind
+            let specific_error = match e.kind() {
+                std::io::ErrorKind::NotFound => EditorError::CommandNotFound {
+                    command: editor_cmd,
+                    source: e,
+                },
+                std::io::ErrorKind::PermissionDenied => EditorError::PermissionDenied {
+                    command: editor_cmd,
+                    source: e,
+                },
+                _ => EditorError::ExecutionFailed {
+                    command: editor_cmd,
+                    source: e,
+                },
+            };
+
+            Err(specific_error.into())
+        }
     }
-
-    Ok(())
 }
 
 /// Appends a date header to a journal entry file if it's empty.
