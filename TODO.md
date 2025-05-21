@@ -71,7 +71,7 @@
   - Include basic usage examples and expected outcomes
   - **Verification**: `cargo test --doc` passes
 
-- [ ] **T013: Replace Magic Numbers/Strings with Constants**
+- [x] **T013: Replace Magic Numbers/Strings with Constants**
   - Define constants for reminisce intervals in `journal_core`
   - Define constant for file extension in `journal_io`
   - **Verification**: No hardcoded literals in logic

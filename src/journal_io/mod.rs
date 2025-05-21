@@ -13,6 +13,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// File extension for journal entries
+const JOURNAL_FILE_EXTENSION: &str = ".md";
+
 /// Ensures the journal directory exists, creating it if necessary.
 ///
 /// This function checks if the specified directory exists and creates it
@@ -317,7 +320,13 @@ pub fn open_journal_entries(config: &Config, dates: &[NaiveDate]) -> AppResult<(
 ///
 /// A PathBuf containing the full path to the journal entry file.
 fn get_entry_path_for_date(journal_dir: &Path, date: NaiveDate) -> PathBuf {
-    let filename = format!("{:04}{:02}{:02}.md", date.year(), date.month(), date.day());
+    let filename = format!(
+        "{:04}{:02}{:02}{}",
+        date.year(),
+        date.month(),
+        date.day(),
+        JOURNAL_FILE_EXTENSION
+    );
     journal_dir.join(filename)
 }
 

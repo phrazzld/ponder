@@ -7,11 +7,18 @@
 use chrono::{Duration, Months, NaiveDate};
 
 // Constants for date calculations
-const REMINISCE_ONE_MONTH_AGO: u32 = 1;
-const REMINISCE_THREE_MONTHS_AGO: u32 = 3;
-const REMINISCE_SIX_MONTHS_AGO: u32 = 6;
-const MONTHS_PER_YEAR: u32 = 12;
-const MAX_REMINISCE_YEARS_AGO: u32 = 100;
+/// Number of months to look back for the first reminisce interval (1 month ago)
+pub const REMINISCE_ONE_MONTH_AGO: u32 = 1;
+/// Number of months to look back for the second reminisce interval (3 months ago)
+pub const REMINISCE_THREE_MONTHS_AGO: u32 = 3;
+/// Number of months to look back for the third reminisce interval (6 months ago)
+pub const REMINISCE_SIX_MONTHS_AGO: u32 = 6;
+/// Number of months in a year, used for annual reminisce intervals
+pub const MONTHS_PER_YEAR: u32 = 12;
+/// Maximum number of years to look back for reminisce intervals
+pub const MAX_REMINISCE_YEARS_AGO: u32 = 100;
+/// Number of days to look back for Retro mode
+pub const RETRO_DAYS: i64 = 7;
 
 /// Represents different ways to specify a date or set of dates for journal entries.
 ///
@@ -180,7 +187,7 @@ impl DateSpecifier {
             DateSpecifier::Today => {
                 vec![reference_date]
             }
-            DateSpecifier::Retro => (1..=7)
+            DateSpecifier::Retro => (1..=RETRO_DAYS)
                 .map(|days| reference_date - Duration::days(days))
                 .collect(),
             DateSpecifier::Reminisce => {
