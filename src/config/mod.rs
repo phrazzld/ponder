@@ -11,6 +11,7 @@
 //! - `EDITOR`: Fallback editor if PONDER_EDITOR is not set (defaults to "vim")
 //! - `HOME`: Used for expanding the default journal directory path
 
+use crate::constants;
 use crate::errors::{AppError, AppResult};
 use std::env;
 use std::fmt;
@@ -67,8 +68,8 @@ pub struct Config {
 impl fmt::Debug for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Config")
-            .field("editor", &"[REDACTED_COMMAND]")
-            .field("journal_dir", &"[REDACTED_PATH]")
+            .field("editor", &constants::REDACTED_PLACEHOLDER)
+            .field("journal_dir", &constants::REDACTED_PLACEHOLDER)
             .finish()
     }
 }
@@ -77,7 +78,7 @@ impl Default for Config {
     /// Creates a new Config with default values.
     fn default() -> Self {
         Config {
-            editor: "vim".to_string(),
+            editor: constants::DEFAULT_EDITOR_COMMAND.to_string(),
             journal_dir: PathBuf::from(""),
         }
     }
@@ -139,10 +140,9 @@ impl Config {
         }
 
         // Check for shell metacharacters
-        const FORBIDDEN_CHARS: &[char] =
-            &['|', '&', ';', '$', '(', ')', '`', '\\', '<', '>', '\'', '"'];
+        let forbidden_chars = constants::EDITOR_FORBIDDEN_CHARS;
 
-        for &ch in FORBIDDEN_CHARS.iter() {
+        for &ch in forbidden_chars.iter() {
             if editor_cmd.contains(ch) {
                 return Err(AppError::Config(format!(
                     "Editor command cannot contain shell metacharacters: '{}'. Use a wrapper script or shell alias instead",
@@ -187,18 +187,18 @@ impl Config {
     /// }
     /// ```
     pub fn load() -> AppResult<Self> {
-        // Get editor from EDITOR or PONDER_EDITOR env vars, fallback to vim
-        let editor_raw = env::var("PONDER_EDITOR")
-            .or_else(|_| env::var("EDITOR"))
-            .unwrap_or_else(|_| "vim".to_string());
+        // Get editor from EDITOR or PONDER_EDITOR env vars, fallback to default
+        let editor_raw = env::var(constants::ENV_VAR_PONDER_EDITOR)
+            .or_else(|_| env::var(constants::ENV_VAR_EDITOR))
+            .unwrap_or_else(|_| constants::DEFAULT_EDITOR_COMMAND.to_string());
 
         // Validate the editor command
         let editor = Config::validate_editor_command(&editor_raw)?;
 
         // Get journal directory from PONDER_DIR env var, fallback to ~/Documents/rubberducks
-        let journal_dir_str = env::var("PONDER_DIR").unwrap_or_else(|_| {
-            let home = env::var("HOME").unwrap_or_else(|_| "".to_string());
-            format!("{}/Documents/rubberducks", home)
+        let journal_dir_str = env::var(constants::ENV_VAR_PONDER_DIR).unwrap_or_else(|_| {
+            let home = env::var(constants::ENV_VAR_HOME).unwrap_or_else(|_| "".to_string());
+            format!("{}/{}", home, constants::DEFAULT_JOURNAL_SUBDIR)
         });
 
         // Expand the path (handles ~ and environment variables)
@@ -305,8 +305,8 @@ mod tests {
         let debug_output = format!("{:?}", config);
 
         // Verify sensitive fields are redacted
-        assert!(debug_output.contains("[REDACTED_COMMAND]"));
-        assert!(debug_output.contains("[REDACTED_PATH]"));
+        assert!(debug_output.contains(constants::REDACTED_PLACEHOLDER));
+        assert!(debug_output.contains(constants::REDACTED_PLACEHOLDER));
 
         // Verify actual values are not present
         assert!(!debug_output.contains("vim"));

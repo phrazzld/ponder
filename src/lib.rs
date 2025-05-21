@@ -58,6 +58,8 @@ fn main() -> AppResult<()> {
 pub mod cli;
 /// Configuration loading and management
 pub mod config;
+/// Centralized constants used throughout the application
+pub mod constants;
 /// Error types and utilities for error handling
 pub mod errors;
 /// Core journal functionality

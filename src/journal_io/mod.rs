@@ -4,6 +4,7 @@
 //! including file creation, directory management, and launching external editors.
 
 use crate::config::Config;
+use crate::constants;
 use crate::errors::{AppError, AppResult, EditorError, LockError};
 use chrono::{Datelike, Local, NaiveDate};
 use fs2::FileExt;
@@ -15,8 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing::{debug, error, info};
 
-/// File extension for journal entries
-const JOURNAL_FILE_EXTENSION: &str = ".md";
+// Constants from the centralized constants module are used in this file
 
 /// Ensures the journal directory exists, creating it if necessary.
 ///
@@ -91,10 +91,10 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
             ))
         })?;
 
-        // Set secure permissions (0o700 - read/write/execute only for owner)
+        // Set secure permissions (read/write/execute only for owner)
         #[cfg(unix)]
         {
-            let permissions = Permissions::from_mode(0o700);
+            let permissions = Permissions::from_mode(constants::DEFAULT_DIR_PERMISSIONS);
             fs::set_permissions(journal_dir, permissions).map_err(|e| {
                 AppError::Io(std::io::Error::new(
                     e.kind(),
@@ -426,7 +426,7 @@ fn get_entry_path_for_date(journal_dir: &Path, date: NaiveDate) -> PathBuf {
         date.year(),
         date.month(),
         date.day(),
-        JOURNAL_FILE_EXTENSION
+        constants::JOURNAL_FILE_EXTENSION
     );
     journal_dir.join(filename)
 }
@@ -457,11 +457,11 @@ fn create_or_open_entry_file(path: &Path) -> AppResult<File> {
         .append(true)
         .open(path)?;
 
-    // Set secure permissions (0o600 - read/write only for owner)
+    // Set secure permissions (read/write only for owner)
     #[cfg(unix)]
     {
         let mut permissions = file.metadata()?.permissions();
-        permissions.set_mode(0o600);
+        permissions.set_mode(constants::DEFAULT_FILE_PERMISSIONS);
         file.set_permissions(permissions).map_err(|e| {
             AppError::Io(std::io::Error::new(
                 e.kind(),
@@ -677,8 +677,8 @@ pub(crate) fn append_date_header_if_needed(
         // Format the date and time headers using the provided reference datetime
         let entry = format!(
             "# {}\n\n## {}\n\n",
-            reference_datetime.format("%B %d, %Y: %A"), // Example: "January 15, 2023: Sunday"
-            reference_datetime.format("%H:%M:%S")       // Example: "14:30:45"
+            reference_datetime.format(constants::JOURNAL_HEADER_DATE_FORMAT), // Example: "January 15, 2023: Sunday"
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)  // Example: "14:30:45"
         );
 
         // Append the formatted header to the file

@@ -41,6 +41,7 @@ use chrono::Local;
 use clap::Parser;
 use ponder::cli::CliArgs;
 use ponder::config::Config;
+use ponder::constants;
 use ponder::errors::{AppError, AppResult};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
@@ -83,11 +84,12 @@ fn main() -> AppResult<()> {
     let correlation_id = Uuid::new_v4().to_string();
 
     // Determine log format based on CLI args
-    let use_json_logging = args.log_format == "json" || std::env::var("CI").is_ok();
+    let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
+        || std::env::var(constants::ENV_VAR_CI).is_ok();
 
     // Configure tracing subscriber with appropriate filter
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new("info"))
+        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
         .unwrap();
 
     // Create the subscriber builder with the filter
@@ -111,8 +113,8 @@ fn main() -> AppResult<()> {
 
     // Create and enter the root span with correlation ID
     let root_span = info_span!(
-        "app_invocation",
-        service_name = "ponder",
+        constants::TRACING_ROOT_SPAN_NAME,
+        service_name = constants::TRACING_SERVICE_NAME,
         correlation_id = %correlation_id
     );
     let _guard = root_span.enter();

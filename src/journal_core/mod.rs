@@ -4,21 +4,16 @@
 //! date calculations. It provides the `DateSpecifier` enum for different
 //! types of date selections without any filesystem or I/O operations.
 
+use crate::constants;
 use chrono::{Duration, Months, NaiveDate};
 
-// Constants for date calculations
-/// Number of months to look back for the first reminisce interval (1 month ago)
-pub const REMINISCE_ONE_MONTH_AGO: u32 = 1;
-/// Number of months to look back for the second reminisce interval (3 months ago)
-pub const REMINISCE_THREE_MONTHS_AGO: u32 = 3;
-/// Number of months to look back for the third reminisce interval (6 months ago)
-pub const REMINISCE_SIX_MONTHS_AGO: u32 = 6;
-/// Number of months in a year, used for annual reminisce intervals
-pub const MONTHS_PER_YEAR: u32 = 12;
-/// Maximum number of years to look back for reminisce intervals
-pub const MAX_REMINISCE_YEARS_AGO: u32 = 100;
-/// Number of days to look back for Retro mode
-pub const RETRO_DAYS: i64 = 7;
+// Constants for date calculations (re-exported from constants module)
+pub use constants::MAX_REMINISCE_YEARS_AGO;
+pub use constants::MONTHS_PER_YEAR;
+pub use constants::REMINISCE_ONE_MONTH_AGO;
+pub use constants::REMINISCE_SIX_MONTHS_AGO;
+pub use constants::REMINISCE_THREE_MONTHS_AGO;
+pub use constants::RETRO_DAYS;
 
 /// Represents different ways to specify a date or set of dates for journal entries.
 ///
@@ -144,8 +139,8 @@ impl DateSpecifier {
     /// Parse a date string in YYYY-MM-DD or YYYYMMDD format
     fn parse_date_string(date_str: &str) -> Result<NaiveDate, chrono::ParseError> {
         // Try parsing in YYYY-MM-DD format first
-        NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-            .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y%m%d"))
+        NaiveDate::parse_from_str(date_str, constants::DATE_FORMAT_ISO)
+            .or_else(|_| NaiveDate::parse_from_str(date_str, constants::DATE_FORMAT_COMPACT))
     }
 
     /// Gets the relevant dates for this date specifier

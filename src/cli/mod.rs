@@ -4,6 +4,7 @@
 //! It defines the CLI structure and provides methods to parse and validate
 //! command-line arguments.
 
+use crate::constants;
 use clap::{ArgGroup, Parser};
 use std::fmt;
 
@@ -30,8 +31,8 @@ use std::fmt;
 /// ```
 #[derive(Parser)]
 #[clap(
-    name = "ponder",
-    about = "A simple journaling tool for daily reflections"
+    name = constants::APP_NAME,
+    about = constants::APP_DESCRIPTION
 )]
 #[clap(author, version, long_about = None)]
 #[clap(group(ArgGroup::new("entry_type").args(&["retro", "reminisce", "date"])))]
@@ -70,7 +71,7 @@ pub struct CliArgs {
     /// Supported values are:
     /// - "text" (default): Human-readable output format
     /// - "json": Structured JSON format, useful for parsing and analysis
-    #[clap(long = "log-format", possible_values = &["text", "json"], default_value = "text")]
+    #[clap(long = "log-format", possible_values = &[constants::LOG_FORMAT_TEXT, constants::LOG_FORMAT_JSON], default_value = constants::LOG_FORMAT_TEXT)]
     pub log_format: String,
 }
 
@@ -79,7 +80,10 @@ impl fmt::Debug for CliArgs {
         f.debug_struct("CliArgs")
             .field("retro", &self.retro)
             .field("reminisce", &self.reminisce)
-            .field("date", &self.date.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "date",
+                &self.date.as_ref().map(|_| constants::REDACTED_PLACEHOLDER),
+            )
             .field("verbose", &self.verbose)
             .field("log_format", &self.log_format)
             .finish()
@@ -103,7 +107,7 @@ mod tests {
         assert!(!args.reminisce);
         assert!(args.date.is_none());
         assert!(!args.verbose);
-        assert_eq!(args.log_format, "text");
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
     }
 
     #[test]
@@ -194,19 +198,24 @@ mod tests {
     fn test_log_format_option() {
         // Test with default value
         let args = CliArgs::parse_from(vec!["ponder"]);
-        assert_eq!(args.log_format, "text");
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
 
         // Test with explicit text value
-        let args = CliArgs::parse_from(vec!["ponder", "--log-format", "text"]);
-        assert_eq!(args.log_format, "text");
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", constants::LOG_FORMAT_TEXT]);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
 
         // Test with JSON value
-        let args = CliArgs::parse_from(vec!["ponder", "--log-format", "json"]);
-        assert_eq!(args.log_format, "json");
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", constants::LOG_FORMAT_JSON]);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_JSON);
 
         // Test with other flags
-        let args = CliArgs::parse_from(vec!["ponder", "--retro", "--log-format", "json"]);
+        let args = CliArgs::parse_from(vec![
+            "ponder",
+            "--retro",
+            "--log-format",
+            constants::LOG_FORMAT_JSON,
+        ]);
         assert!(args.retro);
-        assert_eq!(args.log_format, "json");
+        assert_eq!(args.log_format, constants::LOG_FORMAT_JSON);
     }
 }
