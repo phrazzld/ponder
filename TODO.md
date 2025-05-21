@@ -59,7 +59,7 @@
   - Move initialization logic to `main.rs` or a separate function
   - **Verification**: Clear separation of responsibilities in code
 
-- [ ] **T011: Add Defense-in-Depth Path Validation**
+- [x] **T011: Add Defense-in-Depth Path Validation**
   - Add absolute path check in `journal_io::ensure_journal_directory_exists`
   - Return error for non-absolute paths as a secondary safety check
   - **Verification**: Function fails on non-absolute paths

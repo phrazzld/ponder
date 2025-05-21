@@ -29,9 +29,19 @@ use std::process::Command;
 ///
 /// # Errors
 ///
-/// Returns `AppError::Io` if the directory creation fails due to permission issues,
-/// invalid paths, or other filesystem errors.
+/// Returns:
+/// - `AppError::Journal` if the provided path is not an absolute path
+/// - `AppError::Io` if the directory creation fails due to permission issues,
+///   invalid paths, or other filesystem errors
 pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
+    // Validate that the path is absolute as a defense-in-depth measure
+    if !journal_dir.is_absolute() {
+        return Err(AppError::Journal(format!(
+            "Journal directory path must be absolute: {}",
+            journal_dir.display()
+        )));
+    }
+
     if !journal_dir.exists() {
         // Create the directory if it doesn't exist
         fs::create_dir_all(journal_dir).map_err(|e| {
@@ -500,6 +510,25 @@ mod tests {
         // Directory should still exist
         assert!(journal_dir.exists());
         assert!(journal_dir.is_dir());
+    }
+
+    #[test]
+    fn test_ensure_journal_directory_exists_rejects_relative_path() {
+        // Use a relative path (non-absolute)
+        let journal_dir = Path::new("relative/path/to/journal");
+
+        // Function should reject this path
+        let result = ensure_journal_directory_exists(journal_dir);
+
+        // Verify the function returns an error for a relative path
+        assert!(result.is_err());
+        match result {
+            Err(AppError::Journal(msg)) => {
+                assert!(msg.contains("must be absolute"));
+                assert!(msg.contains("relative/path/to/journal"));
+            }
+            _ => panic!("Expected AppError::Journal variant"),
+        }
     }
 
     #[test]

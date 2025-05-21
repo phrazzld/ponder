@@ -118,3 +118,28 @@ fn test_journal_reminisce() -> AppResult<()> {
 
     Ok(())
 }
+
+#[test]
+#[serial]
+fn test_relative_journal_path_rejected() {
+    use ponder::errors::AppError;
+    use std::path::Path;
+
+    // Create a relative path to test
+    let relative_path = Path::new("relative/path/to/journal");
+
+    // Call ensure_journal_directory_exists with the relative path
+    let result = journal_io::ensure_journal_directory_exists(relative_path);
+
+    // The function should reject the relative path and return an error
+    assert!(result.is_err());
+
+    // Verify the error type and message
+    match result {
+        Err(AppError::Journal(msg)) => {
+            assert!(msg.contains("must be absolute"));
+            assert!(msg.contains("relative/path/to/journal"));
+        }
+        _ => panic!("Expected AppError::Journal variant"),
+    }
+}
