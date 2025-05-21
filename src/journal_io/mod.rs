@@ -6,8 +6,10 @@
 use crate::config::Config;
 use crate::errors::{AppError, AppResult, EditorError};
 use chrono::{Datelike, Local, NaiveDate};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -31,12 +33,29 @@ use std::process::Command;
 /// invalid paths, or other filesystem errors.
 pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
     if !journal_dir.exists() {
+        // Create the directory if it doesn't exist
         fs::create_dir_all(journal_dir).map_err(|e| {
             AppError::Io(std::io::Error::new(
                 e.kind(),
                 format!("Failed to create journal directory: {}", e),
             ))
         })?;
+
+        // Set secure permissions (0o700 - read/write/execute only for owner)
+        #[cfg(unix)]
+        {
+            let permissions = Permissions::from_mode(0o700);
+            fs::set_permissions(journal_dir, permissions).map_err(|e| {
+                AppError::Io(std::io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to set secure permissions on journal directory: {}",
+                        e
+                    ),
+                ))
+            })?;
+            log::debug!("Set 0o700 permissions on journal directory");
+        }
     }
     Ok(())
 }
@@ -155,6 +174,21 @@ fn create_or_open_entry_file(path: &Path) -> AppResult<File> {
         .create(true)
         .append(true)
         .open(path)?;
+
+    // Set secure permissions (0o600 - read/write only for owner)
+    #[cfg(unix)]
+    {
+        let mut permissions = file.metadata()?.permissions();
+        permissions.set_mode(0o600);
+        file.set_permissions(permissions).map_err(|e| {
+            AppError::Io(std::io::Error::new(
+                e.kind(),
+                format!("Failed to set secure permissions on journal file: {}", e),
+            ))
+        })?;
+        log::debug!("Set 0o600 permissions on journal file");
+    }
+
     Ok(file)
 }
 
@@ -351,6 +385,15 @@ mod tests {
 
         // File should also contain a time header with HH:MM:SS format
         assert!(content.contains(":"));
+
+        // Verify file permissions if on Unix platform
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&file_path).expect("Failed to get file metadata");
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o600);
+        }
     }
 
     #[test]
@@ -387,6 +430,15 @@ mod tests {
         // Directory should now exist
         assert!(journal_dir.exists());
         assert!(journal_dir.is_dir());
+
+        // Verify directory permissions if on Unix platform
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&journal_dir).expect("Failed to get directory metadata");
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o700);
+        }
     }
 
     #[test]
@@ -404,5 +456,29 @@ mod tests {
         // Directory should still exist
         assert!(journal_dir.exists());
         assert!(journal_dir.is_dir());
+    }
+
+    #[test]
+    fn test_create_or_open_entry_file_permissions() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file_path = temp_dir.path().join("test_journal_entry.md");
+
+        // Create the file using our function
+        let file = create_or_open_entry_file(&file_path).expect("Failed to create file");
+
+        // Close the file handle
+        drop(file);
+
+        // Verify the file was created
+        assert!(file_path.exists());
+
+        // Verify file permissions if on Unix platform
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&file_path).expect("Failed to get file metadata");
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o600);
+        }
     }
 }

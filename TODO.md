@@ -36,7 +36,7 @@
   - Redact sensitive fields (paths, commands) in debug output
   - **Verification**: Debug logs don't expose sensitive information
 
-- [ ] **T007: Set Secure File Permissions**
+- [x] **T007: Set Secure File Permissions**
   - Update `ensure_journal_directory_exists()` to set 0o700 permissions
   - Update file creation to set 0o600 permissions
   - **Verification**: Created files/directories have correct permissions
