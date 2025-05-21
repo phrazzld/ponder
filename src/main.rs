@@ -42,7 +42,7 @@ use clap::Parser;
 use log::{debug, info};
 use ponder::cli::CliArgs;
 use ponder::config::Config;
-use ponder::errors::AppResult;
+use ponder::errors::{AppError, AppResult};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 
@@ -108,7 +108,8 @@ fn main() -> AppResult<()> {
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
     // Determine which entry type to open based on CLI arguments
-    let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())?;
+    let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())
+        .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
 
     // Get the dates to open
     let dates_to_open = date_spec.resolve_dates(Local::now().naive_local().date());

@@ -4,7 +4,6 @@
 //! date calculations. It provides the `DateSpecifier` enum for different
 //! types of date selections without any filesystem or I/O operations.
 
-use crate::errors::{AppError, AppResult};
 use chrono::{Duration, Months, NaiveDate};
 
 // Constants for date calculations
@@ -83,12 +82,12 @@ impl DateSpecifier {
     ///
     /// # Returns
     ///
-    /// A Result containing either the appropriate DateSpecifier or an AppError
+    /// A Result containing either the appropriate DateSpecifier or a chrono::ParseError
     /// if the date string couldn't be parsed.
     ///
     /// # Errors
     ///
-    /// Returns `AppError::Journal` if the date string is invalid or in an unsupported format.
+    /// Returns `chrono::ParseError` if the date string is invalid or in an unsupported format.
     ///
     /// # Examples
     ///
@@ -114,12 +113,14 @@ impl DateSpecifier {
     ///     _ => panic!("Expected Specific variant"),
     /// }
     /// ```
-    pub fn from_cli_args(retro: bool, reminisce: bool, date_str: Option<&str>) -> AppResult<Self> {
+    pub fn from_cli_args(
+        retro: bool,
+        reminisce: bool,
+        date_str: Option<&str>,
+    ) -> Result<Self, chrono::ParseError> {
         // If a specific date is provided, it takes precedence
         if let Some(date_str) = date_str {
-            return Self::parse_date_string(date_str)
-                .map(DateSpecifier::Specific)
-                .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)));
+            return Self::parse_date_string(date_str).map(DateSpecifier::Specific);
         }
 
         // Check flags in order of precedence
@@ -250,7 +251,15 @@ mod tests {
     #[test]
     fn test_from_cli_args_invalid_date() {
         let result = DateSpecifier::from_cli_args(false, false, Some("invalid-date"));
+
+        // Verify it returns a chrono::ParseError
         assert!(result.is_err());
+        match result {
+            Err(e) => {
+                assert!(e.to_string().contains("input contains invalid characters"));
+            }
+            _ => panic!("Expected chrono::ParseError"),
+        }
     }
 
     #[test]

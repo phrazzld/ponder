@@ -49,7 +49,7 @@
   - Change `CliArgs::parse_date` visibility to `pub(crate)`
   - **Verification**: No unnecessary indirection in code flow
 
-- [ ] **T009: Decouple Core Logic from App Error Type**
+- [x] **T009: Decouple Core Logic from App Error Type**
   - Update `DateSpecifier::from_cli_args` to return `Result<Self, chrono::ParseError>`
   - Map specific errors to `AppError` at the call site
   - **Verification**: `journal_core` has no dependencies on application error types
