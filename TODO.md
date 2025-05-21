@@ -13,7 +13,7 @@
   - Implement lossless clone using `Arc<std::io::Error>`
   - **Verification**: Error chains are preserved through cloning
 
-- [ ] **T003: Add Security Tests for Editor Command Injection**
+- [x] **T003: Add Security Tests for Editor Command Injection**
   - Create `tests/editor_security_tests.rs`
   - Test malicious values for `PONDER_EDITOR` and `EDITOR` environment variables
   - Verify validation correctly rejects dangerous commands
