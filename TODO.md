@@ -54,7 +54,7 @@
   - Map specific errors to `AppError` at the call site
   - **Verification**: `journal_core` has no dependencies on application error types
 
-- [ ] **T010: Separate File Initialization from Open Logic**
+- [x] **T010: Separate File Initialization from Open Logic**
   - Refactor `journal_io::open_journal_entries` to only handle opening
   - Move initialization logic to `main.rs` or a separate function
   - **Verification**: Clear separation of responsibilities in code

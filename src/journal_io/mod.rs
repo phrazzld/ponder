@@ -60,10 +60,55 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
     Ok(())
 }
 
+/// Initializes a journal entry for a specific date.
+///
+/// This function creates a journal entry file for the given date if it doesn't
+/// exist, and adds a formatted date header if the file is empty. It handles
+/// the creation and preparation of journal entry files, but doesn't open them.
+///
+/// # Parameters
+///
+/// * `journal_dir` - Path to the journal directory
+/// * `date` - The date for which to initialize a journal entry
+///
+/// # Returns
+///
+/// A Result containing the PathBuf to the initialized journal entry file,
+/// or an AppError if there was a problem creating or initializing the file.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if file or directory operations fail.
+///
+/// # Examples
+///
+/// ```no_run
+/// use ponder::journal_io;
+/// use std::path::PathBuf;
+/// use chrono::Local;
+///
+/// let journal_dir = PathBuf::from("~/journal");
+/// let today = Local::now().naive_local().date();
+///
+/// // Initialize today's journal entry
+/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, today)
+///     .expect("Failed to initialize journal entry");
+/// ```
+pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResult<PathBuf> {
+    // Get the path for the journal entry
+    let path = get_entry_path_for_date(journal_dir, date);
+
+    // Add date header if needed (this also creates the file if it doesn't exist)
+    append_date_header_if_needed(&path)?;
+
+    Ok(path)
+}
+
 /// Opens journal entries based on the provided dates.
 ///
 /// This function handles the opening of journal entries for a list of dates.
-/// It finds existing entries and creates new ones as needed (only for single date case).
+/// For a single date, it initializes the entry (creates if needed) before opening.
+/// For multiple dates, it only opens existing entries.
 ///
 /// # Parameters
 ///
@@ -99,13 +144,12 @@ pub fn open_journal_entries(config: &Config, dates: &[NaiveDate]) -> AppResult<(
         return Ok(());
     }
 
-    // For a single date, create file if needed and add header
+    // For a single date, initialize the entry before opening
     if dates.len() == 1 {
         let date = dates[0];
-        let path = get_entry_path_for_date(&config.journal_dir, date);
 
-        // Add date header if needed (this also creates the file if it doesn't exist)
-        append_date_header_if_needed(&path)?;
+        // Initialize the journal entry (creates if needed)
+        let path = initialize_journal_entry(&config.journal_dir, date)?;
 
         // Launch editor with the entry
         launch_editor(&config.editor, &[path])
@@ -477,6 +521,41 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             let metadata = fs::metadata(&file_path).expect("Failed to get file metadata");
+            let permissions = metadata.permissions();
+            assert_eq!(permissions.mode() & 0o777, 0o600);
+        }
+    }
+
+    #[test]
+    fn test_initialize_journal_entry() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let journal_dir = temp_dir.path();
+        let date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+
+        // Initialize a journal entry
+        let path = initialize_journal_entry(journal_dir, date)
+            .expect("Failed to initialize journal entry");
+
+        // Verify the file was created
+        assert!(path.exists());
+
+        // Verify file path is correct
+        let expected_path = journal_dir.join("20230115.md");
+        assert_eq!(path, expected_path);
+
+        // Verify file contains date header
+        let content = fs::read_to_string(&path).expect("Failed to read file");
+        assert!(content.starts_with("# "));
+        assert!(content.contains("\n\n## "));
+
+        // Note: The exact date in the header is based on Local::now(), not the parameter date,
+        // so we don't check the specific date content, just the header structure
+
+        // Verify file permissions if on Unix platform
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&path).expect("Failed to get file metadata");
             let permissions = metadata.permissions();
             assert_eq!(permissions.mode() & 0o777, 0o600);
         }
