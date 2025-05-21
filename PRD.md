@@ -316,8 +316,12 @@ ponder/
 │   │   └── mod.rs        # Argument parsing with clap
 │   ├── config/           # Configuration management
 │   │   └── mod.rs        # Environment variable handling
-│   ├── journal_logic.rs  # Core journal operations
-│   └── errors.rs         # Error types and handling
+│   ├── journal_core/     # Core journal functionality
+│   │   └── mod.rs        # Date handling and calculations
+│   ├── journal_io/       # Journal I/O operations
+│   │   └── mod.rs        # File operations and editor launching
+│   └── errors/           # Error types and handling
+│       └── mod.rs        # Error definitions and utilities
 └── tests/                # Integration tests
 ```
 
@@ -339,14 +343,17 @@ ponder/
    - Editor command validation
    - Configuration defaults
 
-4. **journal_logic.rs**
+4. **journal_core/mod.rs**
    - Date calculations and mode handling
+   - Date specifier resolution
+   
+5. **journal_io/mod.rs**
    - File path generation
    - Directory and file creation
    - Header injection for new entries
    - Editor process launching
 
-5. **errors.rs**
+6. **errors/mod.rs**
    - Custom error types
    - Error propagation
    - User-friendly error messages
@@ -355,9 +362,9 @@ ponder/
 1. User executes `ponder` command
 2. CLI module parses arguments
 3. Config module loads and validates settings
-4. Journal logic determines target dates
-5. File system operations ensure files exist
-6. Editor launches with file paths
+4. Journal core determines target dates based on date specifier
+5. Journal I/O ensures directory exists and creates files if needed
+6. Journal I/O launches editor with file paths
 7. User edits and saves
 8. Ponder exits cleanly
 

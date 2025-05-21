@@ -76,7 +76,7 @@
   - Define constant for file extension in `journal_io`
   - **Verification**: No hardcoded literals in logic
 
-- [ ] **T014: Fix Documentation References to Old Modules**
+- [x] **T014: Fix Documentation References to Old Modules**
   - Search and replace all references to `journal_logic`
   - Update with correct module paths (`journal_core`, `journal_io`)
   - **Verification**: No outdated module references remain

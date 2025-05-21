@@ -226,7 +226,7 @@
 -   **[Refactor]**: Extract Pure Functions and Isolate Side Effects in Core Logic
     -   **Complexity**: Medium
     -   **Rationale**: Aligns with "Prioritize Pure Functions," "Separation of Concerns," and "Design for Testability." Increases testability of pure logic in isolation, clarifies responsibilities, and makes side effects easier to manage.
-    -   **Expected Outcome**: Parts of `journal_logic.rs` and related modules are refactored to separate pure computational logic (e.g., date calculations, text manipulation, filename generation) from functions with side effects (e.g., filesystem access, process spawning). Pure functions are moved into well-defined scopes, potentially new sub-modules.
+    -   **Expected Outcome**: Core modules (`journal_core` and `journal_io`) are refactored to further separate pure computational logic (e.g., date calculations, text manipulation, filename generation) from functions with side effects (e.g., filesystem access, process spawning). Pure functions are moved into well-defined scopes, potentially new sub-modules.
     -   **Dependencies**: Eliminate Internal Mocking and Unnecessary Trait Abstractions in Core Logic.
 
 -   **[Fix]**: Awkward Test-Only Public Struct Fields and Public Methods
@@ -250,7 +250,7 @@
 -   **[Fix]**: Complete Refactoring of Deprecated `Config::ensure_journal_dir`
     -   **Complexity**: Simple
     -   **Rationale**: Aligns with "Core Principles (Simplicity First)" by removing dead/deprecated code, reducing codebase size and potential for confusion.
-    -   **Expected Outcome**: The deprecated `Config::ensure_journal_dir` method is removed from `src/config/mod.rs`. All call sites, particularly in tests, are updated to use the designated alternative (likely `journal_logic::ensure_journal_directory_exists` or similar).
+    -   **Expected Outcome**: The deprecated `Config::ensure_journal_dir` method is removed from `src/config/mod.rs`. All call sites, particularly in tests, are updated to use the designated alternative (likely `journal_io::ensure_journal_directory_exists` or similar).
     -   **Dependencies**: Enforce Strict Module Boundaries and Feature-Based Organization.
 
 ## Low Priority
