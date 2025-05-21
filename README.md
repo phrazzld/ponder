@@ -11,6 +11,7 @@ Ponder is a simple journaling tool for daily reflections, designed to help users
 - **Customizable**: Configure your preferred editor and journal directory
 - **Simple Interface**: Minimal CLI interface with intuitive commands
 - **Markdown Support**: Journal entries are stored as plain markdown files
+- **Concurrent Access Protection**: File locking prevents data corruption when multiple processes access the same journal file
 
 ## Installation 🔧
 
@@ -202,6 +203,18 @@ JSON log entries include:
 Journal entries are stored as markdown files in the configured journal directory, with filenames in the format `YYYYMMDD.md` (e.g., `20240508.md`).
 
 When you open a journal entry, the current timestamp is automatically added to the file if it doesn't already exist, providing a convenient way to track when you wrote each entry.
+
+### File Locking
+
+Ponder uses advisory file locking to prevent data corruption when multiple processes attempt to access the same journal file simultaneously. This ensures that concurrent invocations of Ponder won't corrupt your journal entries.
+
+If you try to open a journal file that is already being edited in another instance of Ponder, you'll see an error message like:
+
+```
+File locking error: Journal file is currently being edited by another process: /path/to/journal/20240521.md
+```
+
+Once the first Ponder process completes (the editor is closed), the locks are automatically released, allowing subsequent access to the file.
 
 ## Architecture 🏗️
 

@@ -142,9 +142,10 @@ fn main() -> AppResult<()> {
     // Get the dates to open using the current date obtained earlier
     let dates_to_open = date_spec.resolve_dates(current_date);
 
-    // Open the appropriate journal entries, passing the current date
-    info!("Opening journal entries");
-    journal_io::open_journal_entries(&config, &dates_to_open, &current_datetime)?;
+    // Edit the appropriate journal entries, passing the current date
+    // This includes file locking to prevent concurrent access
+    info!("Opening journal entries (with file locking)");
+    journal_io::edit_journal_entries(&config, &dates_to_open, &current_datetime)?;
 
     info!("Journal entries opened successfully");
     Ok(())

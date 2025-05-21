@@ -4,8 +4,9 @@
 //! including file creation, directory management, and launching external editors.
 
 use crate::config::Config;
-use crate::errors::{AppError, AppResult, EditorError};
+use crate::errors::{AppError, AppResult, EditorError, LockError};
 use chrono::{Datelike, Local, NaiveDate};
+use fs2::FileExt;
 use std::fs::{self, File, OpenOptions, Permissions};
 use std::io::{Read, Write};
 #[cfg(unix)]
@@ -198,11 +199,12 @@ pub fn initialize_journal_entry(
     Ok(path)
 }
 
-/// Opens journal entries based on the provided dates.
+/// Edits journal entries with file locking to prevent concurrent access.
 ///
-/// This function handles the opening of journal entries for a list of dates.
+/// This function handles the initialization, locking, and opening of journal entries for a list of dates.
 /// For a single date, it initializes the entry (creates if needed) before opening.
 /// For multiple dates, it only opens existing entries.
+/// All files are exclusively locked while the editor is running to prevent concurrent modifications.
 ///
 /// # Parameters
 ///
@@ -220,6 +222,160 @@ pub fn initialize_journal_entry(
 /// - `AppError::Io` for file system operation failures
 /// - `AppError::Editor` for editor launch failures
 /// - `AppError::Journal` for journal-specific logic errors
+/// - `AppError::Lock` if files could not be locked (e.g., already being edited by another process)
+///
+/// # Examples
+///
+/// Editing today's journal entry:
+///
+/// ```no_run
+/// use ponder::config::Config;
+/// use ponder::journal_io::edit_journal_entries;
+/// use chrono::Local;
+///
+/// // Load configuration
+/// let config = Config::load().expect("Failed to load config");
+///
+/// // Get current date and time
+/// let current_datetime = Local::now();
+/// let today = current_datetime.naive_local().date();
+///
+/// // Edit today's journal entry
+/// edit_journal_entries(&config, &[today], &current_datetime).expect("Failed to edit journal");
+/// ```
+///
+/// # File Locking
+///
+/// This function uses exclusive advisory locks to prevent multiple processes from
+/// editing the same journal file simultaneously. If a file is already being edited
+/// by another process, this function will return an error. The locks are automatically
+/// released when the editor exits, allowing subsequent edits.
+///
+pub fn edit_journal_entries(
+    config: &Config,
+    dates: &[NaiveDate],
+    reference_datetime: &chrono::DateTime<Local>,
+) -> AppResult<()> {
+    // Short-circuit if no dates provided
+    if dates.is_empty() {
+        return Ok(());
+    }
+
+    let mut paths_to_open: Vec<PathBuf> = Vec::new();
+    let mut locked_files: Vec<File> = Vec::new();
+
+    // 1. Determine paths and perform initialization (if needed)
+    for (i, &date) in dates.iter().enumerate() {
+        let path = get_entry_path_for_date(&config.journal_dir, date);
+
+        // For the first date (likely the primary entry), ensure it's initialized
+        if i == 0 {
+            // Initialize entry if it doesn't exist
+            if !path.exists() {
+                debug!(
+                    "Initializing new journal entry for {} at {}",
+                    date,
+                    path.display()
+                );
+                // This creates the file and adds a header if needed
+                append_date_header_if_needed(&path, reference_datetime)?;
+            }
+        }
+
+        // Only add path if the file exists (relevant for retro/reminisce mode)
+        if path.exists() {
+            paths_to_open.push(path);
+        } else if i > 0 {
+            // Log that the file was skipped (only for non-primary dates)
+            debug!("Skipping non-existent journal entry for {}", date);
+        }
+    }
+
+    // Return early if no files to open
+    if paths_to_open.is_empty() {
+        info!("No existing entries found for the specified dates");
+        return Ok(());
+    }
+
+    // 2. Acquire exclusive locks on all files before launching editor
+    debug!(
+        "Attempting to acquire locks on {} files",
+        paths_to_open.len()
+    );
+    for path in &paths_to_open {
+        // Open the file with read/write permissions needed for locking
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true) // Need write permissions for exclusive lock
+            .open(path)
+            .map_err(|e| LockError::AcquisitionFailed {
+                path: path.clone(),
+                source: e,
+            })?;
+
+        // Attempt to acquire a non-blocking exclusive lock
+        match file.try_lock_exclusive() {
+            Ok(()) => {
+                // Lock acquired successfully, store the file handle
+                debug!("Acquired exclusive lock on {}", path.display());
+                locked_files.push(file);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // Lock is held by another process (WouldBlock is typically returned for busy locks)
+                error!("Failed to acquire lock on {}: File is busy", path.display());
+                // Release any locks we've already acquired
+                drop(locked_files);
+                return Err(LockError::FileBusy { path: path.clone() }.into());
+            }
+            Err(e) => {
+                // Other error occurred
+                error!("Error acquiring lock on {}: {}", path.display(), e);
+                // Release any locks we've already acquired
+                drop(locked_files);
+                return Err(LockError::AcquisitionFailed {
+                    path: path.clone(),
+                    source: e,
+                }
+                .into());
+            }
+        }
+    }
+
+    // 3. Launch editor with all paths
+    info!(
+        "Acquired locks on {} files, launching editor",
+        paths_to_open.len()
+    );
+    let result = launch_editor(&config.editor, &paths_to_open);
+
+    // 4. Locks are automatically released when locked_files goes out of scope
+    debug!("Editor session finished, releasing locks");
+
+    result
+}
+
+/// Opens journal entries based on the provided dates (without locking).
+///
+/// This is a wrapper around edit_journal_entries for backward compatibility.
+/// New code should use edit_journal_entries which provides file locking.
+///
+/// # Parameters
+///
+/// * `config` - Configuration settings containing journal directory and editor command
+/// * `dates` - The dates for which to open journal entries
+/// * `reference_datetime` - The current date and time to use for journal headers
+///
+/// # Returns
+///
+/// A Result that is Ok(()) if the operation completed successfully, or an AppError if there was a problem.
+///
+/// # Errors
+///
+/// May return the following errors:
+/// - `AppError::Io` for file system operation failures
+/// - `AppError::Editor` for editor launch failures
+/// - `AppError::Journal` for journal-specific logic errors
+/// - `AppError::Lock` if files could not be locked
 ///
 /// # Examples
 ///
@@ -241,90 +397,13 @@ pub fn initialize_journal_entry(
 /// open_journal_entries(&config, &[today], &current_datetime).expect("Failed to open journal");
 /// ```
 ///
-/// Opening multiple dates:
-///
-/// ```no_run
-/// use ponder::config::Config;
-/// use ponder::journal_io::open_journal_entries;
-/// use ponder::journal_core::DateSpecifier;
-/// use chrono::Local;
-///
-/// // Load configuration
-/// let config = Config::load().expect("Failed to load config");
-///
-/// // Get current date and time
-/// let current_datetime = Local::now();
-/// let today = current_datetime.naive_local().date();
-///
-/// // Use DateSpecifier to get dates for the past week
-/// let date_spec = DateSpecifier::Retro;
-/// let dates = date_spec.resolve_dates(today);
-///
-/// // Open all existing journal entries from the past week
-/// open_journal_entries(&config, &dates, &current_datetime).expect("Failed to open journal entries");
-/// ```
-///
-/// If no journal entries exist for the specified dates when opening multiple entries,
-/// the function will log a message and return Ok:
-///
-/// ```no_run
-/// use ponder::config::Config;
-/// use ponder::journal_io::{open_journal_entries, ensure_journal_directory_exists};
-/// use chrono::{Local, NaiveDate};
-///
-/// // Load configuration with a clean test directory
-/// let config = Config {
-///     editor: "vim".to_string(),
-///     journal_dir: std::path::PathBuf::from("/tmp/test_journal"),
-/// };
-///
-/// // Ensure the directory exists
-/// ensure_journal_directory_exists(&config.journal_dir).expect("Failed to create directory");
-///
-/// // Get current date and time
-/// let current_datetime = Local::now();
-///
-/// // Try to open entries from 10 years ago (which likely don't exist)
-/// let old_date = NaiveDate::from_ymd_opt(2013, 1, 1).unwrap();
-/// open_journal_entries(&config, &[old_date, old_date.succ()], &current_datetime).expect("Should succeed with no entries");
-/// ```
 pub fn open_journal_entries(
     config: &Config,
     dates: &[NaiveDate],
     reference_datetime: &chrono::DateTime<Local>,
 ) -> AppResult<()> {
-    if dates.is_empty() {
-        return Ok(());
-    }
-
-    // For a single date, initialize the entry before opening
-    if dates.len() == 1 {
-        let date = dates[0];
-
-        // Initialize the journal entry (creates if needed)
-        let path = initialize_journal_entry(&config.journal_dir, date, reference_datetime)?;
-
-        // Launch editor with the entry
-        launch_editor(&config.editor, &[path])
-    } else {
-        // For multiple dates, only open existing entries
-        let mut paths = Vec::new();
-        for &date in dates {
-            let path = get_entry_path_for_date(&config.journal_dir, date);
-            if path.exists() {
-                paths.push(path);
-            }
-        }
-
-        // If no entries found, log a message and return
-        if paths.is_empty() {
-            info!("No existing entries found for the specified dates");
-            return Ok(());
-        }
-
-        // Launch editor with all found entries
-        launch_editor(&config.editor, &paths)
-    }
+    // Call the new function that handles locking
+    edit_journal_entries(config, dates, reference_datetime)
 }
 
 /// Generates the file path for a journal entry on a specific date.

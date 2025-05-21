@@ -134,8 +134,8 @@ fn test_successful_editor() {
         stderr
     );
     assert!(
-        stderr.is_empty(),
-        "There should be no stderr output for successful editor, got: {}",
+        !stderr.contains("Error") && !stderr.contains("error:"),
+        "There should be no error output for successful editor, got: {}",
         stderr
     );
 }

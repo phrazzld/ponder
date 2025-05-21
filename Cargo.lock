@@ -297,6 +297,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -643,6 +653,7 @@ dependencies = [
  "assert_cmd",
  "chrono",
  "clap",
+ "fs2",
  "predicates 2.1.5",
  "serde_json",
  "serial_test",

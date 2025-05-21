@@ -5,6 +5,7 @@
 //! convenience type alias `AppResult` for functions that can return these errors.
 
 use std::io;
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Represents specific error cases that can occur when interacting with external editors.
@@ -148,6 +149,62 @@ pub enum EditorError {
 ///     _ => panic!("Expected Io variant"),
 /// }
 /// ```
+/// Represents errors that can occur when attempting to lock journal files.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when acquiring or managing file locks.
+///
+/// # Examples
+///
+/// Creating a file busy error:
+///
+/// ```
+/// use ponder::errors::LockError;
+/// use std::path::PathBuf;
+///
+/// let error = LockError::FileBusy {
+///     path: PathBuf::from("/path/to/journal_file.md"),
+/// };
+///
+/// assert!(format!("{}", error).contains("currently being edited"));
+/// ```
+///
+/// Creating an acquisition failed error:
+///
+/// ```
+/// use ponder::errors::LockError;
+/// use std::path::PathBuf;
+/// use std::io::{self, ErrorKind};
+///
+/// let io_error = io::Error::new(ErrorKind::PermissionDenied, "permission denied");
+/// let error = LockError::AcquisitionFailed {
+///     path: PathBuf::from("/path/to/journal_file.md"),
+///     source: io_error,
+/// };
+///
+/// assert!(format!("{}", error).contains("Failed to acquire lock"));
+/// assert!(format!("{}", error).contains("permission denied"));
+/// ```
+#[derive(Debug, Error)]
+pub enum LockError {
+    /// Error when the file is already locked by another process.
+    #[error("Journal file is currently being edited by another process: {path}")]
+    FileBusy {
+        /// The path to the file that is locked
+        path: PathBuf,
+    },
+
+    /// Error when acquiring the lock fails for a technical reason.
+    #[error("Failed to acquire lock for journal file {path}: {source}")]
+    AcquisitionFailed {
+        /// The path to the file that couldn't be locked
+        path: PathBuf,
+        /// The underlying I/O error
+        #[source]
+        source: io::Error,
+    },
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Errors related to configuration loading or validation.
@@ -170,6 +227,13 @@ pub enum AppError {
     /// information about what went wrong with the editor interaction.
     #[error("Editor error: {0}")]
     Editor(#[from] EditorError),
+
+    /// Errors related to file locking.
+    ///
+    /// This variant uses a dedicated LockError type to provide detailed
+    /// information about what went wrong with file locking operations.
+    #[error("File locking error: {0}")]
+    Lock(#[from] LockError),
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
@@ -245,6 +309,15 @@ mod tests {
         assert!(format!("{}", app_error).contains("Editor error"));
         assert!(format!("{}", app_error).contains("not found"));
         assert!(format!("{}", app_error).contains("vim"));
+
+        // Test Lock error with FileBusy variant
+        let lock_error = LockError::FileBusy {
+            path: PathBuf::from("/path/to/journal.md"),
+        };
+        let app_error = AppError::Lock(lock_error);
+        assert!(format!("{}", app_error).contains("File locking error"));
+        assert!(format!("{}", app_error).contains("currently being edited"));
+        assert!(format!("{}", app_error).contains("/path/to/journal.md"));
     }
 
     #[test]
@@ -296,6 +369,26 @@ mod tests {
     }
 
     #[test]
+    fn test_lock_error_variants() {
+        // Test FileBusy variant
+        let error = LockError::FileBusy {
+            path: PathBuf::from("/path/to/journal.md"),
+        };
+        assert!(format!("{}", error).contains("currently being edited"));
+        assert!(format!("{}", error).contains("/path/to/journal.md"));
+
+        // Test AcquisitionFailed variant
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/path/to/journal.md"),
+            source: io_error,
+        };
+        assert!(format!("{}", error).contains("Failed to acquire lock"));
+        assert!(format!("{}", error).contains("/path/to/journal.md"));
+        assert!(format!("{}", error).contains("permission denied"));
+    }
+
+    #[test]
     fn test_result_combinators() {
         // Test using map_err with AppResult
         let io_result: Result<(), io::Error> = Err(io::Error::other("test error"));
@@ -331,6 +424,28 @@ mod tests {
                 _ => panic!("Expected EditorError::CommandNotFound variant"),
             },
             _ => panic!("Expected AppError::Editor variant"),
+        }
+    }
+
+    #[test]
+    fn test_lock_error_conversion_to_app_error() {
+        // Create a LockError
+        let lock_error = LockError::FileBusy {
+            path: PathBuf::from("/path/to/journal.md"),
+        };
+
+        // Convert to AppError
+        let app_error: AppError = lock_error.into();
+
+        // Verify conversion
+        match app_error {
+            AppError::Lock(inner) => match inner {
+                LockError::FileBusy { path } => {
+                    assert_eq!(path, PathBuf::from("/path/to/journal.md"));
+                }
+                _ => panic!("Expected LockError::FileBusy variant"),
+            },
+            _ => panic!("Expected AppError::Lock variant"),
         }
     }
 }

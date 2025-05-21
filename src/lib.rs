@@ -40,10 +40,10 @@ fn main() -> AppResult<()> {
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
-    // Option 1: Using DateSpecifier and open_journal_entries
+    // Option 1: Using DateSpecifier and edit_journal_entries (with file locking)
     let date_spec = DateSpecifier::Today;
     let dates = date_spec.resolve_dates(today);
-    journal_io::open_journal_entries(&config, &dates, &current_datetime)?;
+    journal_io::edit_journal_entries(&config, &dates, &current_datetime)?;
 
     // Option 2: Initialize entry explicitly before opening
     let entry_path = journal_io::initialize_journal_entry(&config.journal_dir, today, &current_datetime)?;
@@ -68,5 +68,5 @@ pub mod journal_io;
 // Re-export important types for convenience
 pub use cli::CliArgs;
 pub use config::Config;
-pub use errors::{AppError, AppResult};
+pub use errors::{AppError, AppResult, LockError};
 pub use journal_core::DateSpecifier;

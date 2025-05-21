@@ -94,7 +94,7 @@
   - Add correlation IDs for each application invocation
   - **Verification**: Logs include structured, searchable context fields
 
-- [ ] **T017: Add File Locking for Concurrent Access**
+- [x] **T017: Add File Locking for Concurrent Access**
   - Implement advisory locks for journal files
   - Prevent data corruption from simultaneous writes
   - **Verification**: No data loss under concurrent access
