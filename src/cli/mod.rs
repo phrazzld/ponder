@@ -182,13 +182,7 @@ impl CliArgs {
             Ok(DateSpecifier::Reminisce)
         } else if let Some(date_str) = &self.date {
             // Parse the date string
-            match DateSpecifier::from_cli_args(false, false, Some(date_str)) {
-                Ok(date_spec) => Ok(date_spec),
-                Err(e) => {
-                    log::error!("Invalid date format: {}", e);
-                    Err(e)
-                }
-            }
+            DateSpecifier::from_cli_args(false, false, Some(date_str))
         } else {
             // Default to today if no options are specified
             Ok(DateSpecifier::Today)
