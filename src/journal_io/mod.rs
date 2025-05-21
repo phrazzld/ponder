@@ -119,6 +119,7 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 ///
 /// * `journal_dir` - Path to the journal directory
 /// * `date` - The date for which to initialize a journal entry
+/// * `reference_datetime` - The reference date/time to use for journal headers
 ///
 /// # Returns
 ///
@@ -136,7 +137,7 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 /// ```no_run
 /// use ponder::journal_io;
 /// use std::path::PathBuf;
-/// use chrono::NaiveDate;
+/// use chrono::{Local, NaiveDate};
 ///
 /// // Using an absolute path
 /// let journal_dir = PathBuf::from("/tmp/journal");
@@ -144,9 +145,12 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 /// // Create the directory first
 /// journal_io::ensure_journal_directory_exists(&journal_dir).expect("Failed to create directory");
 ///
+/// // Get current date/time for reference
+/// let current_datetime = Local::now();
+///
 /// // Initialize a journal entry for a specific date
 /// let date = NaiveDate::from_ymd_opt(2023, 6, 15).unwrap();
-/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, date)
+/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, date, &current_datetime)
 ///     .expect("Failed to initialize journal entry");
 ///
 /// // The function returns the path to the journal entry
@@ -164,9 +168,12 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 /// let journal_dir = PathBuf::from("/tmp/journal");
 /// journal_io::ensure_journal_directory_exists(&journal_dir).expect("Failed to create directory");
 ///
+/// // Get current date/time
+/// let current_datetime = Local::now();
+/// let today = current_datetime.naive_local().date();
+///
 /// // Initialize today's journal entry
-/// let today = Local::now().naive_local().date();
-/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, today)
+/// let entry_path = journal_io::initialize_journal_entry(&journal_dir, today, &current_datetime)
 ///     .expect("Failed to initialize journal entry");
 ///
 /// // Verify the entry exists
@@ -176,12 +183,16 @@ pub fn ensure_journal_directory_exists(journal_dir: &Path) -> AppResult<()> {
 /// let content = fs::read_to_string(&entry_path).expect("Failed to read entry");
 /// assert!(content.starts_with("# "));  // Header starts with '# '
 /// ```
-pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResult<PathBuf> {
+pub fn initialize_journal_entry(
+    journal_dir: &Path,
+    date: NaiveDate,
+    reference_datetime: &chrono::DateTime<Local>,
+) -> AppResult<PathBuf> {
     // Get the path for the journal entry
     let path = get_entry_path_for_date(journal_dir, date);
 
     // Add date header if needed (this also creates the file if it doesn't exist)
-    append_date_header_if_needed(&path)?;
+    append_date_header_if_needed(&path, reference_datetime)?;
 
     Ok(path)
 }
@@ -196,6 +207,7 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 ///
 /// * `config` - Configuration settings containing journal directory and editor command
 /// * `dates` - The dates for which to open journal entries
+/// * `reference_datetime` - The current date and time to use for journal headers
 ///
 /// # Returns
 ///
@@ -220,11 +232,12 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 /// // Load configuration
 /// let config = Config::load().expect("Failed to load config");
 ///
-/// // Get today's date
-/// let today = Local::now().naive_local().date();
+/// // Get current date and time
+/// let current_datetime = Local::now();
+/// let today = current_datetime.naive_local().date();
 ///
 /// // Open today's journal entry
-/// open_journal_entries(&config, &[today]).expect("Failed to open journal");
+/// open_journal_entries(&config, &[today], &current_datetime).expect("Failed to open journal");
 /// ```
 ///
 /// Opening multiple dates:
@@ -238,15 +251,16 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 /// // Load configuration
 /// let config = Config::load().expect("Failed to load config");
 ///
-/// // Get today's date
-/// let today = Local::now().naive_local().date();
+/// // Get current date and time
+/// let current_datetime = Local::now();
+/// let today = current_datetime.naive_local().date();
 ///
 /// // Use DateSpecifier to get dates for the past week
 /// let date_spec = DateSpecifier::Retro;
 /// let dates = date_spec.resolve_dates(today);
 ///
 /// // Open all existing journal entries from the past week
-/// open_journal_entries(&config, &dates).expect("Failed to open journal entries");
+/// open_journal_entries(&config, &dates, &current_datetime).expect("Failed to open journal entries");
 /// ```
 ///
 /// If no journal entries exist for the specified dates when opening multiple entries,
@@ -255,7 +269,7 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 /// ```no_run
 /// use ponder::config::Config;
 /// use ponder::journal_io::{open_journal_entries, ensure_journal_directory_exists};
-/// use chrono::NaiveDate;
+/// use chrono::{Local, NaiveDate};
 ///
 /// // Load configuration with a clean test directory
 /// let config = Config {
@@ -266,11 +280,18 @@ pub fn initialize_journal_entry(journal_dir: &Path, date: NaiveDate) -> AppResul
 /// // Ensure the directory exists
 /// ensure_journal_directory_exists(&config.journal_dir).expect("Failed to create directory");
 ///
+/// // Get current date and time
+/// let current_datetime = Local::now();
+///
 /// // Try to open entries from 10 years ago (which likely don't exist)
 /// let old_date = NaiveDate::from_ymd_opt(2013, 1, 1).unwrap();
-/// open_journal_entries(&config, &[old_date, old_date.succ()]).expect("Should succeed with no entries");
+/// open_journal_entries(&config, &[old_date, old_date.succ()], &current_datetime).expect("Should succeed with no entries");
 /// ```
-pub fn open_journal_entries(config: &Config, dates: &[NaiveDate]) -> AppResult<()> {
+pub fn open_journal_entries(
+    config: &Config,
+    dates: &[NaiveDate],
+    reference_datetime: &chrono::DateTime<Local>,
+) -> AppResult<()> {
     if dates.is_empty() {
         return Ok(());
     }
@@ -280,7 +301,7 @@ pub fn open_journal_entries(config: &Config, dates: &[NaiveDate]) -> AppResult<(
         let date = dates[0];
 
         // Initialize the journal entry (creates if needed)
-        let path = initialize_journal_entry(&config.journal_dir, date)?;
+        let path = initialize_journal_entry(&config.journal_dir, date, reference_datetime)?;
 
         // Launch editor with the entry
         launch_editor(&config.editor, &[path])
@@ -500,6 +521,7 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
 /// # Parameters
 ///
 /// * `path` - Path to the journal entry file
+/// * `reference_datetime` - The reference date/time to use for the header
 ///
 /// # Returns
 ///
@@ -510,7 +532,10 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
 /// # Errors
 ///
 /// Returns `AppError::Io` if the file couldn't be read or written to.
-pub(crate) fn append_date_header_if_needed(path: &Path) -> AppResult<()> {
+pub(crate) fn append_date_header_if_needed(
+    path: &Path,
+    reference_datetime: &chrono::DateTime<Local>,
+) -> AppResult<()> {
     // Create or open the file
     let mut file = create_or_open_entry_file(path)?;
 
@@ -519,13 +544,11 @@ pub(crate) fn append_date_header_if_needed(path: &Path) -> AppResult<()> {
 
     // Only append a header if the file is empty
     if content.is_empty() {
-        let now = Local::now();
-
-        // Format the date and time headers
+        // Format the date and time headers using the provided reference datetime
         let entry = format!(
             "# {}\n\n## {}\n\n",
-            now.format("%B %d, %Y: %A"), // Example: "January 15, 2023: Sunday"
-            now.format("%H:%M:%S")       // Example: "14:30:45"
+            reference_datetime.format("%B %d, %Y: %A"), // Example: "January 15, 2023: Sunday"
+            reference_datetime.format("%H:%M:%S")       // Example: "14:30:45"
         );
 
         // Append the formatted header to the file
@@ -549,8 +572,12 @@ mod tests {
         // Create empty file by opening and closing it
         File::create(&file_path).expect("Failed to create test file");
 
+        // Create a reference datetime for the test
+        let reference_datetime = Local::now();
+
         // Append date header to the empty file
-        append_date_header_if_needed(&file_path).expect("Failed to append date header");
+        append_date_header_if_needed(&file_path, &reference_datetime)
+            .expect("Failed to append date header");
 
         // Read the file content
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
@@ -560,8 +587,7 @@ mod tests {
         assert!(content.contains("\n\n## "));
 
         // Verify specific format elements (month, year, time format)
-        let now = Local::now();
-        let expected_year = now.format("%Y").to_string();
+        let expected_year = reference_datetime.format("%Y").to_string();
         assert!(content.contains(&expected_year));
 
         // File should also contain a time header with HH:MM:SS format
@@ -586,8 +612,12 @@ mod tests {
         let existing_content = "Existing journal content";
         fs::write(&file_path, existing_content).expect("Failed to write content");
 
+        // Create a reference datetime for the test
+        let reference_datetime = Local::now();
+
         // Try to append date header to the non-empty file
-        append_date_header_if_needed(&file_path).expect("Failed to check file");
+        append_date_header_if_needed(&file_path, &reference_datetime)
+            .expect("Failed to check file");
 
         // Read the file content
         let content = fs::read_to_string(&file_path).expect("Failed to read file");
@@ -688,8 +718,11 @@ mod tests {
         let journal_dir = temp_dir.path();
         let date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
 
+        // Create a reference datetime for the test
+        let reference_datetime = Local::now();
+
         // Initialize a journal entry
-        let path = initialize_journal_entry(journal_dir, date)
+        let path = initialize_journal_entry(journal_dir, date, &reference_datetime)
             .expect("Failed to initialize journal entry");
 
         // Verify the file was created
@@ -704,8 +737,9 @@ mod tests {
         assert!(content.starts_with("# "));
         assert!(content.contains("\n\n## "));
 
-        // Note: The exact date in the header is based on Local::now(), not the parameter date,
-        // so we don't check the specific date content, just the header structure
+        // Verify the header contains the timestamp from our reference_datetime
+        let expected_year = reference_datetime.format("%Y").to_string();
+        assert!(content.contains(&expected_year));
 
         // Verify file permissions if on Unix platform
         #[cfg(unix)]

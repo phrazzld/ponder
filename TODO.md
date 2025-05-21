@@ -81,7 +81,7 @@
   - Update with correct module paths (`journal_core`, `journal_io`)
   - **Verification**: No outdated module references remain
 
-- [ ] **T015: Standardize Date/Time Handling**
+- [x] **T015: Standardize Date/Time Handling**
   - Obtain current date once at high level and pass it down
   - Use consistent method for getting date/time values
   - **Verification**: Consistent date handling throughout code

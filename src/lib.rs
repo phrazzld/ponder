@@ -33,19 +33,20 @@ fn main() -> AppResult<()> {
     // Load configuration
     let config = Config::load()?;
 
+    // Get the current date/time once
+    let current_datetime = Local::now();
+    let today = current_datetime.naive_local().date();
+
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
-
-    // Initialize and open today's journal entry
-    let today = Local::now().naive_local().date();
 
     // Option 1: Using DateSpecifier and open_journal_entries
     let date_spec = DateSpecifier::Today;
     let dates = date_spec.resolve_dates(today);
-    journal_io::open_journal_entries(&config, &dates)?;
+    journal_io::open_journal_entries(&config, &dates, &current_datetime)?;
 
     // Option 2: Initialize entry explicitly before opening
-    let entry_path = journal_io::initialize_journal_entry(&config.journal_dir, today)?;
+    let entry_path = journal_io::initialize_journal_entry(&config.journal_dir, today, &current_datetime)?;
     // Then open it with your preferred method...
 
     Ok(())

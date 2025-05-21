@@ -70,13 +70,17 @@ use ponder::journal_io;
 /// - Journal logic errors (invalid date format, etc.)
 /// - Editor errors (failed to launch editor)
 fn main() -> AppResult<()> {
+    // Obtain current date/time once at the beginning
+    let current_datetime = Local::now();
+    let current_date = current_datetime.naive_local().date();
+
     // Initialize structured JSON logging
     env_logger::Builder::from_default_env()
-        .format(|buf, record| {
+        .format(move |buf, record| {
             use std::io::Write;
 
-            // Create JSON structure with timestamp, level, and message
-            let timestamp = chrono::Local::now().to_rfc3339();
+            // Use the timestamp obtained at the start
+            let timestamp = current_datetime.to_rfc3339();
             writeln!(
                 buf,
                 "{{\"timestamp\":\"{}\",\"level\":\"{}\",\"message\":\"{}\"}}",
@@ -111,12 +115,12 @@ fn main() -> AppResult<()> {
     let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())
         .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
 
-    // Get the dates to open
-    let dates_to_open = date_spec.resolve_dates(Local::now().naive_local().date());
+    // Get the dates to open using the current date obtained earlier
+    let dates_to_open = date_spec.resolve_dates(current_date);
 
-    // Open the appropriate journal entries
+    // Open the appropriate journal entries, passing the current date
     info!("Opening journal entries");
-    journal_io::open_journal_entries(&config, &dates_to_open)?;
+    journal_io::open_journal_entries(&config, &dates_to_open, &current_datetime)?;
 
     info!("Journal entries opened successfully");
     Ok(())
