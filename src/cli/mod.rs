@@ -6,6 +6,7 @@
 
 use chrono::NaiveDate;
 use clap::{ArgGroup, Parser};
+use std::fmt;
 use std::str::FromStr;
 
 use crate::errors::AppResult;
@@ -32,7 +33,7 @@ use crate::journal_core::DateSpecifier;
 /// assert!(!args.reminisce);
 /// assert!(args.date.is_none());
 /// ```
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[clap(
     name = "ponder",
     about = "A simple journaling tool for daily reflections"
@@ -68,6 +69,17 @@ pub struct CliArgs {
     /// about what it's doing, which can be useful for debugging.
     #[clap(short = 'v', long)]
     pub verbose: bool,
+}
+
+impl fmt::Debug for CliArgs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CliArgs")
+            .field("retro", &self.retro)
+            .field("reminisce", &self.reminisce)
+            .field("date", &self.date.as_ref().map(|_| "[REDACTED]"))
+            .field("verbose", &self.verbose)
+            .finish()
+    }
 }
 
 impl CliArgs {
@@ -259,6 +271,29 @@ mod tests {
         let args = CliArgs::parse_from(vec!["ponder", "--retro", "--verbose"]);
         assert!(args.retro);
         assert!(args.verbose);
+    }
+
+    #[test]
+    fn test_debug_impl_redacts_sensitive_info() {
+        // Create args with sensitive date information
+        let args = CliArgs {
+            retro: false,
+            reminisce: false,
+            date: Some("2023-01-15".to_string()),
+            verbose: true,
+        };
+
+        // Format it with debug
+        let debug_output = format!("{:?}", args);
+
+        // Verify flags are visible but date is redacted
+        assert!(debug_output.contains("retro: false"));
+        assert!(debug_output.contains("reminisce: false"));
+        assert!(debug_output.contains("verbose: true"));
+
+        // Verify sensitive date is redacted
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("2023-01-15"));
     }
 
     #[test]

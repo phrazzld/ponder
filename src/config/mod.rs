@@ -13,6 +13,7 @@
 
 use crate::errors::{AppError, AppResult};
 use std::env;
+use std::fmt;
 use std::path::PathBuf;
 
 /// Configuration for the ponder application.
@@ -61,6 +62,15 @@ pub struct Config {
     /// This is loaded from the PONDER_DIR environment variable with a fallback
     /// to ~/Documents/rubberducks if not specified.
     pub journal_dir: PathBuf,
+}
+
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("editor", &"[REDACTED_COMMAND]")
+            .field("journal_dir", &"[REDACTED_PATH]")
+            .finish()
+    }
 }
 
 impl Default for Config {
@@ -282,6 +292,26 @@ mod tests {
     use serial_test::serial;
     use std::env;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_debug_impl_redacts_sensitive_info() {
+        // Create config with sensitive information
+        let config = Config {
+            editor: "vim".to_string(),
+            journal_dir: PathBuf::from("/home/username/private/journal"),
+        };
+
+        // Format it with debug
+        let debug_output = format!("{:?}", config);
+
+        // Verify sensitive fields are redacted
+        assert!(debug_output.contains("[REDACTED_COMMAND]"));
+        assert!(debug_output.contains("[REDACTED_PATH]"));
+
+        // Verify actual values are not present
+        assert!(!debug_output.contains("vim"));
+        assert!(!debug_output.contains("/home/username/private/journal"));
+    }
 
     fn setup() {
         // Clear relevant environment variables before each test

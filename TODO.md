@@ -31,7 +31,7 @@
   - Update `launch_editor` to map different failure modes to specific error variants
   - **Verification**: Error messages clearly indicate why editor launch failed
 
-- [ ] **T006: Implement Custom Debug for Sensitive Data Types**
+- [x] **T006: Implement Custom Debug for Sensitive Data Types**
   - Add custom `Debug` implementations for `CliArgs` and `Config`
   - Redact sensitive fields (paths, commands) in debug output
   - **Verification**: Debug logs don't expose sensitive information
