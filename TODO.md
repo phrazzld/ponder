@@ -7,7 +7,7 @@
   - Incorporate appropriate timeouts for operations involving file state checks or inter-process coordination
   - **Verification**: Test passes consistently over 10+ local runs without timing-related failures
 
-- [ ] **T002: Add proper cleanup for temporary files and processes in locking test**
+- [x] **T002: Add proper cleanup for temporary files and processes in locking test**
   - Ensure temporary files are always removed, even if the test fails
   - Ensure any child processes spawned by the test are properly cleaned up on test completion or failure
   - **Verification**: No temporary files or zombie processes persist after test execution
