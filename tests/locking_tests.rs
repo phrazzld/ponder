@@ -203,7 +203,7 @@ fn create_slow_editor_script(
     temp_dir: &Path,
     hold_duration_secs: u64,
     sentinel_file: &Path,
-) -> String {
+) -> Result<String, Box<dyn std::error::Error>> {
     let script_path = temp_dir.join("slow_editor.sh");
     let content = format!(
         "#!/bin/sh\n\
@@ -226,12 +226,15 @@ fn create_slow_editor_script(
         sentinel_file.display(),
         hold_duration_secs
     );
-    fs::write(&script_path, content).unwrap();
+    fs::write(&script_path, content)?;
     use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(&script_path).unwrap().permissions();
+    let mut perms = fs::metadata(&script_path)?.permissions();
     perms.set_mode(0o755);
-    fs::set_permissions(&script_path, perms).unwrap();
-    script_path.to_str().unwrap().to_string()
+    fs::set_permissions(&script_path, perms)?;
+    let script_str = script_path
+        .to_str()
+        .ok_or("Failed to convert script path to string")?;
+    Ok(script_str.to_string())
 }
 
 #[cfg(windows)]
@@ -239,7 +242,7 @@ fn create_slow_editor_script(
     temp_dir: &Path,
     hold_duration_secs: u64,
     sentinel_file: &Path,
-) -> String {
+) -> Result<String, Box<dyn std::error::Error>> {
     let script_path = temp_dir.join("slow_editor.bat");
     let content = format!(
         "@echo off\r\n\
@@ -260,20 +263,23 @@ fn create_slow_editor_script(
         sentinel_file.display(),
         hold_duration_secs
     );
-    fs::write(&script_path, content).unwrap();
-    script_path.to_str().unwrap().to_string()
+    fs::write(&script_path, content)?;
+    let script_str = script_path
+        .to_str()
+        .ok_or("Failed to convert script path to string")?;
+    Ok(script_str.to_string())
 }
 
 /// Test that verifies our locking mechanism prevents concurrent access to the same file
 #[test]
 #[serial]
-fn test_file_locking_prevents_concurrent_access() {
+fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("[TEST] Starting file locking test with RAII cleanup");
 
     // Create a temporary directory for testing - this will be automatically cleaned up
-    let temp_dir = tempdir().unwrap();
+    let temp_dir = tempdir()?;
     let journal_dir = temp_dir.path().join("journal");
-    fs::create_dir_all(&journal_dir).unwrap();
+    fs::create_dir_all(&journal_dir)?;
     eprintln!(
         "[TEST] Created temporary directories: {}",
         temp_dir.path().display()
@@ -296,7 +302,7 @@ fn test_file_locking_prevents_concurrent_access() {
 
     // Create the mock "slow" editor script
     let slow_editor_script =
-        create_slow_editor_script(temp_dir.path(), editor_hold_duration_secs, &sentinel_path);
+        create_slow_editor_script(temp_dir.path(), editor_hold_duration_secs, &sentinel_path)?;
     eprintln!("[TEST] Created mock editor script: {}", slow_editor_script);
 
     // Execute the core test logic with retry mechanism
@@ -308,8 +314,18 @@ fn test_file_locking_prevents_concurrent_access() {
             .arg("--date")
             .arg(&today_date_str)
             .env("PONDER_EDITOR", &slow_editor_script)
-            .env("PONDER_DIR", journal_dir.to_str().unwrap())
-            .env("HOME", journal_dir.to_str().unwrap())
+            .env(
+                "PONDER_DIR",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
+            .env(
+                "HOME",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
             .spawn()
             .map_err(|e| format!("Failed to spawn first ponder instance: {}", e))?;
 
@@ -332,8 +348,18 @@ fn test_file_locking_prevents_concurrent_access() {
         let second_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create command: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_DIR", journal_dir.to_str().unwrap())
-            .env("HOME", journal_dir.to_str().unwrap())
+            .env(
+                "PONDER_DIR",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
+            .env(
+                "HOME",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
             .arg("--date")
             .arg(&today_date_str)
             .assert()
@@ -346,8 +372,18 @@ fn test_file_locking_prevents_concurrent_access() {
                 Command::cargo_bin("ponder")
                     .map_err(|e| format!("Failed to create command: {}", e))?
                     .env("PONDER_EDITOR", "true")
-                    .env("PONDER_DIR", journal_dir.to_str().unwrap())
-                    .env("HOME", journal_dir.to_str().unwrap())
+                    .env(
+                        "PONDER_DIR",
+                        journal_dir
+                            .to_str()
+                            .ok_or("Failed to convert journal_dir to string")?,
+                    )
+                    .env(
+                        "HOME",
+                        journal_dir
+                            .to_str()
+                            .ok_or("Failed to convert journal_dir to string")?,
+                    )
                     .arg("--date")
                     .arg(&today_date_str)
                     .assert()
@@ -375,8 +411,18 @@ fn test_file_locking_prevents_concurrent_access() {
         let third_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create command: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_DIR", journal_dir.to_str().unwrap())
-            .env("HOME", journal_dir.to_str().unwrap())
+            .env(
+                "PONDER_DIR",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
+            .env(
+                "HOME",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
             .arg("--date")
             .arg(&today_date_str)
             .assert();
@@ -390,26 +436,27 @@ fn test_file_locking_prevents_concurrent_access() {
     });
 
     // Propagate any test failures
-    test_result.expect("Test failed after maximum retry attempts");
+    test_result.map_err(|e| format!("Test failed after maximum retry attempts: {}", e))?;
 
     eprintln!("[TEST] Test completed successfully");
     // Note: RAII cleanup will handle:
     // - ChildProcessGuard will clean up any remaining child processes
     // - SentinelFileGuard will clean up the sentinel file if left behind
     // - TempDir will clean up the entire temporary directory tree
+    Ok(())
 }
 
 /// Test to verify that attempting to access multiple files works correctly
 /// when some files are locked and others are not
 #[test]
 #[serial]
-fn test_partial_file_locking_with_multiple_files() {
+fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("[TEST] Starting partial file locking test with RAII cleanup");
 
     // Create a temporary directory for testing - this will be automatically cleaned up
-    let temp_dir = tempdir().unwrap();
+    let temp_dir = tempdir()?;
     let journal_dir = temp_dir.path().join("journal");
-    fs::create_dir_all(&journal_dir).unwrap();
+    fs::create_dir_all(&journal_dir)?;
     eprintln!(
         "[TEST] Created temporary directories: {}",
         temp_dir.path().display()
@@ -428,7 +475,7 @@ fn test_partial_file_locking_with_multiple_files() {
 
     // Create the mock "slow" editor script
     let slow_editor_script =
-        create_slow_editor_script(temp_dir.path(), editor_hold_duration_secs, &sentinel_path);
+        create_slow_editor_script(temp_dir.path(), editor_hold_duration_secs, &sentinel_path)?;
     eprintln!("[TEST] Created mock editor script: {}", slow_editor_script);
 
     // Get dates for testing
@@ -447,8 +494,18 @@ fn test_partial_file_locking_with_multiple_files() {
             .arg("--date")
             .arg(&today_date_str)
             .env("PONDER_EDITOR", &slow_editor_script)
-            .env("PONDER_DIR", journal_dir.to_str().unwrap())
-            .env("HOME", journal_dir.to_str().unwrap())
+            .env(
+                "PONDER_DIR",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
+            .env(
+                "HOME",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
             .spawn()
             .map_err(|e| format!("Failed to spawn first ponder instance: {}", e))?;
 
@@ -472,8 +529,18 @@ fn test_partial_file_locking_with_multiple_files() {
         let yesterday_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create command: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_DIR", journal_dir.to_str().unwrap())
-            .env("HOME", journal_dir.to_str().unwrap())
+            .env(
+                "PONDER_DIR",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
+            .env(
+                "HOME",
+                journal_dir
+                    .to_str()
+                    .ok_or("Failed to convert journal_dir to string")?,
+            )
             .arg("--date")
             .arg(&yesterday_date_str)
             .assert();
@@ -497,11 +564,12 @@ fn test_partial_file_locking_with_multiple_files() {
     });
 
     // Propagate any test failures
-    test_result.expect("Test failed after maximum retry attempts");
+    test_result.map_err(|e| format!("Test failed after maximum retry attempts: {}", e))?;
 
     eprintln!("[TEST] Partial file locking test completed successfully");
     // Note: RAII cleanup will handle:
     // - ChildProcessGuard will clean up any remaining child processes
     // - SentinelFileGuard will clean up the sentinel file if left behind
     // - TempDir will clean up the entire temporary directory tree
+    Ok(())
 }

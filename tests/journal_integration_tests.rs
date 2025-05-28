@@ -11,9 +11,9 @@ use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 
 // Helper function to set up a test environment
-fn set_up_test_env() -> (Config, tempfile::TempDir) {
+fn set_up_test_env() -> Result<(Config, tempfile::TempDir), Box<dyn std::error::Error>> {
     // Create a temporary directory for the journal files
-    let temp_dir = tempdir().unwrap();
+    let temp_dir = tempdir()?;
     let dir_path = temp_dir.path().to_string_lossy().to_string();
 
     // Use "echo" as a safe editor for testing
@@ -25,13 +25,14 @@ fn set_up_test_env() -> (Config, tempfile::TempDir) {
         journal_dir: PathBuf::from(&dir_path),
     };
 
-    (config, temp_dir)
+    Ok((config, temp_dir))
 }
 
 #[test]
 #[serial]
 fn test_journal_basic_flow() -> AppResult<()> {
-    let (config, _temp_dir) = set_up_test_env();
+    let (config, _temp_dir) = set_up_test_env()
+        .map_err(|e| ponder::errors::AppError::Journal(format!("Setup failed: {}", e)))?;
 
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
@@ -47,7 +48,9 @@ fn test_journal_basic_flow() -> AppResult<()> {
     journal_io::open_journal_entries(&config, &[today], &current_datetime)?;
 
     // Verify that a journal file was created for today
-    let dir_entries = fs::read_dir(&journal_dir).unwrap();
+    let dir_entries = fs::read_dir(&journal_dir).map_err(|e| {
+        ponder::errors::AppError::Journal(format!("Failed to read journal directory: {}", e))
+    })?;
 
     // Should be at least one entry (today's)
     assert!(dir_entries.count() > 0);
@@ -58,7 +61,8 @@ fn test_journal_basic_flow() -> AppResult<()> {
 #[test]
 #[serial]
 fn test_journal_specific_date() -> AppResult<()> {
-    let (config, _temp_dir) = set_up_test_env();
+    let (config, _temp_dir) = set_up_test_env()
+        .map_err(|e| ponder::errors::AppError::Journal(format!("Setup failed: {}", e)))?;
 
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
@@ -70,7 +74,9 @@ fn test_journal_specific_date() -> AppResult<()> {
     let current_datetime = Local::now();
 
     // Test opening entry for a specific date
-    let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).unwrap();
+    let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).ok_or_else(|| {
+        ponder::errors::AppError::Journal("Failed to create test date".to_string())
+    })?;
     journal_io::open_journal_entries(&config, &[specific_date], &current_datetime)?;
 
     // Verify that a journal file was created for the specific date
@@ -84,7 +90,8 @@ fn test_journal_specific_date() -> AppResult<()> {
 #[test]
 #[serial]
 fn test_journal_retro() -> AppResult<()> {
-    let (config, _temp_dir) = set_up_test_env();
+    let (config, _temp_dir) = set_up_test_env()
+        .map_err(|e| ponder::errors::AppError::Journal(format!("Setup failed: {}", e)))?;
 
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
@@ -109,7 +116,8 @@ fn test_journal_retro() -> AppResult<()> {
 #[test]
 #[serial]
 fn test_journal_reminisce() -> AppResult<()> {
-    let (config, _temp_dir) = set_up_test_env();
+    let (config, _temp_dir) = set_up_test_env()
+        .map_err(|e| ponder::errors::AppError::Journal(format!("Setup failed: {}", e)))?;
 
     // Create copies of the config values so we can check results
     let journal_dir = config.journal_dir.clone();
