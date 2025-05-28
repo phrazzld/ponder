@@ -341,7 +341,7 @@ mod tests {
         assert!(format!("{}", error).contains("vim"));
 
         // Test ExecutionFailed variant
-        let io_error = io::Error::new(io::ErrorKind::Other, "some other error");
+        let io_error = io::Error::other("some other error");
         let error = EditorError::ExecutionFailed {
             command: "vim".to_string(),
             source: io_error,
