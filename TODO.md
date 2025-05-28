@@ -28,7 +28,7 @@
   - Push the local branch to the remote repository
   - **Verification**: Check the remote repository to confirm the branch exists
 
-- [ ] **T006: Create pull request for feat/refactor-module-boundaries** (depends on T005)
+- [x] **T006: Create pull request for feat/refactor-module-boundaries** (depends on T005)
   - Create a PR from the branch to the main branch
   - Ensure CI workflow is automatically triggered
   - **Verification**: Observe the PR and check the CI status
