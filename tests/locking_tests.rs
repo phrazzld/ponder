@@ -8,6 +8,9 @@ use tempfile::tempdir;
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+// Fixed test date for deterministic testing
+const FIXED_TEST_DATE: &str = "2024-01-15";
+
 /// Execute a test closure with retry logic for transient failures
 fn retry_test<F>(test_name: &str, mut test_fn: F) -> Result<(), String>
 where
@@ -285,8 +288,8 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
         temp_dir.path().display()
     );
 
-    // Get today's date string for command arguments
-    let today_date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
+    // Use fixed date string for deterministic testing
+    let today_date_str = FIXED_TEST_DATE.to_string();
 
     // Create a sentinel file path and guard for RAII cleanup
     let sentinel_path = temp_dir.path().join("editor_running");
@@ -478,12 +481,9 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
         create_slow_editor_script(temp_dir.path(), editor_hold_duration_secs, &sentinel_path)?;
     eprintln!("[TEST] Created mock editor script: {}", slow_editor_script);
 
-    // Get dates for testing
-    let now = chrono::Local::now();
-    let today_date_str = now.format("%Y-%m-%d").to_string();
-    let yesterday_date_str = (now - chrono::Duration::days(1))
-        .format("%Y-%m-%d")
-        .to_string();
+    // Use fixed dates for deterministic testing
+    let today_date_str = FIXED_TEST_DATE.to_string();
+    let yesterday_date_str = "2024-01-14".to_string();
 
     // Execute the core test logic with retry mechanism
     let test_result = retry_test("partial_file_locking_with_multiple_files", || {

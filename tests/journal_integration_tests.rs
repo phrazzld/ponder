@@ -4,11 +4,22 @@ use std::path::PathBuf;
 use tempfile::tempdir;
 
 // We need to import the actual library code
-use chrono::{Local, NaiveDate};
+use chrono::{DateTime, Local, NaiveDate, TimeZone};
 use ponder::config::Config;
 use ponder::errors::AppResult;
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
+
+// Fixed test date for deterministic testing
+// Using 2024-01-15 14:30:00 as our reference datetime
+fn get_fixed_test_datetime() -> DateTime<Local> {
+    use chrono::NaiveDate;
+    // Create a fixed date and time
+    let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
+    let time = date.and_hms_opt(14, 30, 0).unwrap();
+    // Convert to local timezone
+    Local.from_local_datetime(&time).single().unwrap()
+}
 
 // Helper function to set up a test environment
 fn set_up_test_env() -> Result<(Config, tempfile::TempDir), Box<dyn std::error::Error>> {
@@ -40,8 +51,8 @@ fn test_journal_basic_flow() -> AppResult<()> {
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
-    // Get the current date/time for reference
-    let current_datetime = Local::now();
+    // Use fixed date/time for deterministic testing
+    let current_datetime = get_fixed_test_datetime();
     let today = current_datetime.naive_local().date();
 
     // Test opening today's entry
@@ -70,8 +81,8 @@ fn test_journal_specific_date() -> AppResult<()> {
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
-    // Get the current date/time for reference
-    let current_datetime = Local::now();
+    // Use fixed date/time for deterministic testing
+    let current_datetime = get_fixed_test_datetime();
 
     // Test opening entry for a specific date
     let specific_date = NaiveDate::from_ymd_opt(2023, 1, 15).ok_or_else(|| {
@@ -99,8 +110,8 @@ fn test_journal_retro() -> AppResult<()> {
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
-    // Get the current date/time for reference
-    let current_datetime = Local::now();
+    // Use fixed date/time for deterministic testing
+    let current_datetime = get_fixed_test_datetime();
     let reference_date = current_datetime.naive_local().date();
 
     // Since we're just creating the directory, there shouldn't be any retro entries
@@ -125,8 +136,8 @@ fn test_journal_reminisce() -> AppResult<()> {
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
-    // Get the current date/time for reference
-    let current_datetime = Local::now();
+    // Use fixed date/time for deterministic testing
+    let current_datetime = get_fixed_test_datetime();
     let reference_date = current_datetime.naive_local().date();
 
     // Since we're just creating the directory, there shouldn't be any reminisce entries

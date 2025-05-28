@@ -55,7 +55,7 @@
   - Implement improvements to ensure tests fail with clear, informative messages
   - **Verification**: Selected tests have improved error handling with clearer failure diagnostics
 
-- [ ] **T010: Use deterministic values in tests where possible**
+- [x] **T010: Use deterministic values in tests where possible**
   - Identify and refactor tests that use non-deterministic values
   - Replace with deterministic inputs or mock equivalents
   - **Verification**: Flakiness due to non-deterministic test data is reduced
