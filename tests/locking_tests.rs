@@ -8,6 +8,9 @@ use tempfile::tempdir;
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+mod debug_helpers;
+use debug_helpers::{debug_directory_state, debug_environment_state, debug_file_info};
+
 // Fixed test date for deterministic testing
 const FIXED_TEST_DATE: &str = "2024-01-15";
 
@@ -186,17 +189,37 @@ fn wait_for_file_state(
         }
         thread::sleep(poll_interval);
     }
-    Err(format!(
-        "Timeout waiting for file '{}' to {} after {}ms. Current state: {}",
-        file_path.display(),
-        if should_exist { "exist" } else { "be removed" },
+
+    // Enhanced error message with debug context
+    let current_state = if file_path.exists() {
+        "exists"
+    } else {
+        "does not exist"
+    };
+    let expected_state = if should_exist { "exist" } else { "be removed" };
+
+    let parent_dir = file_path.parent().unwrap_or_else(|| Path::new("."));
+    let debug_context = format!(
+        "File state timeout details:\n\
+        Expected: file should {}\n\
+        Actual: file {}\n\
+        Timeout: {}ms\n\
+        Poll interval: {}ms\n\
+        File: {}\n\
+        \n\
+        Parent directory state:\n{}\n\
+        \n\
+        Environment:\n{}",
+        expected_state,
+        current_state,
         timeout.as_millis(),
-        if file_path.exists() {
-            "exists"
-        } else {
-            "does not exist"
-        }
-    ))
+        poll_interval.as_millis(),
+        file_path.display(),
+        debug_directory_state(parent_dir),
+        debug_environment_state()
+    );
+
+    Err(debug_context)
 }
 
 /// Create a mock editor script that simulates a slow editor with configurable duration
@@ -395,7 +418,27 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                 eprintln!("[TEST] Second instance correctly failed with lock error");
             }
             Err(_) => {
-                return Err("Second instance did not fail as expected".to_string());
+                let debug_context = format!(
+                    "Second instance did not fail as expected.\n\
+                    \n\
+                    Test context:\n\
+                    Date: {}\n\
+                    Sentinel file: {}\n\
+                    Journal directory: {}\n\
+                    \n\
+                    Sentinel file state:\n{}\n\
+                    \n\
+                    Journal directory state:\n{}\n\
+                    \n\
+                    Environment:\n{}",
+                    today_date_str,
+                    sentinel_path.display(),
+                    journal_dir.to_str().unwrap_or("invalid_path"),
+                    debug_file_info(&sentinel_path),
+                    debug_directory_state(&journal_dir),
+                    debug_environment_state()
+                );
+                return Err(debug_context);
             }
         }
 
@@ -431,7 +474,30 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             .assert();
 
         if third_result.try_success().is_err() {
-            return Err("Third instance did not succeed as expected".to_string());
+            let debug_context = format!(
+                "Third instance did not succeed as expected.\n\
+                \n\
+                Test context:\n\
+                Date: {}\n\
+                Sentinel file: {}\n\
+                Journal directory: {}\n\
+                \n\
+                Sentinel file state:\n{}\n\
+                \n\
+                Journal directory state:\n{}\n\
+                \n\
+                Expected: Lock should be released, third instance should succeed\n\
+                Actual: Third instance failed\n\
+                \n\
+                Environment:\n{}",
+                today_date_str,
+                sentinel_path.display(),
+                journal_dir.to_str().unwrap_or("invalid_path"),
+                debug_file_info(&sentinel_path),
+                debug_directory_state(&journal_dir),
+                debug_environment_state()
+            );
+            return Err(debug_context);
         }
         eprintln!("[TEST] Third instance succeeded as expected");
 
@@ -546,7 +612,32 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
             .assert();
 
         if yesterday_result.try_success().is_err() {
-            return Err("Failed to access yesterday's file while today's is locked".to_string());
+            let debug_context = format!(
+                "Failed to access yesterday's file while today's is locked.\n\
+                \n\
+                Test context:\n\
+                Today's date: {}\n\
+                Yesterday's date: {}\n\
+                Sentinel file: {}\n\
+                Journal directory: {}\n\
+                \n\
+                Sentinel file state:\n{}\n\
+                \n\
+                Journal directory state:\n{}\n\
+                \n\
+                Expected: Should be able to access yesterday's file (different from today's locked file)\n\
+                Actual: Access to yesterday's file failed\n\
+                \n\
+                Environment:\n{}",
+                today_date_str,
+                yesterday_date_str,
+                sentinel_path.display(),
+                journal_dir.to_str().unwrap_or("invalid_path"),
+                debug_file_info(&sentinel_path),
+                debug_directory_state(&journal_dir),
+                debug_environment_state()
+            );
+            return Err(debug_context);
         }
         eprintln!("[TEST] Successfully accessed yesterday's file while today's is locked");
 

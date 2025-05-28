@@ -60,7 +60,7 @@
   - Replace with deterministic inputs or mock equivalents
   - **Verification**: Flakiness due to non-deterministic test data is reduced
 
-- [ ] **T011: Add better debug output for test failures**
+- [x] **T011: Add better debug output for test failures**
   - Enhance selected tests to provide more detailed debug output when failures occur
   - Include relevant state and input values in failure logs
   - **Verification**: Diagnosing failures is easier due to improved contextual information
