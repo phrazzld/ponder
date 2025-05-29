@@ -11,9 +11,10 @@
 //! - `EDITOR`: Fallback editor if PONDER_EDITOR is not set (defaults to "vim")
 //! - `HOME`: Used for expanding the default journal directory path
 
+use crate::constants;
 use crate::errors::{AppError, AppResult};
 use std::env;
-use std::fs;
+use std::fmt;
 use std::path::PathBuf;
 
 /// Configuration for the ponder application.
@@ -64,11 +65,20 @@ pub struct Config {
     pub journal_dir: PathBuf,
 }
 
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("editor", &constants::REDACTED_PLACEHOLDER)
+            .field("journal_dir", &constants::REDACTED_PLACEHOLDER)
+            .finish()
+    }
+}
+
 impl Default for Config {
     /// Creates a new Config with default values.
     fn default() -> Self {
         Config {
-            editor: "vim".to_string(),
+            editor: constants::DEFAULT_EDITOR_COMMAND.to_string(),
             journal_dir: PathBuf::from(""),
         }
     }
@@ -130,10 +140,9 @@ impl Config {
         }
 
         // Check for shell metacharacters
-        const FORBIDDEN_CHARS: &[char] =
-            &['|', '&', ';', '$', '(', ')', '`', '\\', '<', '>', '\'', '"'];
+        let forbidden_chars = constants::EDITOR_FORBIDDEN_CHARS;
 
-        for &ch in FORBIDDEN_CHARS.iter() {
+        for &ch in forbidden_chars.iter() {
             if editor_cmd.contains(ch) {
                 return Err(AppError::Config(format!(
                     "Editor command cannot contain shell metacharacters: '{}'. Use a wrapper script or shell alias instead",
@@ -178,18 +187,18 @@ impl Config {
     /// }
     /// ```
     pub fn load() -> AppResult<Self> {
-        // Get editor from EDITOR or PONDER_EDITOR env vars, fallback to vim
-        let editor_raw = env::var("PONDER_EDITOR")
-            .or_else(|_| env::var("EDITOR"))
-            .unwrap_or_else(|_| "vim".to_string());
+        // Get editor from EDITOR or PONDER_EDITOR env vars, fallback to default
+        let editor_raw = env::var(constants::ENV_VAR_PONDER_EDITOR)
+            .or_else(|_| env::var(constants::ENV_VAR_EDITOR))
+            .unwrap_or_else(|_| constants::DEFAULT_EDITOR_COMMAND.to_string());
 
         // Validate the editor command
         let editor = Config::validate_editor_command(&editor_raw)?;
 
         // Get journal directory from PONDER_DIR env var, fallback to ~/Documents/rubberducks
-        let journal_dir_str = env::var("PONDER_DIR").unwrap_or_else(|_| {
-            let home = env::var("HOME").unwrap_or_else(|_| "".to_string());
-            format!("{}/Documents/rubberducks", home)
+        let journal_dir_str = env::var(constants::ENV_VAR_PONDER_DIR).unwrap_or_else(|_| {
+            let home = env::var(constants::ENV_VAR_HOME).unwrap_or_else(|_| "".to_string());
+            format!("{}/{}", home, constants::DEFAULT_JOURNAL_SUBDIR)
         });
 
         // Expand the path (handles ~ and environment variables)
@@ -213,54 +222,6 @@ impl Config {
         Ok(config)
     }
 
-    /// Ensures the journal directory exists, creating it if necessary.
-    ///
-    /// This method checks if the configured journal directory exists and creates it
-    /// (including any parent directories) if it doesn't.
-    ///
-    /// # Returns
-    ///
-    /// A Result that is Ok(()) if the directory exists or was successfully created,
-    /// or an AppError if directory creation failed.
-    ///
-    /// # Errors
-    ///
-    /// Returns `AppError::Config` if directory creation fails for any reason
-    /// (e.g., insufficient permissions).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ponder::Config;
-    /// use std::path::PathBuf;
-    ///
-    /// let config = Config {
-    ///     editor: "vim".to_string(),
-    ///     journal_dir: PathBuf::from("/tmp/my_journal"),
-    /// };
-    ///
-    /// // Make sure the directory exists
-    /// config.ensure_journal_dir().expect("Failed to create journal directory");
-    /// ```
-    ///
-    /// # Deprecated
-    ///
-    /// This method is deprecated. Use `journal_logic::ensure_journal_directory_exists` instead.
-    #[deprecated(
-        since = "0.1.2",
-        note = "Use journal_logic::ensure_journal_directory_exists instead"
-    )]
-    #[allow(dead_code)]
-    pub fn ensure_journal_dir(&self) -> AppResult<()> {
-        if !self.journal_dir.exists() {
-            fs::create_dir_all(&self.journal_dir).map_err(|e| {
-                AppError::Config(format!("Failed to create journal directory: {}", e))
-            })?;
-        }
-
-        Ok(())
-    }
-
     /// Validates that the configuration is usable.
     ///
     /// This method checks if the configuration meets the minimum requirements:
@@ -276,8 +237,8 @@ impl Config {
     /// # Errors
     ///
     /// Returns `AppError::Config` with one of the following messages:
-    /// - "Editor command is empty" if the editor is empty
     /// - "Journal directory path is empty" if the journal directory path is empty
+    /// - "Editor command is empty" if the editor is empty
     /// - "Journal directory must be an absolute path" if the path is relative
     ///
     /// # Examples
@@ -327,10 +288,30 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::journal_logic;
+    use crate::journal_io;
     use serial_test::serial;
     use std::env;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_debug_impl_redacts_sensitive_info() {
+        // Create config with sensitive information
+        let config = Config {
+            editor: "vim".to_string(),
+            journal_dir: PathBuf::from("/home/username/private/journal"),
+        };
+
+        // Format it with debug
+        let debug_output = format!("{:?}", config);
+
+        // Verify sensitive fields are redacted
+        assert!(debug_output.contains(constants::REDACTED_PLACEHOLDER));
+        assert!(debug_output.contains(constants::REDACTED_PLACEHOLDER));
+
+        // Verify actual values are not present
+        assert!(!debug_output.contains("vim"));
+        assert!(!debug_output.contains("/home/username/private/journal"));
+    }
 
     fn setup() {
         // Clear relevant environment variables before each test
@@ -527,7 +508,7 @@ mod tests {
         assert!(!dir_path.exists());
 
         // Should create the directory
-        journal_logic::ensure_journal_directory_exists(&config.journal_dir).unwrap();
+        journal_io::ensure_journal_directory_exists(&config.journal_dir).unwrap();
 
         // Now it should exist
         assert!(dir_path.exists());

@@ -4,12 +4,9 @@
 //! It defines the CLI structure and provides methods to parse and validate
 //! command-line arguments.
 
+use crate::constants;
 use clap::{ArgGroup, Parser};
-
-#[cfg(test)]
-use chrono::NaiveDate;
-#[cfg(test)]
-use std::str::FromStr;
+use std::fmt;
 
 /// Command-line arguments for the ponder application.
 ///
@@ -32,10 +29,10 @@ use std::str::FromStr;
 /// assert!(!args.reminisce);
 /// assert!(args.date.is_none());
 /// ```
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[clap(
-    name = "ponder",
-    about = "A simple journaling tool for daily reflections"
+    name = constants::APP_NAME,
+    about = constants::APP_DESCRIPTION
 )]
 #[clap(author, version, long_about = None)]
 #[clap(group(ArgGroup::new("entry_type").args(&["retro", "reminisce", "date"])))]
@@ -68,86 +65,40 @@ pub struct CliArgs {
     /// about what it's doing, which can be useful for debugging.
     #[clap(short = 'v', long)]
     pub verbose: bool,
+
+    /// Sets the log output format.
+    ///
+    /// Supported values are:
+    /// - "text" (default): Human-readable output format
+    /// - "json": Structured JSON format, useful for parsing and analysis
+    #[clap(long = "log-format", possible_values = &[constants::LOG_FORMAT_TEXT, constants::LOG_FORMAT_JSON], default_value = constants::LOG_FORMAT_TEXT)]
+    pub log_format: String,
+}
+
+impl fmt::Debug for CliArgs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CliArgs")
+            .field("retro", &self.retro)
+            .field("reminisce", &self.reminisce)
+            .field(
+                "date",
+                &self.date.as_ref().map(|_| constants::REDACTED_PLACEHOLDER),
+            )
+            .field("verbose", &self.verbose)
+            .field("log_format", &self.log_format)
+            .finish()
+    }
 }
 
 impl CliArgs {
-    /// Parses command-line arguments from the current process.
-    ///
-    /// This is a convenience wrapper around `clap::Parser::parse()` that
-    /// uses the current process's command-line arguments.
-    ///
-    /// # Returns
-    ///
-    /// A new `CliArgs` instance populated from command-line arguments.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use ponder::cli::CliArgs;
-    ///
-    /// let args = CliArgs::parse();
-    /// // Use the parsed arguments
-    /// ```
-    pub fn parse() -> Self {
-        CliArgs::parse_from(std::env::args())
-    }
-
-    /// Parses the date string from command-line arguments into a NaiveDate.
-    ///
-    /// This method attempts to parse the date specified with the `--date` option
-    /// into a `chrono::NaiveDate`. It supports two date formats:
-    /// - YYYY-MM-DD (e.g., 2023-01-15)
-    /// - YYYYMMDD (e.g., 20230115)
-    ///
-    /// # Returns
-    ///
-    /// - `None` if no date was specified in the command-line arguments
-    /// - `Some(Ok(date))` if the date was successfully parsed
-    /// - `Some(Err(error))` if the date string could not be parsed
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use ponder::cli::CliArgs;
-    /// use clap::Parser;
-    ///
-    /// // Valid date in YYYY-MM-DD format
-    /// let args = CliArgs::parse_from(["ponder", "--date", "2023-01-15"]);
-    /// let date = args.parse_date().unwrap().unwrap();
-    /// assert_eq!(date.to_string(), "2023-01-15");
-    ///
-    /// // Valid date in YYYYMMDD format
-    /// let args = CliArgs::parse_from(["ponder", "--date", "20230115"]);
-    /// let date = args.parse_date().unwrap().unwrap();
-    /// assert_eq!(date.to_string(), "2023-01-15");
-    ///
-    /// // No date specified
-    /// let args = CliArgs::parse_from(["ponder"]);
-    /// assert!(args.parse_date().is_none());
-    ///
-    /// // Invalid date format
-    /// let args = CliArgs::parse_from(["ponder", "--date", "invalid"]);
-    /// assert!(args.parse_date().unwrap().is_err());
-    /// ```
-    ///
-    /// Note: This method is primarily used for testing purposes and may be useful
-    /// for applications that need to perform custom date parsing.
-    #[cfg(test)]
-    pub fn parse_date(&self) -> Option<Result<NaiveDate, chrono::ParseError>> {
-        self.date.as_ref().map(|date_str| {
-            // Try parsing in YYYY-MM-DD format first
-            NaiveDate::from_str(date_str).or_else(|_| {
-                // Try parsing in YYYYMMDD format if the first format failed
-                NaiveDate::parse_from_str(date_str, "%Y%m%d")
-            })
-        })
-    }
+    // No methods needed anymore - all the necessary functionality is provided by:
+    // 1. The clap::Parser implementation which provides the parse() method
+    // 2. DateSpecifier::from_cli_args which handles date parsing and specifier creation
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Datelike;
 
     #[test]
     fn test_default_args() {
@@ -156,6 +107,7 @@ mod tests {
         assert!(!args.reminisce);
         assert!(args.date.is_none());
         assert!(!args.verbose);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
     }
 
     #[test]
@@ -216,51 +168,54 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_date() {
-        // Test ISO format
+    fn test_debug_impl_redacts_sensitive_info() {
+        // Create args with sensitive date information
         let args = CliArgs {
             retro: false,
             reminisce: false,
             date: Some("2023-01-15".to_string()),
-            verbose: false,
+            verbose: true,
+            log_format: "text".to_string(),
         };
 
-        let parsed_date = args.parse_date().unwrap().unwrap();
-        assert_eq!(parsed_date.year(), 2023);
-        assert_eq!(parsed_date.month(), 1);
-        assert_eq!(parsed_date.day(), 15);
+        // Format it with debug
+        let debug_output = format!("{:?}", args);
 
-        // Test compact format
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("20230115".to_string()),
-            verbose: false,
-        };
+        // Verify flags are visible but date is redacted
+        assert!(debug_output.contains("retro: false"));
+        assert!(debug_output.contains("reminisce: false"));
+        assert!(debug_output.contains("verbose: true"));
 
-        let parsed_date = args.parse_date().unwrap().unwrap();
-        assert_eq!(parsed_date.year(), 2023);
-        assert_eq!(parsed_date.month(), 1);
-        assert_eq!(parsed_date.day(), 15);
+        // Verify sensitive date is redacted
+        assert!(debug_output.contains("[REDACTED]"));
+        assert!(!debug_output.contains("2023-01-15"));
+    }
 
-        // Test None case
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: None,
-            verbose: false,
-        };
+    // parse_date test removed as parse_date method was removed
+    // The date parsing functionality is now tested in DateSpecifier::from_cli_args tests
 
-        assert!(args.parse_date().is_none());
+    #[test]
+    fn test_log_format_option() {
+        // Test with default value
+        let args = CliArgs::parse_from(vec!["ponder"]);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
 
-        // Test invalid date
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("invalid-date".to_string()),
-            verbose: false,
-        };
+        // Test with explicit text value
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", constants::LOG_FORMAT_TEXT]);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_TEXT);
 
-        assert!(args.parse_date().unwrap().is_err());
+        // Test with JSON value
+        let args = CliArgs::parse_from(vec!["ponder", "--log-format", constants::LOG_FORMAT_JSON]);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_JSON);
+
+        // Test with other flags
+        let args = CliArgs::parse_from(vec![
+            "ponder",
+            "--retro",
+            "--log-format",
+            constants::LOG_FORMAT_JSON,
+        ]);
+        assert!(args.retro);
+        assert_eq!(args.log_format, constants::LOG_FORMAT_JSON);
     }
 }

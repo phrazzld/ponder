@@ -5,7 +5,7 @@ use tempfile::tempdir;
 
 use ponder::config::Config;
 use ponder::errors::{AppError, AppResult};
-use ponder::journal_logic;
+use ponder::journal_io;
 
 #[test]
 #[serial]
@@ -149,13 +149,13 @@ fn test_ensure_journal_directory_exists() -> AppResult<()> {
     let journal_dir = PathBuf::from(&base_path).join("journals");
 
     // We no longer need to create the Config object since we're using
-    // journal_logic::ensure_journal_directory_exists directly
+    // journal_io::ensure_journal_directory_exists directly
 
     // Directory shouldn't exist yet
     assert!(!journal_dir.exists());
 
     // Call ensure_journal_directory_exists to create it
-    journal_logic::ensure_journal_directory_exists(&journal_dir)?;
+    journal_io::ensure_journal_directory_exists(&journal_dir)?;
 
     // Now the directory should exist
     assert!(journal_dir.exists());

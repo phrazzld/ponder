@@ -11,6 +11,7 @@ Ponder is a simple journaling tool for daily reflections, designed to help users
 - **Customizable**: Configure your preferred editor and journal directory
 - **Simple Interface**: Minimal CLI interface with intuitive commands
 - **Markdown Support**: Journal entries are stored as plain markdown files
+- **Concurrent Access Protection**: File locking prevents data corruption when multiple processes access the same journal file
 
 ## Installation 🔧
 
@@ -46,6 +47,7 @@ ponder
 | `-m, --reminisce` | Opens entries from significant past time intervals |
 | `-d, --date DATE` | Opens an entry for a specific date (YYYY-MM-DD or YYYYMMDD format) |
 | `-v, --verbose` | Enables verbose output for debugging |
+| `--log-format FORMAT` | Sets the log output format ("text" or "json") |
 | `-h, --help` | Displays help information |
 | `-V, --version` | Displays version information |
 
@@ -82,6 +84,8 @@ Ponder can be configured using environment variables:
 | `PONDER_DIR` | The directory where journal entries are stored | `~/Documents/rubberducks` |
 | `PONDER_EDITOR` | The editor to use for journal entries | Uses `EDITOR` if set |
 | `EDITOR` | Fallback editor if `PONDER_EDITOR` is not set | `vim` |
+| `RUST_LOG` | Controls log filtering and verbosity | `info` |
+| `CI` | When set to any value, forces JSON log format | Not set |
 
 ### Editor Configuration Security
 
@@ -135,13 +139,82 @@ export PONDER_EDITOR="ponder-code"
 # Add to your .bashrc, .zshrc, etc.
 export PONDER_DIR="~/journals"
 export PONDER_EDITOR="vim"  # Simple command without arguments
+export RUST_LOG="debug"     # For more verbose logging
 ```
+
+### Logging Configuration
+
+Ponder uses structured logging with support for both human-readable and JSON output formats:
+
+#### Log Levels
+
+You can control log verbosity using the `RUST_LOG` environment variable:
+
+```bash
+# Show only info, warn, and error logs (default)
+export RUST_LOG=info
+
+# Show debug logs and above
+export RUST_LOG=debug
+
+# Show trace logs (most verbose)
+export RUST_LOG=trace
+
+# Filter logs from specific modules
+export RUST_LOG=ponder::journal_io=debug,info
+```
+
+#### Log Formats
+
+Ponder supports two output formats:
+
+1. **Text** (default): Human-readable output for development
+2. **JSON**: Structured output for parsing and analysis
+
+You can select the format using the `--log-format` CLI option:
+
+```bash
+# Human-readable output
+ponder --log-format text
+
+# JSON output
+ponder --log-format json
+```
+
+Setting the `CI` environment variable will also force JSON output:
+
+```bash
+CI=true ponder
+```
+
+#### Correlation IDs
+
+All logs include a correlation ID that uniquely identifies each application invocation. This makes it easier to trace all operations from a single run of the application.
+
+JSON log entries include:
+- `timestamp`: ISO 8601 timestamp
+- `level`: Log level (`INFO`, `DEBUG`, etc.)
+- `target`: Module path
+- `span`: Contains `correlation_id` and context information
+- `fields`: Contains the log message and other fields
 
 ## File Structure 📁
 
 Journal entries are stored as markdown files in the configured journal directory, with filenames in the format `YYYYMMDD.md` (e.g., `20240508.md`).
 
 When you open a journal entry, the current timestamp is automatically added to the file if it doesn't already exist, providing a convenient way to track when you wrote each entry.
+
+### File Locking
+
+Ponder uses advisory file locking to prevent data corruption when multiple processes attempt to access the same journal file simultaneously. This ensures that concurrent invocations of Ponder won't corrupt your journal entries.
+
+If you try to open a journal file that is already being edited in another instance of Ponder, you'll see an error message like:
+
+```
+File locking error: Journal file is currently being edited by another process: /path/to/journal/20240521.md
+```
+
+Once the first Ponder process completes (the editor is closed), the locks are automatically released, allowing subsequent access to the file.
 
 ## Architecture 🏗️
 
@@ -150,9 +223,12 @@ Ponder follows a modular architecture with clear separation of concerns:
 - `cli`: Command-line interface handling using clap
 - `config`: Configuration loading and validation
 - `errors`: Error handling infrastructure
-- `journal_logic`: Core journal functionality
+- `journal_core`: Core journal logic without I/O operations
+- `journal_io`: Journal I/O operations and file management
 
 The codebase is designed with simplicity and maintainability in mind, using direct function calls and standard library features rather than abstractions. This approach improves readability and makes the code easier to reason about.
+
+The architecture separates pure logic (in `journal_core`) from I/O operations (in `journal_io`), which improves testability and maintainability. Each module has a clearly defined responsibility, with minimal dependencies between modules.
 
 ## Contributing 🤝
 
@@ -165,6 +241,8 @@ We welcome contributions to Ponder! If you'd like to contribute:
 5. Ensure your code is properly formatted and passes linting checks
 6. Commit your changes following the Conventional Commits specification
 7. Submit a pull request
+
+For more details, please see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ### Development Setup
 

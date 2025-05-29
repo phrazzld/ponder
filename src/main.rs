@@ -37,16 +37,17 @@ The application can be configured with the following environment variables:
 - `PONDER_DIR`: The directory to store journal entries (defaults to "~/Documents/rubberducks")
 */
 
-mod cli;
-mod config;
-mod errors;
-mod journal_logic;
-
-use cli::CliArgs;
-use config::Config;
-use errors::AppResult;
-use journal_logic::DateSpecifier;
-use log::{debug, error, info};
+use chrono::Local;
+use clap::Parser;
+use ponder::cli::CliArgs;
+use ponder::config::Config;
+use ponder::constants;
+use ponder::errors::{AppError, AppResult};
+use ponder::journal_core::DateSpecifier;
+use ponder::journal_io;
+use tracing::{debug, info, info_span};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use uuid::Uuid;
 
 /// The main entry point for the ponder application.
 ///
@@ -72,27 +73,54 @@ use log::{debug, error, info};
 /// - Journal logic errors (invalid date format, etc.)
 /// - Editor errors (failed to launch editor)
 fn main() -> AppResult<()> {
-    // Initialize structured JSON logging
-    env_logger::Builder::from_default_env()
-        .format(|buf, record| {
-            use std::io::Write;
+    // Obtain current date/time once at the beginning
+    let current_datetime = Local::now();
+    let current_date = current_datetime.naive_local().date();
 
-            // Create JSON structure with timestamp, level, and message
-            let timestamp = chrono::Local::now().to_rfc3339();
-            writeln!(
-                buf,
-                "{{\"timestamp\":\"{}\",\"level\":\"{}\",\"message\":\"{}\"}}",
-                timestamp,
-                record.level(),
-                record.args()
-            )
-        })
-        .init();
-
-    info!("Starting ponder");
-
-    // Parse command-line arguments
+    // Parse command-line arguments first (needed for log format)
     let args = CliArgs::parse();
+
+    // Generate a correlation ID for this application invocation
+    let correlation_id = Uuid::new_v4().to_string();
+
+    // Determine log format based on CLI args
+    let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
+        || std::env::var(constants::ENV_VAR_CI).is_ok();
+
+    // Configure tracing subscriber with appropriate filter
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
+        .unwrap();
+
+    // Create the subscriber builder with the filter
+    let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
+
+    // Add the appropriate formatter based on the log format
+    if use_json_logging {
+        // JSON logging for CI or when explicitly requested
+        let json_layer = fmt::layer()
+            .json()
+            .with_timer(fmt::time::ChronoUtc::default()) // Use UTC time with RFC 3339 format
+            .with_current_span(true) // Include current span info
+            .with_span_list(true) // Include span hierarchy
+            .flatten_event(true); // Flatten event fields into the JSON object
+        subscriber_builder.with(json_layer).init();
+    } else {
+        // Human-readable logging for development
+        let pretty_layer = fmt::layer().pretty().with_writer(std::io::stderr);
+        subscriber_builder.with(pretty_layer).init();
+    }
+
+    // Create and enter the root span with correlation ID
+    let root_span = info_span!(
+        constants::TRACING_ROOT_SPAN_NAME,
+        service_name = constants::TRACING_SERVICE_NAME,
+        correlation_id = %correlation_id
+    );
+    let _guard = root_span.enter();
+
+    // Log the application start with correlation ID
+    info!("Starting ponder");
     debug!("CLI arguments: {:?}", args);
 
     // Set up verbose logging if requested
@@ -102,173 +130,30 @@ fn main() -> AppResult<()> {
 
     // Load and validate configuration
     info!("Loading configuration");
-    let config = Config::load().map_err(|e| {
-        error!("Configuration error: {}", e);
-        e
-    })?;
-
-    config.validate().map_err(|e| {
-        error!("Invalid configuration: {}", e);
-        e
-    })?;
+    let config = Config::load()?;
+    config.validate()?;
 
     // Ensure journal directory exists
     debug!("Journal directory: {:?}", config.journal_dir);
-    journal_logic::ensure_journal_directory_exists(&config.journal_dir).map_err(|e| {
-        error!("Failed to create journal directory: {}", e);
-        e
-    })?;
+    journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
     // Determine which entry type to open based on CLI arguments
-    let date_spec = get_date_specifier_from_args(&args)?;
+    let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())
+        .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
 
-    // Open the appropriate journal entries
-    info!("Opening journal entries");
-    journal_logic::open_journal_entries(&config, &date_spec).map_err(|e| {
-        error!("Failed to open journal entries: {}", e);
-        e
-    })?;
+    // Get the dates to open using the current date obtained earlier
+    let dates_to_open = date_spec.resolve_dates(current_date);
+
+    // Edit the appropriate journal entries, passing the current date
+    // This includes file locking to prevent concurrent access
+    info!("Opening journal entries (with file locking)");
+    journal_io::edit_journal_entries(&config, &dates_to_open, &current_datetime)?;
 
     info!("Journal entries opened successfully");
     Ok(())
 }
 
-/// Converts CLI arguments to a DateSpecifier.
-///
-/// This helper function examines the CLI arguments and determines the
-/// appropriate DateSpecifier to use for journal entry selection.
-///
-/// # Parameters
-///
-/// * `args` - The parsed command-line arguments
-///
-/// # Returns
-///
-/// A Result containing either the appropriate DateSpecifier or an AppError
-/// if a date string couldn't be parsed.
-///
-/// # Errors
-///
-/// Returns an error if the date string (from `--date` option) is invalid or
-/// in an unsupported format.
-///
-/// # Examples
-///
-/// ```
-/// use ponder::cli::CliArgs;
-/// use ponder::journal_logic::DateSpecifier;
-///
-/// // No flags specified - defaults to today
-/// let args = CliArgs {
-///     retro: false,
-///     reminisce: false,
-///     date: None,
-///     verbose: false,
-/// };
-/// let date_spec = get_date_specifier_from_args(&args).unwrap();
-/// assert_eq!(date_spec, DateSpecifier::Today);
-/// ```
-fn get_date_specifier_from_args(args: &CliArgs) -> AppResult<DateSpecifier> {
-    if args.retro {
-        Ok(DateSpecifier::Retro)
-    } else if args.reminisce {
-        Ok(DateSpecifier::Reminisce)
-    } else if let Some(date_str) = &args.date {
-        // Parse the date string
-        match DateSpecifier::from_args(false, false, Some(date_str)) {
-            Ok(date_spec) => Ok(date_spec),
-            Err(e) => {
-                error!("Invalid date format: {}", e);
-                Err(e)
-            }
-        }
-    } else {
-        // Default to today if no options are specified
-        Ok(DateSpecifier::Today)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::Datelike;
-    use errors::AppError;
-
-    #[test]
-    fn test_get_date_specifier_from_retro_args() {
-        let args = CliArgs {
-            retro: true,
-            reminisce: false,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Retro);
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_reminisce_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: true,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Reminisce);
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_date_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2023-01-15".to_string()),
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        if let DateSpecifier::Specific(date) = date_spec {
-            assert_eq!(date.year(), 2023);
-            assert_eq!(date.month(), 1);
-            assert_eq!(date.day(), 15);
-        } else {
-            panic!("Expected DateSpecifier::Specific");
-        }
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_invalid_date_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("invalid-date".to_string()),
-            verbose: false,
-        };
-
-        let result = get_date_specifier_from_args(&args);
-        assert!(result.is_err());
-
-        match result {
-            Err(AppError::Journal(msg)) => {
-                assert!(msg.contains("Invalid date format"));
-            }
-            _ => panic!("Expected Journal error"),
-        }
-    }
-
-    #[test]
-    fn test_get_date_specifier_from_default_args() {
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: None,
-            verbose: false,
-        };
-
-        let date_spec = get_date_specifier_from_args(&args).unwrap();
-        assert_eq!(date_spec, DateSpecifier::Today);
-    }
+    // These tests have been moved to cli/mod.rs and are no longer needed here
 }

@@ -61,10 +61,32 @@ jobs:
       run: cargo build --verbose
       timeout-minutes: 5
     
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run tests (excluding file locking tests)
+      run: cargo test --verbose -- --skip locking_tests
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
       timeout-minutes: 5
+
+  locking-tests:
+    name: File Locking Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [formatting, clippy]
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Run file locking tests
+      run: cargo test --test locking_tests --verbose
+      env:
+        PONDER_EDITOR: echo
+        PONDER_DIR: /tmp/ponder_ci_tests_locking
+        RUST_BACKTRACE: 1
+      timeout-minutes: 15
