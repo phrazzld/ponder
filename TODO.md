@@ -67,7 +67,7 @@
 
 ## CI Configuration Improvements (Priority 2)
 
-- [ ] **T012: Add CI config parameter to increase timeouts for flaky tests** (depends on T007)
+- [x] **T012: Add CI config parameter to increase timeouts for flaky tests** (depends on T007)
   - Add or modify CI configuration to allow increased execution timeouts for flaky tests
   - Target file locking tests specifically
   - **Verification**: CI configuration reflects new timeout settings

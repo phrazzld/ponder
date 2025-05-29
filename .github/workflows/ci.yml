@@ -61,10 +61,18 @@ jobs:
       run: cargo build --verbose
       timeout-minutes: 5
     
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Run tests (excluding file locking tests)
+      run: cargo test --verbose -- --skip locking_tests
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
       timeout-minutes: 5
+    
+    - name: Run file locking tests (with extended timeout)
+      run: cargo test --test locking_tests --verbose
+      env:
+        PONDER_EDITOR: echo
+        PONDER_DIR: /tmp/ponder_ci_tests
+        RUST_BACKTRACE: 1
+      timeout-minutes: 15
