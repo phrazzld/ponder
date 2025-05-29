@@ -15,9 +15,9 @@ use debug_helpers::{debug_directory_state, debug_environment_state, debug_file_i
 const FIXED_TEST_DATE: &str = "2024-01-15";
 
 /// Execute a test closure with retry logic for transient failures
-fn retry_test<F>(test_name: &str, mut test_fn: F) -> Result<(), String>
+fn retry_test<F>(test_name: &str, mut test_fn: F) -> Result<(), Box<dyn std::error::Error>>
 where
-    F: FnMut() -> Result<(), String>,
+    F: FnMut() -> Result<(), Box<dyn std::error::Error>>,
 {
     const MAX_ATTEMPTS: u32 = 3;
     const RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -52,7 +52,8 @@ where
     Err(format!(
         "Test '{}' failed after {} attempts",
         test_name, MAX_ATTEMPTS
-    ))
+    )
+    .into())
 }
 
 /// A guard that ensures child processes are properly cleaned up
@@ -181,7 +182,7 @@ fn wait_for_file_state(
     should_exist: bool,
     timeout: Duration,
     poll_interval: Duration,
-) -> Result<(), String> {
+) -> Result<(), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
     while start_time.elapsed() < timeout {
         if file_path.exists() == should_exist {
@@ -219,7 +220,7 @@ fn wait_for_file_state(
         debug_environment_state()
     );
 
-    Err(debug_context)
+    Err(debug_context.into())
 }
 
 /// Create a mock editor script that simulates a slow editor with configurable duration
@@ -332,94 +333,113 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
     eprintln!("[TEST] Created mock editor script: {}", slow_editor_script);
 
     // Execute the core test logic with retry mechanism
-    let test_result = retry_test("file_locking_prevents_concurrent_access", || {
-        // Scenario 1: First instance acquires lock
-        let instance_a_child = std::process::Command::new("cargo")
-            .arg("run")
-            .arg("--")
-            .arg("--date")
-            .arg(&today_date_str)
-            .env("PONDER_EDITOR", &slow_editor_script)
-            .env(
-                "PONDER_DIR",
-                journal_dir
-                    .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+    let test_result = retry_test(
+        "file_locking_prevents_concurrent_access",
+        || -> Result<(), Box<dyn std::error::Error>> {
+            // Scenario 1: First instance acquires lock
+            let instance_a_child = std::process::Command::new("cargo")
+                .arg("run")
+                .arg("--")
+                .arg("--date")
+                .arg(&today_date_str)
+                .env("PONDER_EDITOR", &slow_editor_script)
+                .env(
+                    "PONDER_DIR",
+                    journal_dir.to_str().ok_or_else(|| {
+                        format!(
+                            "Failed to convert journal_dir path to string: {}",
+                            journal_dir.display()
+                        )
+                    })?,
+                )
+                .env(
+                    "HOME",
+                    journal_dir.to_str().ok_or_else(|| {
+                        format!(
+                            "Failed to convert HOME directory path to string: {}",
+                            journal_dir.display()
+                        )
+                    })?,
+                )
+                .spawn()
+                .map_err(|e| {
+                    format!(
+                        "Failed to spawn first ponder instance with slow editor '{}': {}",
+                        slow_editor_script, e
+                    )
+                })?;
+
+            let _instance_a_guard =
+                ChildProcessGuard::new(instance_a_child, "PonderInstanceA".to_string());
+            eprintln!("[TEST] Spawned first ponder instance with ChildProcessGuard");
+
+            // Wait for the sentinel file to be created by the mock editor
+            eprintln!("[TEST] Waiting for sentinel file to be created...");
+            wait_for_file_state(
+                &sentinel_path,
+                true,
+                Duration::from_secs(5),
+                Duration::from_millis(100),
             )
-            .env(
-                "HOME",
-                journal_dir
-                    .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
-            )
-            .spawn()
-            .map_err(|e| format!("Failed to spawn first ponder instance: {}", e))?;
+            .map_err(|e| {
+                format!(
+                    "Failed waiting for first instance to start (sentinel file creation): {}",
+                    e
+                )
+            })?;
+            eprintln!("[TEST] Sentinel file created, first instance is running");
 
-        let _instance_a_guard =
-            ChildProcessGuard::new(instance_a_child, "PonderInstanceA".to_string());
-        eprintln!("[TEST] Spawned first ponder instance with ChildProcessGuard");
-
-        // Wait for the sentinel file to be created by the mock editor
-        eprintln!("[TEST] Waiting for sentinel file to be created...");
-        wait_for_file_state(
-            &sentinel_path,
-            true,
-            Duration::from_secs(5),
-            Duration::from_millis(100),
-        )?;
-        eprintln!("[TEST] Sentinel file created, first instance is running");
-
-        // Scenario 2: While first instance has lock, second instance should fail
-        eprintln!("[TEST] Second instance should fail due to lock");
-        let second_result = Command::cargo_bin("ponder")
-            .map_err(|e| format!("Failed to create command: {}", e))?
+            // Scenario 2: While first instance has lock, second instance should fail
+            eprintln!("[TEST] Second instance should fail due to lock");
+            let second_result = Command::cargo_bin("ponder")
+            .map_err(|e| format!("Failed to create second ponder command for lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
             .env(
                 "PONDER_DIR",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert journal_dir path to string for second instance: {}", journal_dir.display()))?,
             )
             .env(
                 "HOME",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert HOME directory path to string for second instance: {}", journal_dir.display()))?,
             )
             .arg("--date")
             .arg(&today_date_str)
             .assert()
             .try_failure();
 
-        // Verify it failed with the expected lock error
-        match second_result {
-            Ok(_) => {
-                // Now verify the error message
-                Command::cargo_bin("ponder")
-                    .map_err(|e| format!("Failed to create command: {}", e))?
+            // Verify it failed with the expected lock error
+            match second_result {
+                Ok(_) => {
+                    // Now verify the error message
+                    Command::cargo_bin("ponder")
+                    .map_err(|e| format!("Failed to create command for lock error verification: {}", e))?
                     .env("PONDER_EDITOR", "true")
                     .env(
                         "PONDER_DIR",
                         journal_dir
                             .to_str()
-                            .ok_or("Failed to convert journal_dir to string")?,
+                            .ok_or_else(|| format!("Failed to convert journal_dir path to string for lock verification: {}", journal_dir.display()))?,
                     )
                     .env(
                         "HOME",
                         journal_dir
                             .to_str()
-                            .ok_or("Failed to convert journal_dir to string")?,
+                            .ok_or_else(|| format!("Failed to convert HOME directory path to string for lock verification: {}", journal_dir.display()))?,
                     )
                     .arg("--date")
                     .arg(&today_date_str)
                     .assert()
                     .failure()
                     .stderr(predicate::str::contains("Error: Lock(FileBusy"));
-                eprintln!("[TEST] Second instance correctly failed with lock error");
-            }
-            Err(_) => {
-                let debug_context = format!(
-                    "Second instance did not fail as expected.\n\
+                    eprintln!("[TEST] Second instance correctly failed with lock error");
+                }
+                Err(_) => {
+                    let debug_context = format!(
+                        "Second instance did not fail as expected.\n\
                     \n\
                     Test context:\n\
                     Date: {}\n\
@@ -431,51 +451,57 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     Journal directory state:\n{}\n\
                     \n\
                     Environment:\n{}",
-                    today_date_str,
-                    sentinel_path.display(),
-                    journal_dir.to_str().unwrap_or("invalid_path"),
-                    debug_file_info(&sentinel_path),
-                    debug_directory_state(&journal_dir),
-                    debug_environment_state()
-                );
-                return Err(debug_context);
+                        today_date_str,
+                        sentinel_path.display(),
+                        journal_dir.to_str().unwrap_or("invalid_path"),
+                        debug_file_info(&sentinel_path),
+                        debug_directory_state(&journal_dir),
+                        debug_environment_state()
+                    );
+                    return Err(debug_context.into());
+                }
             }
-        }
 
-        // Wait for the sentinel file to be removed by the mock editor
-        eprintln!("[TEST] Waiting for first instance to complete...");
-        wait_for_file_state(
-            &sentinel_path,
-            false,
-            editor_hold_duration + Duration::from_secs(5),
-            Duration::from_millis(100),
-        )?;
-        eprintln!("[TEST] First instance completed, lock should be released");
+            // Wait for the sentinel file to be removed by the mock editor
+            eprintln!("[TEST] Waiting for first instance to complete...");
+            wait_for_file_state(
+                &sentinel_path,
+                false,
+                editor_hold_duration + Duration::from_secs(5),
+                Duration::from_millis(100),
+            )
+            .map_err(|e| {
+                format!(
+                    "Failed waiting for first instance to complete (sentinel file removal): {}",
+                    e
+                )
+            })?;
+            eprintln!("[TEST] First instance completed, lock should be released");
 
-        // Scenario 3: After first instance releases lock, third instance should succeed
-        eprintln!("[TEST] Third instance should succeed now that lock is released");
-        let third_result = Command::cargo_bin("ponder")
-            .map_err(|e| format!("Failed to create command: {}", e))?
+            // Scenario 3: After first instance releases lock, third instance should succeed
+            eprintln!("[TEST] Third instance should succeed now that lock is released");
+            let third_result = Command::cargo_bin("ponder")
+            .map_err(|e| format!("Failed to create third ponder command for post-lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
             .env(
                 "PONDER_DIR",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert journal_dir path to string for third instance: {}", journal_dir.display()))?,
             )
             .env(
                 "HOME",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert HOME directory path to string for third instance: {}", journal_dir.display()))?,
             )
             .arg("--date")
             .arg(&today_date_str)
             .assert();
 
-        if third_result.try_success().is_err() {
-            let debug_context = format!(
-                "Third instance did not succeed as expected.\n\
+            if third_result.try_success().is_err() {
+                let debug_context = format!(
+                    "Third instance did not succeed as expected.\n\
                 \n\
                 Test context:\n\
                 Date: {}\n\
@@ -490,19 +516,20 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                 Actual: Third instance failed\n\
                 \n\
                 Environment:\n{}",
-                today_date_str,
-                sentinel_path.display(),
-                journal_dir.to_str().unwrap_or("invalid_path"),
-                debug_file_info(&sentinel_path),
-                debug_directory_state(&journal_dir),
-                debug_environment_state()
-            );
-            return Err(debug_context);
-        }
-        eprintln!("[TEST] Third instance succeeded as expected");
+                    today_date_str,
+                    sentinel_path.display(),
+                    journal_dir.to_str().unwrap_or("invalid_path"),
+                    debug_file_info(&sentinel_path),
+                    debug_directory_state(&journal_dir),
+                    debug_environment_state()
+                );
+                return Err(debug_context.into());
+            }
+            eprintln!("[TEST] Third instance succeeded as expected");
 
-        Ok(())
-    });
+            Ok(())
+        },
+    );
 
     // Propagate any test failures
     test_result.map_err(|e| format!("Test failed after maximum retry attempts: {}", e))?;
@@ -552,9 +579,11 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
     let yesterday_date_str = "2024-01-14".to_string();
 
     // Execute the core test logic with retry mechanism
-    let test_result = retry_test("partial_file_locking_with_multiple_files", || {
-        // Scenario 1: Lock today's file specifically
-        let instance_a_child = std::process::Command::new("cargo")
+    let test_result = retry_test(
+        "partial_file_locking_with_multiple_files",
+        || -> Result<(), Box<dyn std::error::Error>> {
+            // Scenario 1: Lock today's file specifically
+            let instance_a_child = std::process::Command::new("cargo")
             .arg("run")
             .arg("--")
             .arg("--date")
@@ -564,55 +593,55 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
                 "PONDER_DIR",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert journal_dir path to string for partial test: {}", journal_dir.display()))?,
             )
             .env(
                 "HOME",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert HOME directory path to string for partial test: {}", journal_dir.display()))?,
             )
             .spawn()
-            .map_err(|e| format!("Failed to spawn first ponder instance: {}", e))?;
+            .map_err(|e| format!("Failed to spawn first ponder instance for partial test with slow editor '{}': {}", slow_editor_script, e))?;
 
-        let _instance_a_guard =
-            ChildProcessGuard::new(instance_a_child, "PonderInstanceAPartialTest".to_string());
-        eprintln!("[TEST] Spawned first ponder instance with ChildProcessGuard");
+            let _instance_a_guard =
+                ChildProcessGuard::new(instance_a_child, "PonderInstanceAPartialTest".to_string());
+            eprintln!("[TEST] Spawned first ponder instance with ChildProcessGuard");
 
-        // Wait for the sentinel file to be created by the mock editor
-        eprintln!("[TEST] Waiting for sentinel file to be created...");
-        wait_for_file_state(
-            &sentinel_path,
-            true,
-            Duration::from_secs(5),
-            Duration::from_millis(100),
-        )?;
-        eprintln!("[TEST] Sentinel file created, first instance is running");
+            // Wait for the sentinel file to be created by the mock editor
+            eprintln!("[TEST] Waiting for sentinel file to be created...");
+            wait_for_file_state(
+                &sentinel_path,
+                true,
+                Duration::from_secs(5),
+                Duration::from_millis(100),
+            )?;
+            eprintln!("[TEST] Sentinel file created, first instance is running");
 
-        // Scenario 2: Try to access yesterday's file while today's is locked
-        // This should succeed because it's a different file
-        eprintln!("[TEST] Attempting to access yesterday's file while today's is locked");
-        let yesterday_result = Command::cargo_bin("ponder")
-            .map_err(|e| format!("Failed to create command: {}", e))?
+            // Scenario 2: Try to access yesterday's file while today's is locked
+            // This should succeed because it's a different file
+            eprintln!("[TEST] Attempting to access yesterday's file while today's is locked");
+            let yesterday_result = Command::cargo_bin("ponder")
+            .map_err(|e| format!("Failed to create command for yesterday's file test: {}", e))?
             .env("PONDER_EDITOR", "true")
             .env(
                 "PONDER_DIR",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert journal_dir path to string for yesterday test: {}", journal_dir.display()))?,
             )
             .env(
                 "HOME",
                 journal_dir
                     .to_str()
-                    .ok_or("Failed to convert journal_dir to string")?,
+                    .ok_or_else(|| format!("Failed to convert HOME directory path to string for yesterday test: {}", journal_dir.display()))?,
             )
             .arg("--date")
             .arg(&yesterday_date_str)
             .assert();
 
-        if yesterday_result.try_success().is_err() {
-            let debug_context = format!(
+            if yesterday_result.try_success().is_err() {
+                let debug_context = format!(
                 "Failed to access yesterday's file while today's is locked.\n\
                 \n\
                 Test context:\n\
@@ -637,22 +666,23 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
                 debug_directory_state(&journal_dir),
                 debug_environment_state()
             );
-            return Err(debug_context);
-        }
-        eprintln!("[TEST] Successfully accessed yesterday's file while today's is locked");
+                return Err(debug_context.into());
+            }
+            eprintln!("[TEST] Successfully accessed yesterday's file while today's is locked");
 
-        // Wait for the sentinel file to be removed by the mock editor
-        eprintln!("[TEST] Waiting for first instance to complete...");
-        wait_for_file_state(
+            // Wait for the sentinel file to be removed by the mock editor
+            eprintln!("[TEST] Waiting for first instance to complete...");
+            wait_for_file_state(
             &sentinel_path,
             false,
             Duration::from_secs(editor_hold_duration_secs + 5),
             Duration::from_millis(100),
-        )?;
-        eprintln!("[TEST] First instance completed");
+        ).map_err(|e| format!("Failed waiting for partial test first instance to complete (sentinel file removal): {}", e))?;
+            eprintln!("[TEST] First instance completed");
 
-        Ok(())
-    });
+            Ok(())
+        },
+    );
 
     // Propagate any test failures
     test_result.map_err(|e| format!("Test failed after maximum retry attempts: {}", e))?;
