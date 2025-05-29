@@ -72,7 +72,7 @@
   - Target file locking tests specifically
   - **Verification**: CI configuration reflects new timeout settings
 
-- [ ] **T013: Add specific CI test step for file locking tests** (depends on T007)
+- [x] **T013: Add specific CI test step for file locking tests** (depends on T007)
   - Modify CI workflow to run file locking tests as a separate, distinct step
   - Allow for independent monitoring and timeout configuration
   - **Verification**: CI pipeline executes file locking tests in an isolated step
