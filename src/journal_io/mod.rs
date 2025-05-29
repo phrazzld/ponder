@@ -268,18 +268,15 @@ pub fn edit_journal_entries(
     for (i, &date) in dates.iter().enumerate() {
         let path = get_entry_path_for_date(&config.journal_dir, date);
 
-        // For the first date (likely the primary entry), ensure it's initialized
+        // For the first date (likely the primary entry), ensure it has a timestamp header
         if i == 0 {
-            // Initialize entry if it doesn't exist
-            if !path.exists() {
-                debug!(
-                    "Initializing new journal entry for {} at {}",
-                    date,
-                    path.display()
-                );
-                // This creates the file and adds a header if needed
-                append_date_header_if_needed(&path, reference_datetime)?;
-            }
+            debug!(
+                "Adding timestamp header for primary journal entry {} at {}",
+                date,
+                path.display()
+            );
+            // Always append a timestamp header for the primary entry
+            append_timestamp_header(&path, reference_datetime)?;
         }
 
         // Only add path if the file exists (relevant for retro/reminisce mode)
@@ -688,6 +685,55 @@ pub(crate) fn append_date_header_if_needed(
     Ok(())
 }
 
+/// Appends a timestamp header to a journal entry file unconditionally.
+///
+/// This function always appends a new timestamp header to the journal file,
+/// regardless of whether the file is empty or already contains content.
+/// If the file is empty, it adds both date and time headers. If the file
+/// already has content, it only adds a time header.
+///
+/// # Parameters
+///
+/// * `path` - Path to the journal entry file
+/// * `reference_datetime` - The reference date/time to use for the timestamp
+///
+/// # Returns
+///
+/// A Result indicating success or failure.
+///
+/// # Errors
+///
+/// Returns `AppError::Io` if file operations fail.
+pub(crate) fn append_timestamp_header(
+    path: &Path,
+    reference_datetime: &chrono::DateTime<Local>,
+) -> AppResult<()> {
+    // Create or open the file
+    let mut file = create_or_open_entry_file(path)?;
+
+    // Read the file content to check if it's empty
+    let content = read_file_content(path)?;
+
+    if content.is_empty() {
+        // File is empty: add both date and time headers
+        let entry = format!(
+            "# {}\n\n## {}\n\n",
+            reference_datetime.format(constants::JOURNAL_HEADER_DATE_FORMAT),
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
+        );
+        append_to_file(&mut file, &entry)?;
+    } else {
+        // File has content: only add time header
+        let entry = format!(
+            "## {}\n\n",
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
+        );
+        append_to_file(&mut file, &entry)?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -879,5 +925,69 @@ mod tests {
             let permissions = metadata.permissions();
             assert_eq!(permissions.mode() & 0o777, 0o600);
         }
+    }
+
+    #[test]
+    fn test_append_timestamp_header_empty_file() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file_path = temp_dir.path().join("test_entry.md");
+
+        // Create empty file by opening and closing it
+        File::create(&file_path).expect("Failed to create test file");
+
+        // Create a reference datetime for the test
+        let reference_datetime = Local::now();
+
+        // Append timestamp header to the empty file
+        append_timestamp_header(&file_path, &reference_datetime)
+            .expect("Failed to append timestamp header");
+
+        // Read the file content
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+
+        // Verify both date and time headers were added
+        assert!(content.contains(&format!(
+            "# {}",
+            reference_datetime.format(constants::JOURNAL_HEADER_DATE_FORMAT)
+        )));
+        assert!(content.contains(&format!(
+            "## {}",
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
+        )));
+    }
+
+    #[test]
+    fn test_append_timestamp_header_non_empty_file() {
+        let temp_dir = tempdir().expect("Failed to create temporary directory");
+        let file_path = temp_dir.path().join("test_entry.md");
+
+        // Create a file with existing content (simulating an existing journal entry)
+        let existing_content =
+            "# May 29, 2025: Thursday\n\n## 07:26:38\n\nExisting journal content";
+        fs::write(&file_path, existing_content).expect("Failed to write content");
+
+        // Create a reference datetime for the test
+        let reference_datetime = Local::now();
+
+        // Append timestamp header to the non-empty file
+        append_timestamp_header(&file_path, &reference_datetime)
+            .expect("Failed to append timestamp header");
+
+        // Read the file content
+        let content = fs::read_to_string(&file_path).expect("Failed to read file");
+
+        // Verify the existing content is still there
+        assert!(content.contains("Existing journal content"));
+
+        // Verify a new time header was added (should appear twice now)
+        let time_header = format!(
+            "## {}",
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
+        );
+        assert!(content.contains(&time_header));
+
+        // The original date header should still be there (only once)
+        let date_headers: Vec<&str> = content.matches("# May 29, 2025: Thursday").collect();
+        assert_eq!(date_headers.len(), 1, "Should have exactly one date header");
     }
 }
