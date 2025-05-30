@@ -14,7 +14,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 // Constants from the centralized constants module are used in this file
 
@@ -560,14 +560,6 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
             } else {
                 let status_code = status.code().unwrap_or(-1);
 
-                // Log the error with the editor command and status code
-                error!(
-                    error.type = "EditorError::NonZeroExit",
-                    error.command = %editor_cmd,
-                    error.status_code = status_code,
-                    "Editor exited with non-zero status code"
-                );
-
                 // Create and return the EditorError
                 let err = EditorError::NonZeroExit {
                     command: editor_cmd,
@@ -580,16 +572,6 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
             // Map the I/O error to a specific EditorError variant based on the error kind
             let specific_error = match e.kind() {
                 std::io::ErrorKind::NotFound => {
-                    let error_string = e.to_string();
-
-                    // Log the error with details
-                    error!(
-                        error.type = "EditorError::CommandNotFound",
-                        error.command = %editor_cmd,
-                        error.message = %error_string,
-                        "Editor command not found"
-                    );
-
                     // Create the EditorError
                     EditorError::CommandNotFound {
                         command: editor_cmd,
@@ -597,16 +579,6 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
                     }
                 }
                 std::io::ErrorKind::PermissionDenied => {
-                    let error_string = e.to_string();
-
-                    // Log the error with details
-                    error!(
-                        error.type = "EditorError::PermissionDenied",
-                        error.command = %editor_cmd,
-                        error.message = %error_string,
-                        "Permission denied when trying to execute editor"
-                    );
-
                     // Create the EditorError
                     EditorError::PermissionDenied {
                         command: editor_cmd,
@@ -614,16 +586,6 @@ fn launch_editor(editor: &str, paths: &[PathBuf]) -> AppResult<()> {
                     }
                 }
                 _ => {
-                    let error_string = e.to_string();
-
-                    // Log the error with details
-                    error!(
-                        error.type = "EditorError::ExecutionFailed",
-                        error.command = %editor_cmd,
-                        error.message = %error_string,
-                        "Failed to execute editor command"
-                    );
-
                     // Create the EditorError
                     EditorError::ExecutionFailed {
                         command: editor_cmd,

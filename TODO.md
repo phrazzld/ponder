@@ -24,7 +24,7 @@
         2. Lock acquisition errors are still correctly returned as `LockError`.
     - **Depends‑on:** none
 
-- [ ] **T003 · Refactor · P1: remove `error!()` logging from editor execution functions in `journal_io/mod.rs`**
+- [x] **T003 · Refactor · P1: remove `error!()` logging from editor execution functions in `journal_io/mod.rs`**
     - **Context:** PLAN.md: Phase 2, Step 2.2
     - **Action:**
         1. In `src/journal_io/mod.rs`, identify and remove all `error!()` macro calls that occur immediately before returning `EditorError` variants.
