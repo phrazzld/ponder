@@ -15,7 +15,7 @@
         2. Attempt to run the application with an invalid log level (e.g., by setting `constants::DEFAULT_LOG_LEVEL` to an invalid string temporarily, or via environment variable if that path is tested) and verify it exits gracefully with the specified error message.
     - **Depends‑on:** none
 
-- [ ] **T002 · Refactor · P1: remove `error!()` logging from lock acquisition functions in `journal_io/mod.rs`**
+- [x] **T002 · Refactor · P1: remove `error!()` logging from lock acquisition functions in `journal_io/mod.rs`**
     - **Context:** PLAN.md: Phase 2, Step 2.1
     - **Action:**
         1. In `src/journal_io/mod.rs`, remove the `error!()` macro calls from lines 322 and 329, ensuring only the `Err(...)` is returned.

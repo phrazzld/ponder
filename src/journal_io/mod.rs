@@ -319,14 +319,12 @@ pub fn edit_journal_entries(
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 // Lock is held by another process (WouldBlock is typically returned for busy locks)
-                error!("Failed to acquire lock on {}: File is busy", path.display());
                 // Release any locks we've already acquired
                 drop(locked_files);
                 return Err(LockError::FileBusy { path: path.clone() }.into());
             }
             Err(e) => {
                 // Other error occurred
-                error!("Error acquiring lock on {}: {}", path.display(), e);
                 // Release any locks we've already acquired
                 drop(locked_files);
                 return Err(LockError::AcquisitionFailed {
