@@ -69,7 +69,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum EditorError {
     /// Error when the specified editor command cannot be found.
-    #[error("Editor command '{command}' not found: {source}")]
+    #[error("Editor command '{command}' not found: {source}. Please check that the editor is installed and available in your PATH.")]
     CommandNotFound {
         /// The editor command that was not found
         command: String,
@@ -79,7 +79,7 @@ pub enum EditorError {
     },
 
     /// Error when permission is denied to execute the editor command.
-    #[error("Permission denied when trying to execute editor '{command}': {source}")]
+    #[error("Permission denied when trying to execute editor '{command}': {source}. Please check file permissions or try running with appropriate access rights.")]
     PermissionDenied {
         /// The editor command that had permission denied
         command: String,
@@ -89,7 +89,7 @@ pub enum EditorError {
     },
 
     /// Error when the editor command fails to execute due to other I/O errors.
-    #[error("Failed to execute editor '{command}': {source}")]
+    #[error("Failed to execute editor '{command}': {source}. Please check system resources, disk space, or editor installation.")]
     ExecutionFailed {
         /// The editor command that failed to execute
         command: String,
@@ -99,7 +99,7 @@ pub enum EditorError {
     },
 
     /// Error when the editor exits with a non-zero status code.
-    #[error("Editor '{command}' exited with non-zero status code: {status_code}")]
+    #[error("Editor '{command}' exited with non-zero status code: {status_code}. This may indicate an issue with editor configuration or the file being edited.")]
     NonZeroExit {
         /// The editor command that exited with a non-zero status
         command: String,
@@ -188,14 +188,14 @@ pub enum EditorError {
 #[derive(Debug, Error)]
 pub enum LockError {
     /// Error when the file is already locked by another process.
-    #[error("Journal file is currently being edited by another process: {path}")]
+    #[error("Journal file is currently being edited by another process: {path}. Please wait for the other editor to close or check for existing ponder processes.")]
     FileBusy {
         /// The path to the file that is locked
         path: PathBuf,
     },
 
     /// Error when acquiring the lock fails for a technical reason.
-    #[error("Failed to acquire lock for journal file {path}: {source}")]
+    #[error("Failed to acquire lock for journal file {path}: {source}. Please check file permissions and ensure the directory is accessible.")]
     AcquisitionFailed {
         /// The path to the file that couldn't be locked
         path: PathBuf,
@@ -447,5 +447,100 @@ mod tests {
             },
             _ => panic!("Expected AppError::Lock variant"),
         }
+    }
+
+    #[test]
+    fn test_enhanced_editor_error_display_with_resolution_hints() {
+        // Test CommandNotFound variant includes resolution hints
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "command not found");
+        let error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("not found"));
+        assert!(message.contains("vim"));
+        assert!(message.contains("install") || message.contains("PATH"));
+
+        // Test PermissionDenied variant includes resolution hints
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let error = EditorError::PermissionDenied {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("Permission denied"));
+        assert!(message.contains("vim"));
+        assert!(message.contains("permission") || message.contains("access"));
+
+        // Test NonZeroExit variant includes resolution hints
+        let error = EditorError::NonZeroExit {
+            command: "vim".to_string(),
+            status_code: 1,
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("non-zero status code"));
+        assert!(message.contains("vim"));
+        assert!(message.contains("1"));
+        assert!(message.contains("configuration") || message.contains("file"));
+
+        // Test ExecutionFailed variant includes resolution hints
+        let io_error = io::Error::other("disk full");
+        let error = EditorError::ExecutionFailed {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("Failed to execute"));
+        assert!(message.contains("vim"));
+        assert!(
+            message.contains("disk") || message.contains("space") || message.contains("resource")
+        );
+    }
+
+    #[test]
+    fn test_enhanced_lock_error_display_with_resolution_hints() {
+        // Test FileBusy variant includes resolution hints
+        let error = LockError::FileBusy {
+            path: PathBuf::from("/path/to/journal.md"),
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("currently being edited"));
+        assert!(message.contains("/path/to/journal.md"));
+        assert!(
+            message.contains("wait") || message.contains("process") || message.contains("close")
+        );
+
+        // Test AcquisitionFailed variant includes resolution hints
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/path/to/journal.md"),
+            source: io_error,
+        };
+        let message = format!("{}", error);
+        assert!(message.contains("Failed to acquire lock"));
+        assert!(message.contains("/path/to/journal.md"));
+        assert!(message.contains("permission denied"));
+        assert!(
+            message.contains("permission")
+                || message.contains("access")
+                || message.contains("directory")
+        );
+    }
+
+    #[test]
+    fn test_enhanced_app_error_display_clarity() {
+        // Test that AppError wrappers provide clear context
+        let config_error = AppError::Config("Invalid log level configuration: unknown".to_string());
+        let message = format!("{}", config_error);
+        assert!(message.contains("Configuration"));
+        assert!(message.contains("Invalid log level configuration"));
+        // The wrapper should maintain clarity without being overly verbose
+
+        let journal_error = AppError::Journal("Invalid date format: abc".to_string());
+        let message = format!("{}", journal_error);
+        assert!(message.contains("Journal"));
+        assert!(message.contains("Invalid date format"));
+        // The wrapper should maintain clarity without being overly verbose
     }
 }

@@ -33,7 +33,7 @@
         2. Editor execution errors are still correctly returned as `EditorError` with their context.
     - **Depends‑on:** none
 
-- [ ] **T004 · Refactor · P1: enhance `Display` implementations for `AppError` and its sources**
+- [x] **T004 · Refactor · P1: enhance `Display` implementations for `AppError` and its sources**
     - **Context:** PLAN.md: Phase 3, Step 3.1; Phase 4, Step 4.2; Risk 2 Mitigation
     - **Action:**
         1. Review `Display` implementations for `AppError` and all its domain-specific variants (Config, Io, Journal, Editor, Lock errors).
