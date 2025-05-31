@@ -723,9 +723,11 @@ pub(crate) fn append_timestamp_header(
         );
         append_to_file(&mut file, &entry)?;
     } else {
-        // File has content: only add time header
+        // File has content: ensure a blank line before the time header
+        let prefix = if content.ends_with('\n') { "\n" } else { "\n\n" };
         let entry = format!(
-            "## {}\n\n",
+            "{}## {}\n\n",
+            prefix,
             reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
         );
         append_to_file(&mut file, &entry)?;
@@ -985,6 +987,11 @@ mod tests {
             reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
         );
         assert!(content.contains(&time_header));
+
+        // Verify the timestamp header is separated by a blank line
+        let separator = format!("Existing journal content\n\n## {}",
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT));
+        assert!(content.contains(&separator));
 
         // The original date header should still be there (only once)
         let date_headers: Vec<&str> = content.matches("# May 29, 2025: Thursday").collect();
