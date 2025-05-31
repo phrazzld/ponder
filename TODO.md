@@ -64,7 +64,7 @@
         1. The new integration test passes, confirming single error log entry for editor failures.
     - **Depends‑on:** [T003, T004]
 
-- [ ] **T007 · Test · P1: add integration test for `main()` error propagation and formatting**
+- [x] **T007 · Test · P1: add integration test for `main()` error propagation and formatting**
     - **Context:** PLAN.md: Phase 4, Step 4.1
     - **Action:**
         1. Create an integration test `test_main_error_propagation`.
@@ -74,7 +74,7 @@
         1. The new integration test passes, confirming correct error handling and formatting by `main()`.
     - **Depends‑on:** [T001, T004]
 
-- [ ] **T008 · Test · P2: add unit tests for error construction and `source()` chaining**
+- [x] **T008 · Test · P2: add unit tests for error construction and `source()` chaining**
     - **Context:** PLAN.md: Testing Strategy - Unit Tests (Error Construction Tests, Error Chaining Tests)
     - **Action:**
         1. Write unit tests to verify that all `AppError` variants and their underlying domain-specific errors are constructed correctly with proper context.

@@ -543,4 +543,315 @@ mod tests {
         assert!(message.contains("Invalid date format"));
         // The wrapper should maintain clarity without being overly verbose
     }
+
+    /// Test error source chaining for EditorError variants that have #[source] attributes
+    #[test]
+    fn test_editor_error_source_chaining() {
+        use std::error::Error;
+
+        // Test CommandNotFound source chaining
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "command not found");
+        let original_io_kind = io_error.kind();
+        let editor_error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+
+        // Test that source() returns the underlying io::Error
+        let source = editor_error
+            .source()
+            .expect("EditorError::CommandNotFound should have a source");
+        let source_io_error = source
+            .downcast_ref::<io::Error>()
+            .expect("Source should be an io::Error");
+        assert_eq!(source_io_error.kind(), original_io_kind);
+        assert_eq!(source_io_error.to_string(), "command not found");
+
+        // Test PermissionDenied source chaining
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let editor_error = EditorError::PermissionDenied {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+
+        let source = editor_error
+            .source()
+            .expect("EditorError::PermissionDenied should have a source");
+        let source_io_error = source
+            .downcast_ref::<io::Error>()
+            .expect("Source should be an io::Error");
+        assert_eq!(source_io_error.kind(), io::ErrorKind::PermissionDenied);
+
+        // Test ExecutionFailed source chaining
+        let io_error = io::Error::other("execution failed");
+        let editor_error = EditorError::ExecutionFailed {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+
+        let source = editor_error
+            .source()
+            .expect("EditorError::ExecutionFailed should have a source");
+        let source_io_error = source
+            .downcast_ref::<io::Error>()
+            .expect("Source should be an io::Error");
+        assert_eq!(source_io_error.to_string(), "execution failed");
+
+        // Test that NonZeroExit has no source (it doesn't have #[source])
+        let editor_error = EditorError::NonZeroExit {
+            command: "vim".to_string(),
+            status_code: 1,
+        };
+        assert!(
+            editor_error.source().is_none(),
+            "EditorError::NonZeroExit should not have a source"
+        );
+
+        // Test that Other has no source (it doesn't have #[source])
+        let editor_error = EditorError::Other {
+            command: "vim".to_string(),
+            message: "unexpected error".to_string(),
+        };
+        assert!(
+            editor_error.source().is_none(),
+            "EditorError::Other should not have a source"
+        );
+    }
+
+    /// Test error source chaining for LockError variants that have #[source] attributes
+    #[test]
+    fn test_lock_error_source_chaining() {
+        use std::error::Error;
+
+        // Test AcquisitionFailed source chaining
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let original_io_kind = io_error.kind();
+        let lock_error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/path/to/journal.md"),
+            source: io_error,
+        };
+
+        // Test that source() returns the underlying io::Error
+        let source = lock_error
+            .source()
+            .expect("LockError::AcquisitionFailed should have a source");
+        let source_io_error = source
+            .downcast_ref::<io::Error>()
+            .expect("Source should be an io::Error");
+        assert_eq!(source_io_error.kind(), original_io_kind);
+        assert_eq!(source_io_error.to_string(), "permission denied");
+
+        // Test that FileBusy has no source (it doesn't have #[source])
+        let lock_error = LockError::FileBusy {
+            path: PathBuf::from("/path/to/journal.md"),
+        };
+        assert!(
+            lock_error.source().is_none(),
+            "LockError::FileBusy should not have a source"
+        );
+    }
+
+    /// Test error source chaining for AppError variants, including nested chaining
+    #[test]
+    fn test_app_error_source_chaining() {
+        use std::error::Error;
+
+        // Test AppError::Editor with source chaining through to io::Error
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "command not found");
+        let editor_error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let app_error = AppError::Editor(editor_error);
+
+        // Test first level: AppError -> EditorError
+        let first_source = app_error
+            .source()
+            .expect("AppError::Editor should have a source");
+        let editor_source = first_source
+            .downcast_ref::<EditorError>()
+            .expect("First source should be EditorError");
+
+        // Test second level: EditorError -> io::Error
+        let second_source = editor_source
+            .source()
+            .expect("EditorError should have a source");
+        let io_source = second_source
+            .downcast_ref::<io::Error>()
+            .expect("Second source should be io::Error");
+        assert_eq!(io_source.kind(), io::ErrorKind::NotFound);
+
+        // Test AppError::Lock with source chaining
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let lock_error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/path/to/journal.md"),
+            source: io_error,
+        };
+        let app_error = AppError::Lock(lock_error);
+
+        // Test first level: AppError -> LockError
+        let first_source = app_error
+            .source()
+            .expect("AppError::Lock should have a source");
+        let lock_source = first_source
+            .downcast_ref::<LockError>()
+            .expect("First source should be LockError");
+
+        // Test second level: LockError -> io::Error
+        let second_source = lock_source
+            .source()
+            .expect("LockError should have a source");
+        let io_source = second_source
+            .downcast_ref::<io::Error>()
+            .expect("Second source should be io::Error");
+        assert_eq!(io_source.kind(), io::ErrorKind::PermissionDenied);
+
+        // Test AppError::Io source chaining (direct io::Error)
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let app_error = AppError::Io(io_error);
+
+        let source = app_error
+            .source()
+            .expect("AppError::Io should have a source");
+        let io_source = source
+            .downcast_ref::<io::Error>()
+            .expect("Source should be io::Error");
+        assert_eq!(io_source.kind(), io::ErrorKind::NotFound);
+
+        // Test AppError variants without sources
+        let config_error = AppError::Config("Invalid configuration".to_string());
+        assert!(
+            config_error.source().is_none(),
+            "AppError::Config should not have a source"
+        );
+
+        let journal_error = AppError::Journal("Invalid date".to_string());
+        assert!(
+            journal_error.source().is_none(),
+            "AppError::Journal should not have a source"
+        );
+    }
+
+    /// Test full error chain traversal to ensure complete source chains work correctly
+    #[test]
+    fn test_full_error_chain_traversal() {
+        use std::error::Error;
+
+        // Create a deep error chain: AppError -> EditorError -> io::Error
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "vim: command not found");
+        let editor_error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let app_error = AppError::Editor(editor_error);
+
+        // Collect all errors in the chain
+        let mut error_chain = Vec::new();
+        let mut current_error: &dyn Error = &app_error;
+
+        loop {
+            error_chain.push(current_error.to_string());
+            match current_error.source() {
+                Some(source) => current_error = source,
+                None => break,
+            }
+        }
+
+        // Verify the chain has the expected depth and content
+        assert_eq!(
+            error_chain.len(),
+            3,
+            "Error chain should have 3 levels: AppError -> EditorError -> io::Error"
+        );
+        assert!(
+            error_chain[0].contains("Editor error"),
+            "First error should be AppError::Editor"
+        );
+        assert!(
+            error_chain[1].contains("not found") && error_chain[1].contains("vim"),
+            "Second error should be EditorError::CommandNotFound"
+        );
+        assert!(
+            error_chain[2].contains("vim: command not found"),
+            "Third error should be the original io::Error"
+        );
+
+        // Test a shorter chain: AppError -> io::Error (direct conversion)
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let app_error = AppError::Io(io_error);
+
+        let mut error_chain = Vec::new();
+        let mut current_error: &dyn Error = &app_error;
+
+        loop {
+            error_chain.push(current_error.to_string());
+            match current_error.source() {
+                Some(source) => current_error = source,
+                None => break,
+            }
+        }
+
+        assert_eq!(
+            error_chain.len(),
+            2,
+            "Direct io::Error chain should have 2 levels: AppError -> io::Error"
+        );
+        assert!(
+            error_chain[0].contains("I/O error"),
+            "First error should be AppError::Io"
+        );
+        assert!(
+            error_chain[1].contains("permission denied"),
+            "Second error should be the original io::Error"
+        );
+    }
+
+    /// Test error construction with proper context preservation
+    #[test]
+    fn test_error_construction_context_preservation() {
+        // Test that constructed errors preserve all expected context
+
+        // EditorError construction
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "vim: command not found");
+        let editor_error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+
+        // Verify all context is preserved
+        match editor_error {
+            EditorError::CommandNotFound { command, source } => {
+                assert_eq!(command, "vim");
+                assert_eq!(source.kind(), io::ErrorKind::NotFound);
+                assert_eq!(source.to_string(), "vim: command not found");
+            }
+            _ => panic!("Expected CommandNotFound variant"),
+        }
+
+        // LockError construction
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let lock_error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/test/journal.md"),
+            source: io_error,
+        };
+
+        // Verify all context is preserved
+        match lock_error {
+            LockError::AcquisitionFailed { path, source } => {
+                assert_eq!(path, PathBuf::from("/test/journal.md"));
+                assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+                assert_eq!(source.to_string(), "permission denied");
+            }
+            _ => panic!("Expected AcquisitionFailed variant"),
+        }
+
+        // AppError construction with proper wrapping
+        let config_error = AppError::Config("Invalid log level: unknown".to_string());
+        match config_error {
+            AppError::Config(message) => {
+                assert_eq!(message, "Invalid log level: unknown");
+            }
+            _ => panic!("Expected Config variant"),
+        }
+    }
 }
