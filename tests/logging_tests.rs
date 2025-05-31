@@ -196,3 +196,143 @@ fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::err
 
     Ok(())
 }
+
+/// Test that main() properly propagates and formats various AppError types
+/// This verifies that T001 and T004 work together correctly
+#[test]
+#[serial]
+fn test_main_error_propagation() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a temporary directory for testing
+    let temp_dir = tempdir()?;
+    let journal_dir = temp_dir.path().join("journal");
+    fs::create_dir_all(&journal_dir)?;
+
+    // Test 1: Config error - editor command with forbidden characters
+    {
+        // Create a test that triggers AppError::Config from editor with shell metacharacters
+        let output = Command::cargo_bin("ponder")?
+            .env("PONDER_DIR", journal_dir.to_str().unwrap())
+            .env("HOME", journal_dir.to_str().unwrap())
+            .env("PONDER_EDITOR", "vim;dangerous") // Contains semicolon which is forbidden
+            .arg("--date")
+            .arg("2024-01-15")
+            .output()?;
+
+        // Verify the command failed
+        assert!(
+            !output.status.success(),
+            "Command should fail with invalid editor command"
+        );
+
+        // Verify the error output contains Config error with proper formatting
+        let stderr_output = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr_output.contains("Error: Config(") && stderr_output.contains("shell metacharacters"),
+            "Error should contain Config error formatting for shell metacharacters, but stderr was: {}",
+            stderr_output
+        );
+    }
+
+    // Test 2: Journal error - invalid date format
+    {
+        let output = Command::cargo_bin("ponder")?
+            .env("PONDER_DIR", journal_dir.to_str().unwrap())
+            .env("HOME", journal_dir.to_str().unwrap())
+            .env("PONDER_EDITOR", "true")
+            .env("RUST_LOG", "error") // Valid log level
+            .arg("--date")
+            .arg("invalid-date-format")
+            .output()?;
+
+        // Verify the command failed
+        assert!(
+            !output.status.success(),
+            "Command should fail with invalid date"
+        );
+
+        // Verify the error output contains Journal error with proper formatting
+        let stderr_output = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr_output.contains("Error: Journal(")
+                && stderr_output.contains("Invalid date format"),
+            "Error should contain Journal error formatting, but stderr was: {}",
+            stderr_output
+        );
+    }
+
+    // Test 3: Editor error - command not found
+    {
+        let output = Command::cargo_bin("ponder")?
+            .env("PONDER_DIR", journal_dir.to_str().unwrap())
+            .env("HOME", journal_dir.to_str().unwrap())
+            .env("PONDER_EDITOR", "command_that_definitely_does_not_exist")
+            .env("RUST_LOG", "error") // Valid log level
+            .arg("--date")
+            .arg("2024-01-15")
+            .output()?;
+
+        // Verify the command failed
+        assert!(
+            !output.status.success(),
+            "Command should fail with missing editor"
+        );
+
+        // Verify the error output contains Editor error with proper formatting
+        let stderr_output = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr_output.contains("Error: Editor(") && stderr_output.contains("CommandNotFound"),
+            "Error should contain Editor error formatting, but stderr was: {}",
+            stderr_output
+        );
+    }
+
+    // Test 4: I/O error - invalid directory permission (simulate filesystem error)
+    {
+        // Create a directory with no write permissions to trigger I/O error
+        let readonly_dir = temp_dir.path().join("readonly");
+        fs::create_dir_all(&readonly_dir)?;
+
+        // Make directory read-only (Unix)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&readonly_dir)?.permissions();
+            perms.set_mode(0o444); // Read-only
+            fs::set_permissions(&readonly_dir, perms)?;
+        }
+
+        let output = Command::cargo_bin("ponder")?
+            .env("PONDER_DIR", readonly_dir.to_str().unwrap())
+            .env("HOME", readonly_dir.to_str().unwrap())
+            .env("PONDER_EDITOR", "true")
+            .env("RUST_LOG", "error") // Valid log level
+            .arg("--date")
+            .arg("2024-01-15")
+            .output()?;
+
+        // Verify the command failed
+        assert!(
+            !output.status.success(),
+            "Command should fail with I/O permission error"
+        );
+
+        // Verify the error output contains I/O error with proper formatting
+        let stderr_output = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr_output.contains("Error: Io(") || stderr_output.contains("Permission denied"),
+            "Error should contain I/O error formatting, but stderr was: {}",
+            stderr_output
+        );
+
+        // Restore permissions for cleanup
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&readonly_dir)?.permissions();
+            perms.set_mode(0o755); // Restore write permission
+            fs::set_permissions(&readonly_dir, perms)?;
+        }
+    }
+
+    Ok(())
+}
