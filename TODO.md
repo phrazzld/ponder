@@ -44,7 +44,7 @@
         2. Error messages include context as outlined in PLAN.md (Phase 4, Step 4.2).
     - **Depends‑on:** none
 
-- [ ] **T005 · Test · P1: add integration test for single error logging on lock failure**
+- [x] **T005 · Test · P1: add integration test for single error logging on lock failure**
     - **Context:** PLAN.md: Phase 4, Step 4.1
     - **Action:**
         1. Create an integration test `test_single_error_logging_for_lock_failure`.
