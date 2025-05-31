@@ -134,3 +134,65 @@ fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error
 
     Ok(())
 }
+
+/// Test that editor failures are logged exactly once at the application boundary
+/// This verifies that T003 (removal of double logging) is working correctly
+#[test]
+#[serial]
+fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a temporary directory for testing
+    let temp_dir = tempdir()?;
+    let journal_dir = temp_dir.path().join("journal");
+    fs::create_dir_all(&journal_dir)?;
+
+    // Use fixed date for deterministic testing
+    let test_date = "2024-01-15";
+
+    // Use a non-existent editor command to trigger CommandNotFound error
+    let non_existent_editor = "this_editor_definitely_does_not_exist_anywhere";
+
+    // Run ponder with the non-existent editor
+    let output = Command::cargo_bin("ponder")?
+        .env("PONDER_EDITOR", non_existent_editor)
+        .env("PONDER_DIR", journal_dir.to_str().unwrap())
+        .env("HOME", journal_dir.to_str().unwrap())
+        .env("RUST_LOG", "debug") // Enable debug logging
+        .arg("--date")
+        .arg(test_date)
+        .output()?;
+
+    // Verify the command failed as expected
+    assert!(
+        !output.status.success(),
+        "Ponder process should have failed due to editor not found"
+    );
+
+    // Verify the error output contains the editor error message
+    let stderr_output = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr_output.contains("Editor(CommandNotFound"),
+        "Error message should contain CommandNotFound editor error, but stderr was: {}",
+        stderr_output
+    );
+
+    // Note: Enhanced error messages from T004 include resolution hints
+    // This test focuses on verifying single error logging (no double logging from T003)
+
+    // Count how many times the editor error appears in stderr
+    // We expect it to appear exactly once (single error logging)
+    let editor_error_count = stderr_output.matches("Editor(CommandNotFound").count();
+
+    // Assert single error logging - error should appear exactly once
+    assert_eq!(
+        editor_error_count, 1,
+        "Editor error should be logged exactly once, but found {} occurrences in stderr: {}",
+        editor_error_count, stderr_output
+    );
+
+    // The test passes if we've verified:
+    // 1. The editor command fails (command not found)
+    // 2. The CommandNotFound error is present in output
+    // 3. The error appears exactly once (no double logging)
+
+    Ok(())
+}

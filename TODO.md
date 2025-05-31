@@ -54,7 +54,7 @@
         1. The new integration test passes, confirming single error log entry for lock failures.
     - **Depends‑on:** [T002, T004]
 
-- [ ] **T006 · Test · P1: add integration test for single error logging on editor failure**
+- [x] **T006 · Test · P1: add integration test for single error logging on editor failure**
     - **Context:** PLAN.md: Phase 4, Step 4.1
     - **Action:**
         1. Create an integration test `test_single_error_logging_for_editor_failure`.
