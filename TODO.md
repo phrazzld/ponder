@@ -83,7 +83,7 @@
         1. Unit tests cover error construction and `source()` chaining for all key error types.
     - **Depends‑on:** none
 
-- [ ] **T009 · Test · P2: add unit tests for error `Display` implementations**
+- [x] **T009 · Test · P2: add unit tests for error `Display` implementations**
     - **Context:** PLAN.md: Testing Strategy - Unit Tests (Error Display Tests)
     - **Action:**
         1. Write unit tests for the `Display` implementations of `AppError` and its domain-specific variants.

@@ -854,4 +854,460 @@ mod tests {
             _ => panic!("Expected Config variant"),
         }
     }
+
+    /// Comprehensive tests for error Display implementations covering all variants and edge cases
+    #[test]
+    fn test_comprehensive_error_display_formatting() {
+        // Test AppError::Config Display with various message types
+        let long_message = "X".repeat(1000);
+        let config_errors = vec![
+            ("Empty config", "".to_string()),
+            ("Simple message", "Invalid setting".to_string()),
+            ("Unicode message", "配置错误: invalid 设置".to_string()),
+            ("Long message", long_message),
+            (
+                "Special chars",
+                "Config with\nnewlines\tand\ttabs".to_string(),
+            ),
+        ];
+
+        for (desc, message) in config_errors {
+            let error = AppError::Config(message.clone());
+            let display = format!("{}", error);
+            assert!(
+                display.starts_with("Configuration error: "),
+                "Config error should start with proper prefix for {}",
+                desc
+            );
+            assert!(
+                display.contains(&message),
+                "Config error should contain original message for {}",
+                desc
+            );
+        }
+
+        // Test AppError::Journal Display with various message types
+        let long_date_error = format!("Very long date error: {}", "x".repeat(500));
+        let journal_errors = vec![
+            (
+                "Date parsing",
+                "Invalid date format: 2024-13-45".to_string(),
+            ),
+            ("Empty date", "Date cannot be empty".to_string()),
+            ("Unicode date", "无效日期: 2024年13月".to_string()),
+            ("Long date error", long_date_error),
+        ];
+
+        for (desc, message) in journal_errors {
+            let error = AppError::Journal(message.clone());
+            let display = format!("{}", error);
+            assert!(
+                display.starts_with("Journal logic error: "),
+                "Journal error should start with proper prefix for {}",
+                desc
+            );
+            assert!(
+                display.contains(&message),
+                "Journal error should contain original message for {}",
+                desc
+            );
+        }
+    }
+
+    /// Test EditorError Display implementations for comprehensive coverage
+    #[test]
+    fn test_comprehensive_editor_error_display() {
+        // Test CommandNotFound with various command names
+        let long_command = "x".repeat(100);
+        let commands = vec![
+            ("simple", "vim".to_string()),
+            ("with-dashes", "text-editor".to_string()),
+            ("with_underscores", "my_editor".to_string()),
+            ("unicode", "编辑器".to_string()),
+            ("long", long_command),
+            ("absolute path", "/usr/bin/vim".to_string()),
+            ("relative path", "./vim".to_string()),
+        ];
+
+        for (desc, command) in commands {
+            let io_error = io::Error::new(io::ErrorKind::NotFound, "command not found");
+            let error = EditorError::CommandNotFound {
+                command: command.clone(),
+                source: io_error,
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains(&command),
+                "CommandNotFound should contain command name for {}",
+                desc
+            );
+            assert!(
+                display.contains("not found"),
+                "CommandNotFound should indicate not found for {}",
+                desc
+            );
+            assert!(
+                display.contains("PATH") || display.contains("install"),
+                "CommandNotFound should provide resolution hint for {}",
+                desc
+            );
+        }
+
+        // Test PermissionDenied with various scenarios
+        let permission_scenarios = vec![
+            (
+                "No permission",
+                io::Error::new(io::ErrorKind::PermissionDenied, "permission denied"),
+            ),
+            (
+                "Access denied",
+                io::Error::new(io::ErrorKind::PermissionDenied, "access denied"),
+            ),
+            (
+                "Read-only",
+                io::Error::new(io::ErrorKind::PermissionDenied, "read-only file system"),
+            ),
+        ];
+
+        for (desc, io_error) in permission_scenarios {
+            let error = EditorError::PermissionDenied {
+                command: "vim".to_string(),
+                source: io_error,
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains("vim"),
+                "PermissionDenied should contain command for {}",
+                desc
+            );
+            assert!(
+                display.contains("Permission denied") || display.contains("denied"),
+                "PermissionDenied should indicate permission issue for {}",
+                desc
+            );
+        }
+
+        // Test ExecutionFailed with various failure reasons
+        let execution_failures = vec![
+            ("Resource", io::Error::other("insufficient resources")),
+            ("Disk full", io::Error::other("no space left on device")),
+            ("Memory", io::Error::other("out of memory")),
+            ("Signal", io::Error::other("killed by signal")),
+        ];
+
+        for (desc, io_error) in execution_failures {
+            let error = EditorError::ExecutionFailed {
+                command: "vim".to_string(),
+                source: io_error,
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains("vim"),
+                "ExecutionFailed should contain command for {}",
+                desc
+            );
+            assert!(
+                display.contains("Failed to execute"),
+                "ExecutionFailed should indicate execution failure for {}",
+                desc
+            );
+        }
+
+        // Test NonZeroExit with various status codes
+        let exit_codes = vec![1, 127, 130, 255];
+        for code in exit_codes {
+            let error = EditorError::NonZeroExit {
+                command: "vim".to_string(),
+                status_code: code,
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains("vim"),
+                "NonZeroExit should contain command for code {}",
+                code
+            );
+            assert!(
+                display.contains(&code.to_string()),
+                "NonZeroExit should contain status code {}",
+                code
+            );
+            assert!(
+                display.contains("non-zero"),
+                "NonZeroExit should indicate non-zero exit for code {}",
+                code
+            );
+        }
+
+        // Test Other variant with various messages
+        let long_message = "x".repeat(500);
+        let other_messages = vec![
+            ("Timeout", "editor operation timed out".to_string()),
+            ("Corruption", "editor config file corrupted".to_string()),
+            ("Network", "editor requires network access".to_string()),
+            ("Unicode", "编辑器错误信息".to_string()),
+            ("Empty", "".to_string()),
+            ("Long", long_message),
+        ];
+
+        for (desc, message) in other_messages {
+            let error = EditorError::Other {
+                command: "vim".to_string(),
+                message: message.clone(),
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains("vim"),
+                "Other variant should contain command for {}",
+                desc
+            );
+            assert!(
+                display.contains("unexpected issue") || display.contains("issue"),
+                "Other variant should indicate unexpected issue for {}",
+                desc
+            );
+            if !message.is_empty() {
+                assert!(
+                    display.contains(&message),
+                    "Other variant should contain custom message for {}",
+                    desc
+                );
+            }
+        }
+    }
+
+    /// Test LockError Display implementations for comprehensive coverage
+    #[test]
+    fn test_comprehensive_lock_error_display() {
+        use std::path::PathBuf;
+
+        // Test FileBusy with various path types
+        let long_path = format!("/{}", "very_long_path_name/".repeat(20))
+            .trim_end_matches('/')
+            .to_string();
+        let paths = vec![
+            ("simple", "/journal.md".to_string()),
+            (
+                "nested",
+                "/home/user/documents/journal/2024/01/15.md".to_string(),
+            ),
+            ("windows", r"C:\Users\User\Documents\journal.md".to_string()),
+            ("unicode", "/用户/文档/日记.md".to_string()),
+            ("spaces", "/path with spaces/journal entry.md".to_string()),
+            ("long", long_path),
+            ("relative", "./journal.md".to_string()),
+        ];
+
+        for (desc, path) in paths {
+            let error = LockError::FileBusy {
+                path: PathBuf::from(&path),
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains(&path),
+                "FileBusy should contain file path for {}",
+                desc
+            );
+            assert!(
+                display.contains("currently being edited") || display.contains("being edited"),
+                "FileBusy should indicate file is being edited for {}",
+                desc
+            );
+            assert!(
+                display.contains("wait")
+                    || display.contains("process")
+                    || display.contains("close"),
+                "FileBusy should provide resolution hint for {}",
+                desc
+            );
+        }
+
+        // Test AcquisitionFailed with various I/O error types
+        let io_errors = vec![
+            (
+                "Permission",
+                io::Error::new(io::ErrorKind::PermissionDenied, "permission denied"),
+            ),
+            (
+                "Not found",
+                io::Error::new(io::ErrorKind::NotFound, "directory not found"),
+            ),
+            (
+                "Read only",
+                io::Error::new(io::ErrorKind::PermissionDenied, "read-only file system"),
+            ),
+            (
+                "Disk full",
+                io::Error::new(io::ErrorKind::WriteZero, "no space left on device"),
+            ),
+            (
+                "Network",
+                io::Error::new(io::ErrorKind::NetworkUnreachable, "network is unreachable"),
+            ),
+        ];
+
+        for (desc, io_error) in io_errors {
+            let path = "/test/journal.md";
+            let error = LockError::AcquisitionFailed {
+                path: PathBuf::from(path),
+                source: io_error,
+            };
+            let display = format!("{}", error);
+
+            assert!(
+                display.contains(path),
+                "AcquisitionFailed should contain file path for {}",
+                desc
+            );
+            assert!(
+                display.contains("Failed to acquire lock"),
+                "AcquisitionFailed should indicate lock failure for {}",
+                desc
+            );
+            assert!(
+                display.contains("permission")
+                    || display.contains("access")
+                    || display.contains("directory"),
+                "AcquisitionFailed should provide resolution hint for {}",
+                desc
+            );
+        }
+    }
+
+    /// Test AppError Display wrapping behavior
+    #[test]
+    fn test_app_error_display_wrapping_behavior() {
+        // Test that AppError properly wraps and formats nested errors
+
+        // Test Editor error wrapping preserves all information
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "command not found");
+        let editor_error = EditorError::CommandNotFound {
+            command: "vim".to_string(),
+            source: io_error,
+        };
+        let app_error = AppError::Editor(editor_error);
+        let display = format!("{}", app_error);
+
+        assert!(
+            display.starts_with("Editor error: "),
+            "AppError::Editor should start with proper prefix"
+        );
+        assert!(
+            display.contains("vim"),
+            "AppError::Editor should preserve command from underlying error"
+        );
+        assert!(
+            display.contains("not found"),
+            "AppError::Editor should preserve details from underlying error"
+        );
+
+        // Test Lock error wrapping preserves all information
+        let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "permission denied");
+        let lock_error = LockError::AcquisitionFailed {
+            path: PathBuf::from("/test/journal.md"),
+            source: io_error,
+        };
+        let app_error = AppError::Lock(lock_error);
+        let display = format!("{}", app_error);
+
+        assert!(
+            display.starts_with("File locking error: "),
+            "AppError::Lock should start with proper prefix"
+        );
+        assert!(
+            display.contains("/test/journal.md"),
+            "AppError::Lock should preserve path from underlying error"
+        );
+        assert!(
+            display.contains("permission denied"),
+            "AppError::Lock should preserve I/O error details"
+        );
+
+        // Test I/O error wrapping preserves error kind and message
+        let io_error = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let app_error = AppError::Io(io_error);
+        let display = format!("{}", app_error);
+
+        assert!(
+            display.starts_with("I/O error: "),
+            "AppError::Io should start with proper prefix"
+        );
+        assert!(
+            display.contains("file not found"),
+            "AppError::Io should preserve original I/O error message"
+        );
+    }
+
+    /// Test error Display consistency and formatting standards
+    #[test]
+    fn test_error_display_consistency_and_standards() {
+        // Test that all AppError variants follow consistent formatting patterns
+
+        // All AppError variants should have a descriptive prefix followed by ": "
+        let errors = vec![
+            (
+                AppError::Config("test".to_string()),
+                "Configuration error: ",
+            ),
+            (
+                AppError::Journal("test".to_string()),
+                "Journal logic error: ",
+            ),
+            (AppError::Io(io::Error::other("test")), "I/O error: "),
+        ];
+
+        for (error, expected_prefix) in errors {
+            let display = format!("{}", error);
+            assert!(
+                display.starts_with(expected_prefix),
+                "Error display should start with consistent prefix: {}",
+                expected_prefix
+            );
+            assert!(
+                !display.ends_with('\n'),
+                "Error display should not end with newline"
+            );
+            assert!(
+                !display.starts_with(' '),
+                "Error display should not start with whitespace"
+            );
+            assert!(
+                !display.ends_with(' '),
+                "Error display should not end with whitespace"
+            );
+        }
+
+        // Test that error messages are properly formatted and readable
+        let long_message = "This is a very long error message that should still be properly formatted and readable even when it exceeds typical line lengths and contains various types of information";
+        let config_error = AppError::Config(long_message.to_string());
+        let display = format!("{}", config_error);
+
+        assert!(
+            display.contains(long_message),
+            "Long error messages should be preserved completely"
+        );
+        assert!(
+            display.len() > long_message.len(),
+            "Error display should include both prefix and original message"
+        );
+
+        // Test special character handling
+        let special_chars = "Message with\ttabs\nand newlines\rand\0null bytes";
+        let journal_error = AppError::Journal(special_chars.to_string());
+        let display = format!("{}", journal_error);
+
+        assert!(
+            display.contains("tabs"),
+            "Error display should preserve readable parts of special character messages"
+        );
+        assert!(
+            display.starts_with("Journal logic error: "),
+            "Error display should maintain proper formatting even with special characters"
+        );
+    }
 }
