@@ -90,7 +90,7 @@ fn main() -> AppResult<()> {
     // Configure tracing subscriber with appropriate filter
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
-        .unwrap();
+        .map_err(|e| AppError::Config(format!("Invalid log level configuration: {}", e)))?;
 
     // Create the subscriber builder with the filter
     let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
