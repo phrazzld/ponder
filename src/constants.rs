@@ -82,4 +82,3 @@ pub const RETRO_DAYS: i64 = 7;
 pub const TRACING_SERVICE_NAME: &str = "ponder";
 /// Name for the root tracing span covering an application invocation.
 pub const TRACING_ROOT_SPAN_NAME: &str = "app_invocation";
-// Test comment
