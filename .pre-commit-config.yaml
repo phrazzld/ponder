@@ -21,3 +21,12 @@ repos:
         types: [rust]    # Only run on Rust files
         pass_filenames: false # 'cargo clippy' typically operates on the whole project/crate
         stages: [pre-commit]
+
+      - id: glance-update
+        name: glance documentation update
+        description: "Updates glance.md files when significant code or config changes are detected."
+        entry: ./scripts/pre-commit-glance.sh
+        language: system # Uses our custom script
+        files: '^(src/.*\.(rs|toml)|Cargo\.(toml|lock)|README\.md|CONTRIBUTING\.md|PRD\.md|CLAUDE\.md|\.pre-commit-config\.yaml)$'
+        pass_filenames: false # glance operates on the entire project
+        stages: [pre-commit]
