@@ -683,14 +683,14 @@ pub(crate) fn append_timestamp_header(
         );
         append_to_file(&mut file, &entry)?;
     } else {
-        // File has content: ensure a blank line before the time header
+        // File has content: ensure a blank line before the time header with extra spacing
         let prefix = if content.ends_with('\n') {
-            "\n"
+            "\n" // Single newline above timestamp
         } else {
-            "\n\n"
+            "\n\n" // Extra newlines to ensure proper spacing
         };
         let entry = format!(
-            "{}## {}\n\n",
+            "{}## {}\n\n\n", // Extra newline below timestamp
             prefix,
             reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
         );
@@ -952,9 +952,9 @@ mod tests {
         );
         assert!(content.contains(&time_header));
 
-        // Verify the timestamp header is separated by a blank line
+        // Verify the timestamp header is separated with extra spacing above and below
         let separator = format!(
-            "Existing journal content\n\n## {}\n\n",
+            "Existing journal content\n\n## {}\n\n\n",
             reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
         );
         assert!(content.contains(&separator));
