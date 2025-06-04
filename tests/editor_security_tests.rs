@@ -43,17 +43,22 @@ fn test_valid_single_command() {
 
     for editor in editor_values {
         let (success, stderr) = run_with_editor(editor);
-        // May fail if editor isn't installed, but shouldn't have validation errors
+        // Test behavior: Valid single commands should not fail validation
+        // This verifies that simple editor commands pass security checks
         if !success {
+            // Use robust pattern matching: test for absence of validation-related errors
+            // Focus on essential concepts rather than exact error message wording
             assert!(
-                !stderr.contains("cannot contain spaces"),
-                "Editor '{}' shouldn't fail validation for spaces",
-                editor
+                !stderr.contains("spaces") && !stderr.contains("Configuration error"),
+                "Editor '{}' shouldn't fail validation for spaces (got: {})",
+                editor,
+                stderr
             );
             assert!(
-                !stderr.contains("cannot contain shell metacharacters"),
-                "Editor '{}' shouldn't fail validation for metacharacters",
-                editor
+                !stderr.contains("metacharacters") && !stderr.contains("Configuration error"),
+                "Editor '{}' shouldn't fail validation for security concerns (got: {})",
+                editor,
+                stderr
             );
         }
     }
@@ -69,17 +74,22 @@ fn test_valid_paths() {
 
     for editor in editor_values {
         let (success, stderr) = run_with_editor(editor);
-        // May fail if editor isn't installed, but shouldn't have validation errors
+        // Test behavior: Valid absolute paths should not fail validation
+        // This verifies that absolute path editors pass security checks
         if !success {
+            // Use robust pattern matching: test for absence of validation-related errors
+            // Focus on essential concepts rather than exact error message wording
             assert!(
-                !stderr.contains("cannot contain spaces"),
-                "Path '{}' shouldn't fail validation for spaces",
-                editor
+                !stderr.contains("spaces") && !stderr.contains("Configuration error"),
+                "Path '{}' shouldn't fail validation for spaces (got: {})",
+                editor,
+                stderr
             );
             assert!(
-                !stderr.contains("cannot contain shell metacharacters"),
-                "Path '{}' shouldn't fail validation for metacharacters",
-                editor
+                !stderr.contains("metacharacters") && !stderr.contains("Configuration error"),
+                "Path '{}' shouldn't fail validation for security concerns (got: {})",
+                editor,
+                stderr
             );
         }
     }
@@ -132,19 +142,25 @@ fn test_reject_shell_metacharacters() {
 
     for cmd in shell_metacharacter_commands {
         let (success, stderr) = run_with_editor(cmd);
+        // Test behavior: Commands with shell metacharacters must be rejected for security
+        // This is a critical security test preventing command injection attacks
         assert!(
             !success,
             "Command with shell metacharacters should be rejected: {}",
             cmd
         );
 
-        // The command might be rejected either due to spaces or metacharacters,
-        // depending on which check runs first
+        // Use robust pattern matching: focus on essential security validation behavior
+        // Test that the command was rejected due to security concerns, not exact wording
         assert!(
-            stderr.contains("cannot contain shell metacharacters")
-                || stderr.contains("cannot contain spaces"),
-            "Error for '{}' should mention metacharacters or spaces",
-            cmd
+            stderr.contains("Configuration error")
+                && (stderr.contains("metacharacters")
+                    || stderr.contains("spaces")
+                    || stderr.contains("shell")
+                    || stderr.contains("security")),
+            "Error for '{}' should indicate security validation failure, got: {}",
+            cmd,
+            stderr
         );
     }
 }
@@ -153,10 +169,19 @@ fn test_reject_shell_metacharacters() {
 #[serial]
 fn test_reject_empty_editor() {
     let (success, stderr) = run_with_editor("");
+    // Test behavior: Empty editor commands must be rejected
+    // This validates that the application requires a valid editor to function
     assert!(!success, "Empty editor command should be rejected");
+
+    // Use robust pattern matching: focus on essential validation behavior
+    // Test that empty input is rejected, regardless of exact error message wording
     assert!(
-        stderr.contains("cannot be empty"),
-        "Error should mention empty command"
+        stderr.contains("Configuration error")
+            && (stderr.contains("empty")
+                || stderr.contains("missing")
+                || stderr.contains("required")),
+        "Error should indicate empty/missing editor validation failure, got: {}",
+        stderr
     );
 }
 
@@ -212,10 +237,13 @@ fn test_editor_fallback_validation() {
         .env("HOME", temp_dir.path())
         .timeout(std::time::Duration::from_secs(5));
 
-    cmd.assert().failure().stderr(
-        predicate::str::contains("cannot contain shell metacharacters")
-            .or(predicate::str::contains("cannot contain spaces")),
-    );
+    // Test behavior: Invalid EDITOR environment variable should be rejected
+    // This validates security checks apply to fallback editor configuration
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Configuration error").and(
+            predicate::str::contains("metacharacters").or(predicate::str::contains("spaces")),
+        ));
 }
 
 #[test]
@@ -356,17 +384,22 @@ fn test_unicode_characters_in_editor() {
 
     for editor in valid_unicode_editors {
         let (success, stderr) = run_with_editor(editor);
-        // May fail if editor isn't found, but should not fail validation
+        // Test behavior: Valid unicode editor names should not fail validation
+        // This verifies that unicode characters in editor names are properly supported
         if !success {
+            // Use robust pattern matching: test for absence of validation-related errors
+            // Focus on essential concepts rather than exact error message wording
             assert!(
-                !stderr.contains("cannot contain spaces"),
-                "Unicode editor '{}' shouldn't fail validation for spaces",
-                editor
+                !stderr.contains("spaces") && !stderr.contains("Configuration error"),
+                "Unicode editor '{}' shouldn't fail validation for spaces (got: {})",
+                editor,
+                stderr
             );
             assert!(
-                !stderr.contains("cannot contain shell metacharacters"),
-                "Unicode editor '{}' shouldn't fail validation for metacharacters",
-                editor
+                !stderr.contains("metacharacters") && !stderr.contains("Configuration error"),
+                "Unicode editor '{}' shouldn't fail validation for security concerns (got: {})",
+                editor,
+                stderr
             );
         }
     }
