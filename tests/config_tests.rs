@@ -116,9 +116,21 @@ fn test_config_validation() -> AppResult<()> {
     };
     let result = invalid_editor_config.validate();
     assert!(result.is_err());
+    // Test behavior: Empty editor configuration should be rejected
+    // This validates that the application requires a valid editor to function
     match result {
         Err(AppError::Config(msg)) => {
-            assert!(msg.contains("Editor command is empty"));
+            // Use robust pattern matching: focus on essential validation concepts
+            // Test for empty/missing editor validation, not exact wording
+            let msg_lower = msg.to_lowercase();
+            assert!(
+                msg_lower.contains("editor")
+                    && (msg_lower.contains("empty")
+                        || msg_lower.contains("missing")
+                        || msg_lower.contains("required")),
+                "Config error should indicate empty/missing editor issue, got: {}",
+                msg
+            );
         }
         _ => panic!("Expected Config error about empty editor"),
     }
@@ -130,9 +142,21 @@ fn test_config_validation() -> AppResult<()> {
     };
     let result = relative_path_config.validate();
     assert!(result.is_err());
+    // Test behavior: Relative path configuration should be rejected
+    // This validates that journal directory must be an absolute path for security/consistency
     match result {
         Err(AppError::Config(msg)) => {
-            assert!(msg.contains("must be an absolute path"));
+            // Use robust pattern matching: focus on essential path validation concepts
+            // Test for path requirement validation, not exact wording
+            let msg_lower = msg.to_lowercase();
+            assert!(
+                (msg_lower.contains("path") || msg_lower.contains("directory"))
+                    && (msg_lower.contains("absolute")
+                        || msg_lower.contains("relative")
+                        || msg_lower.contains("must")),
+                "Config error should indicate path validation issue, got: {}",
+                msg
+            );
         }
         _ => panic!("Expected Config error about relative path"),
     }

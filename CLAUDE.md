@@ -93,8 +93,52 @@ main.rs
   - `cli_tests.rs`: Tests CLI argument parsing
   - `journal_integration_tests.rs`: Tests full journal operations
   - `config_tests.rs`: Tests configuration loading
+  - `editor_error_integration_tests.rs`: Tests error handling with robust patterns
+  - `locking_tests.rs`: Tests file locking mechanisms
 
 Tests use `tempfile` for isolated filesystem operations and mock the `EDITOR` environment variable for testing. Note: Test configurations should use simple editor commands like `echo` or `true` without arguments to pass validation.
+
+### Error Testing Best Practices
+
+The project uses robust error testing patterns to prevent test brittleness:
+
+**✅ Good practices:**
+```rust
+// Focus on user-visible behavior, not implementation details
+assert!(stderr.contains("not found"));
+assert!(stderr.contains(&command_name));
+
+// Test error type propagation
+match result {
+    Err(AppError::Config(_)) => {}, // Expected
+    other => panic!("Expected Config error, got: {:?}", other),
+}
+
+// Use pattern matching for key components
+assert!(error_msg.contains("Configuration error"));
+assert!(error_msg.contains("shell metacharacters"));
+```
+
+**❌ Avoid brittle patterns:**
+```rust
+// Don't test enum variant names in user output
+assert!(stderr.contains("CommandNotFound"));
+
+// Don't use exact string matching
+assert_eq!(error_msg, "exact error message here");
+
+// Don't test implementation details
+assert!(error_msg.contains("EditorError::"));
+```
+
+### Test Execution
+
+For reliable test execution, especially when debugging concurrency issues:
+```bash
+cargo test -- --test-threads=1  # Run tests sequentially
+```
+
+Concurrent test execution can cause file locking conflicts in integration tests.
 
 ## Pre-commit and CI
 

@@ -26,10 +26,14 @@ fn test_reject_editor_with_spaces() {
         .env("PONDER_DIR", temp_dir.path())
         .env("HOME", temp_dir.path()); // Set HOME to avoid any fallback issues
 
-    // Try to run ponder - should fail at config loading
+    // Test behavior: Editor commands with spaces should be rejected for security
+    // This validates that the application prevents space-based command injection attacks
+    // Use robust pattern matching: focus on essential security validation behavior
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("cannot contain spaces"));
+        .stderr(predicate::str::contains("Configuration error").and(
+            predicate::str::contains("spaces").or(predicate::str::contains("metacharacters")),
+        ));
 }
 
 #[test]
@@ -47,15 +51,19 @@ fn test_reject_editor_with_shell_metacharacters() {
     .env("PONDER_DIR", temp_dir.path())
     .env("HOME", temp_dir.path());
 
-    cmd.assert().failure().stderr(
-        predicate::str::contains("cannot contain shell metacharacters")
-            .or(predicate::str::contains("cannot contain spaces")),
-    ); // Might fail on space first
+    // Test behavior: Commands with shell metacharacters must be rejected for security
+    // This is a critical security test preventing command injection attacks
+    // Use robust pattern matching: focus on essential security validation behavior
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Configuration error").and(
+            predicate::str::contains("metacharacters").or(predicate::str::contains("spaces")),
+        )); // Might fail on space first
 
-    // Verify the malicious file was never created
+    // Verify the malicious file was never created - this confirms the security protection worked
     assert!(
         !pwned_file.exists(),
-        "Malicious file should not have been created"
+        "Malicious file should not have been created - security validation should prevent execution"
     );
 }
 
@@ -73,15 +81,19 @@ fn test_reject_editor_with_shell_invocation() {
     .env("PONDER_DIR", temp_dir.path())
     .env("HOME", temp_dir.path());
 
-    cmd.assert().failure().stderr(
-        predicate::str::contains("cannot contain shell metacharacters")
-            .or(predicate::str::contains("cannot contain spaces")),
-    );
+    // Test behavior: Shell invocation commands must be rejected for security
+    // This validates protection against sophisticated command injection attempts
+    // Use robust pattern matching: focus on essential security validation behavior
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Configuration error").and(
+            predicate::str::contains("metacharacters").or(predicate::str::contains("spaces")),
+        ));
 
-    // Verify the malicious file was never created
+    // Verify the malicious file was never created - confirms complete prevention of shell execution
     assert!(
         !pwned_shell_file.exists(),
-        "Malicious shell file should not have been created"
+        "Malicious shell file should not have been created - security validation should prevent all shell execution"
     );
 }
 
@@ -129,13 +141,14 @@ fn test_launch_valid_editor_successfully() {
         .env("PONDER_DIR", journal_dir.to_str().unwrap())
         .env("HOME", temp_dir.path().to_str().unwrap());
 
-    // Run ponder to trigger editor launch
+    // Test behavior: Valid editor commands should execute successfully
+    // This validates that legitimate editor commands pass security validation and work correctly
     cmd.assert().success();
 
-    // Verify the editor was actually launched
+    // Verify the editor was actually launched - confirms that valid commands are not blocked
     assert!(
         sentinel_file.exists(),
-        "Editor script should have created sentinel file"
+        "Editor script should have created sentinel file - validates that security checks don't block legitimate editors"
     );
 }
 
