@@ -434,7 +434,8 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     .arg(&today_date_str)
                     .assert()
                     .failure()
-                    .stderr(predicate::str::contains("Error: Lock(FileBusy"));
+                    .stderr(predicate::str::contains("File locking error"))
+                    .stderr(predicate::str::contains("currently being edited by another process"));
                     eprintln!("[TEST] Second instance correctly failed with lock error");
                 }
                 Err(_) => {

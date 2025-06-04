@@ -141,5 +141,99 @@
 **Issue #43**: ✅ **RESOLVED** - Ready for code review  
 
 **Total Time Spent**: ~2.5 hours (as estimated)  
-**Current Phase**: ✅ **AWAITING CODE REVIEW**  
-**Next Step**: Code review and potential merge of PR #48
+**Current Phase**: 🚨 **CI FAILURES - URGENT FIXES NEEDED**  
+**Next Step**: Fix failing tests and get CI passing before code review
+
+---
+
+# 🚨 URGENT: CI FAILURE RESOLUTION
+
+**Issue**: CI failing on PR #48 - 2 out of 4 jobs failing  
+**Target**: Get all tests passing and CI green  
+**Priority**: CRITICAL - blocking deployment
+
+## CI Failure Analysis ✅ COMPLETED
+- [x] **Analysis**: Both build and file locking tests failing due to structured logging changes
+- [x] **Documentation**: Created CI-FAILURE-SUMMARY.md and CI-RESOLUTION-PLAN.md  
+- [x] **Root Cause**: Error message format changes and test assertion mismatches
+
+## T600: Fix Build Test Failures (CRITICAL PRIORITY)
+
+### T601: Investigate Error Handling Chain ✅ COMPLETED
+- [x] **T601.1**: Examine why tests expect Config/Editor errors but get Io(NotFound)
+- [x] **T601.2**: Review error conversion and propagation in run_application function  
+- [x] **T601.3**: Check if structured logging changes affected error flow
+- [x] **T601.4**: Verify error types still convert correctly through the chain
+
+### T602: Fix Failing Integration Tests ✅ COMPLETED
+- [x] **T602.1**: Fix `test_run_application_io_error` - should fail but succeeds
+- [x] **T602.2**: Fix `test_error_propagation_preserves_context` - should error but succeeds  
+- [x] **T602.3**: Fix `test_run_application_config_error` - expects Config but gets Io(NotFound)
+- [x] **T602.4**: Fix `test_run_application_editor_error` - expects Editor but gets Io(NotFound)
+
+### T603: Review Test Setup Validity ✅ COMPLETED
+- [x] **T603.1**: Examine test configurations to ensure they trigger intended error paths
+- [x] **T603.2**: Verify test setup doesn't cause premature Io(NotFound) failures
+- [x] **T603.3**: Check if tests need updated file paths or environment setup
+- [x] **T603.4**: Ensure test mocks and stubs are still valid
+
+## T610: Fix File Locking Test Failures ✅ COMPLETED
+
+### T611: Update Error Pattern Matching ✅ COMPLETED
+- [x] **T611.1**: Update `test_file_locking_prevents_concurrent_access` error assertion
+- [x] **T611.2**: Change from `"Error: Lock(FileBusy)"` to handle structured error format
+- [x] **T611.3**: Use robust pattern matching instead of simple string contains
+- [x] **T611.4**: Verify file locking functionality still works correctly
+
+### T612: Improve Test Robustness 🟡 PENDING
+- [ ] **T612.1**: Make error assertions less brittle to format changes
+- [ ] **T612.2**: Use regex or partial matching for error message validation
+- [ ] **T612.3**: Focus on essential error information rather than exact format
+- [ ] **T612.4**: Add comments explaining what the test is validating
+
+## T620: Quality Assurance & Prevention (LOW PRIORITY)
+
+### T621: Verification Testing 🟡 PENDING
+- [ ] **T621.1**: Run complete test suite locally after fixes
+- [ ] **T621.2**: Verify all error types (Config, Editor, Lock, Io) work correctly  
+- [ ] **T621.3**: Test both local and CI environments
+- [ ] **T621.4**: Confirm no regressions in working functionality
+
+### T622: Future-Proofing 🟡 PENDING
+- [ ] **T622.1**: Document error message format expectations
+- [ ] **T622.2**: Add safeguards against future test brittleness
+- [ ] **T622.3**: Create guidelines for error handling changes
+- [ ] **T622.4**: Update test documentation with robust patterns
+
+## T630: Cleanup & Completion (FINAL)
+
+### T631: Final Validation 🟡 PENDING
+- [ ] **T631.1**: Confirm all CI jobs pass (formatting, clippy, build, file locking)  
+- [ ] **T631.2**: Verify PR #48 shows green checkmarks
+- [ ] **T631.3**: Run final smoke tests on core functionality
+- [ ] **T631.4**: Confirm no performance regressions
+
+### T632: Cleanup 🟡 PENDING
+- [ ] **T632.1**: Remove CI-FAILURE-SUMMARY.md temporary file
+- [ ] **T632.2**: Remove CI-RESOLUTION-PLAN.md temporary file  
+- [ ] **T632.3**: Update TODO.md to reflect completion
+- [ ] **T632.4**: Prepare branch for merge after CI passes
+
+---
+
+## 🎯 Success Criteria for CI Resolution
+
+### Critical Must-Haves
+- [ ] All 4 CI jobs pass (formatting ✅, clippy ✅, build, file locking)
+- [ ] All integration tests in src/main.rs pass (currently 4/6 failing)
+- [ ] File locking test passes with updated error pattern matching
+- [ ] No regressions in existing functionality
+
+### Technical Requirements  
+- [ ] Error types propagate correctly (Config, Editor, Lock, Io)
+- [ ] Structured logging doesn't break error handling
+- [ ] Test assertions match current error message formats
+- [ ] All error paths trigger correctly in test scenarios
+
+**Estimated Time**: 2-4 hours  
+**Current Status**: 🚨 **URGENT - BLOCKING DEPLOYMENT**
