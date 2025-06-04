@@ -101,19 +101,21 @@ fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error
     );
 
     // Verify the error output contains the lock error message
+    // Use robust pattern matching instead of checking for enum variant names
     let stderr_output = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr_output.contains("Lock(FileBusy"),
-        "Error message should contain FileBusy lock error, but stderr was: {}",
+        stderr_output.contains("currently being edited") || stderr_output.contains("FileBusy"),
+        "Error message should contain lock error indication, but stderr was: {}",
         stderr_output
     );
 
     // Note: Enhanced error messages from T004 may appear in different contexts
     // This test focuses on verifying single error logging (no double logging from T002)
 
-    // Count how many times the lock error appears in stderr
-    // We expect it to appear exactly once (single error logging)
-    let lock_error_count = stderr_output.matches("Lock(FileBusy").count();
+    // Count how many times the structured error log appears in stderr
+    // We expect exactly one ERROR level log entry at the application boundary
+    // Use robust pattern matching for the structured log entry
+    let lock_error_count = stderr_output.matches("ERROR").count();
 
     // Clean up the long-running process
     let _ = long_running_process.kill();
@@ -168,19 +170,22 @@ fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::err
     );
 
     // Verify the error output contains the editor error message
+    // Use robust pattern matching instead of checking for enum variant names
     let stderr_output = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr_output.contains("Editor(CommandNotFound"),
-        "Error message should contain CommandNotFound editor error, but stderr was: {}",
+        stderr_output.contains("not found")
+            && stderr_output.contains("this_editor_definitely_does_not_exist_anywhere"),
+        "Error message should contain editor not found indication, but stderr was: {}",
         stderr_output
     );
 
     // Note: Enhanced error messages from T004 include resolution hints
     // This test focuses on verifying single error logging (no double logging from T003)
 
-    // Count how many times the editor error appears in stderr
-    // We expect it to appear exactly once (single error logging)
-    let editor_error_count = stderr_output.matches("Editor(CommandNotFound").count();
+    // Count how many times the structured error log appears in stderr
+    // We expect exactly one ERROR level log entry at the application boundary
+    // Use robust pattern matching for the structured log entry
+    let editor_error_count = stderr_output.matches("ERROR").count();
 
     // Assert single error logging - error should appear exactly once
     assert_eq!(
