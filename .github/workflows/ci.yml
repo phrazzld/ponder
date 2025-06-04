@@ -62,7 +62,7 @@ jobs:
       timeout-minutes: 5
     
     - name: Run tests (excluding file locking tests)
-      run: cargo test --verbose -- --skip locking_tests
+      run: cargo test --verbose -- --skip locking_tests --test-threads=1
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
@@ -84,7 +84,7 @@ jobs:
       uses: Swatinem/rust-cache@v2
     
     - name: Run file locking tests
-      run: cargo test --test locking_tests --verbose
+      run: cargo test --test locking_tests --verbose -- --test-threads=1
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests_locking
