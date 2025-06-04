@@ -90,6 +90,7 @@ fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error
         .env("PONDER_DIR", journal_dir.to_str().unwrap())
         .env("HOME", journal_dir.to_str().unwrap())
         .env("RUST_LOG", "debug") // Enable debug logging
+        .env("CI", "true") // Force structured logging to ensure ERROR logs appear
         .arg("--date")
         .arg(test_date)
         .output()?;
@@ -115,7 +116,10 @@ fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error
     // Count how many times the structured error log appears in stderr
     // We expect exactly one ERROR level log entry at the application boundary
     // Use robust pattern matching for the structured log entry
-    let lock_error_count = stderr_output.matches("ERROR").count();
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let combined_output = format!("{}{}", stderr_str, stdout_str);
+    let lock_error_count = combined_output.matches("\"level\":\"ERROR\"").count();
 
     // Clean up the long-running process
     let _ = long_running_process.kill();
@@ -159,6 +163,7 @@ fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::err
         .env("PONDER_DIR", journal_dir.to_str().unwrap())
         .env("HOME", journal_dir.to_str().unwrap())
         .env("RUST_LOG", "debug") // Enable debug logging
+        .env("CI", "true") // Force structured logging to ensure ERROR logs appear
         .arg("--date")
         .arg(test_date)
         .output()?;
@@ -185,7 +190,10 @@ fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::err
     // Count how many times the structured error log appears in stderr
     // We expect exactly one ERROR level log entry at the application boundary
     // Use robust pattern matching for the structured log entry
-    let editor_error_count = stderr_output.matches("ERROR").count();
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let combined_output = format!("{}{}", stderr_str, stdout_str);
+    let editor_error_count = combined_output.matches("\"level\":\"ERROR\"").count();
 
     // Assert single error logging - error should appear exactly once
     assert_eq!(
