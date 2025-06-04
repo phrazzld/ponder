@@ -724,7 +724,11 @@ pub(crate) fn append_timestamp_header(
         append_to_file(&mut file, &entry)?;
     } else {
         // File has content: ensure a blank line before the time header
-        let prefix = if content.ends_with('\n') { "\n" } else { "\n\n" };
+        let prefix = if content.ends_with('\n') {
+            "\n"
+        } else {
+            "\n\n"
+        };
         let entry = format!(
             "{}## {}\n\n",
             prefix,
