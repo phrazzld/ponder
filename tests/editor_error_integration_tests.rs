@@ -60,11 +60,13 @@ fn test_editor_command_not_found() -> Result<(), Box<dyn std::error::Error>> {
     let (success, stderr) = run_with_editor("nonexistent_editor_command")?;
     assert!(!success, "Command with nonexistent editor should fail");
 
-    if !stderr.contains("CommandNotFound") {
+    // Use robust pattern matching instead of checking for enum variant names
+    // This safeguards against test brittleness when error message formats change
+    if !stderr.contains("not found") || !stderr.contains("nonexistent_editor_command") {
         let debug_context = format!(
             "Error message validation failed for nonexistent editor command.\n\
             \n\
-            Expected: Error message should contain 'CommandNotFound'\n\
+            Expected: Error message should contain 'not found' and the command name\n\
             Actual stderr output: {}\n\
             \n\
             Command execution context:\n{}\n\
@@ -144,8 +146,10 @@ fn test_editor_non_zero_exit() -> Result<(), Box<dyn std::error::Error>> {
     let (success, stderr) = run_with_editor(script_path_str)?;
 
     assert!(!success, "Command with failing editor should fail");
+    // Use robust pattern matching for non-zero exit status
+    // This safeguards against test brittleness when error message formats change
     assert!(
-        stderr.contains("NonZeroExit"),
+        stderr.contains("non-zero status code") || stderr.contains("exited with"),
         "Error message should indicate non-zero exit status, got: {}",
         stderr
     );
