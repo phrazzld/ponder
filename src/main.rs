@@ -52,11 +52,12 @@ use uuid::Uuid;
 /// Runs the core application logic with the given correlation ID and CLI arguments.
 ///
 /// This function contains the main application flow:
-/// 1. Initializes logging based on CLI arguments
-/// 2. Loads and validates configuration
-/// 3. Ensures the journal directory exists
-/// 4. Determines which entries to open based on CLI arguments
-/// 5. Opens the appropriate journal entries
+/// 1. Loads and validates configuration
+/// 2. Ensures the journal directory exists
+/// 3. Determines which entries to open based on CLI arguments
+/// 4. Opens the appropriate journal entries
+///
+/// Note: Tracing/logging setup must be done before calling this function.
 ///
 /// # Arguments
 ///
@@ -82,35 +83,6 @@ fn run_application(
     current_datetime: chrono::DateTime<Local>,
 ) -> AppResult<()> {
     let current_date = current_datetime.naive_local().date();
-
-    // Determine log format based on CLI args
-    let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
-        || std::env::var(constants::ENV_VAR_CI).is_ok();
-
-    // Configure tracing subscriber with appropriate filter
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
-        .map_err(|e| AppError::Config(format!("Invalid log level configuration: {}", e)))?;
-
-    // Create the subscriber builder with the filter
-    let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
-
-    // Add the appropriate formatter based on the log format
-    // Use try_init to avoid panics in test environments where subscriber may already be set
-    let _init_result = if use_json_logging {
-        // JSON logging for CI or when explicitly requested
-        let json_layer = fmt::layer()
-            .json()
-            .with_timer(fmt::time::ChronoUtc::default()) // Use UTC time with RFC 3339 format
-            .with_current_span(true) // Include current span info
-            .with_span_list(true) // Include span hierarchy
-            .flatten_event(true); // Flatten event fields into the JSON object
-        subscriber_builder.with(json_layer).try_init()
-    } else {
-        // Human-readable logging for development
-        let pretty_layer = fmt::layer().pretty().with_writer(std::io::stderr);
-        subscriber_builder.with(pretty_layer).try_init()
-    };
 
     // Create and enter the root span with correlation ID
     let root_span = info_span!(
@@ -159,9 +131,10 @@ fn run_application(
 /// This function handles the application startup and error boundary:
 /// 1. Obtains current date/time
 /// 2. Parses command-line arguments
-/// 3. Generates correlation ID for tracing
-/// 4. Runs the core application logic
-/// 5. Handles any errors with structured logging and user-friendly messages
+/// 3. Initializes logging/tracing
+/// 4. Generates correlation ID for tracing
+/// 5. Runs the core application logic
+/// 6. Handles any errors with structured logging and user-friendly messages
 ///
 /// The main function implements structured error logging at the application boundary,
 /// ensuring that all errors are properly logged with correlation IDs for monitoring
@@ -172,6 +145,38 @@ fn main() {
 
     // Parse command-line arguments first (needed for log format)
     let args = CliArgs::parse();
+
+    // Initialize tracing/logging before anything else so it's available for error boundary
+    let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
+        || std::env::var(constants::ENV_VAR_CI).is_ok();
+
+    // Configure tracing subscriber with appropriate filter
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
+        .unwrap_or_else(|e| {
+            eprintln!("Error: Invalid log level configuration: {}", e);
+            std::process::exit(1);
+        });
+
+    // Create the subscriber builder with the filter
+    let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
+
+    // Add the appropriate formatter based on the log format
+    // Use try_init to avoid panics in test environments where subscriber may already be set
+    let _init_result = if use_json_logging {
+        // JSON logging for CI or when explicitly requested
+        let json_layer = fmt::layer()
+            .json()
+            .with_timer(fmt::time::ChronoUtc::default()) // Use UTC time with RFC 3339 format
+            .with_current_span(true) // Include current span info
+            .with_span_list(true) // Include span hierarchy
+            .flatten_event(true); // Flatten event fields into the JSON object
+        subscriber_builder.with(json_layer).try_init()
+    } else {
+        // Human-readable logging for development
+        let pretty_layer = fmt::layer().pretty().with_writer(std::io::stderr);
+        subscriber_builder.with(pretty_layer).try_init()
+    };
 
     // Generate a correlation ID for this application invocation
     let correlation_id = Uuid::new_v4().to_string();
