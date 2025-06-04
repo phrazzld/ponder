@@ -993,8 +993,10 @@ mod tests {
         assert!(content.contains(&time_header));
 
         // Verify the timestamp header is separated by a blank line
-        let separator = format!("Existing journal content\n\n## {}",
-            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT));
+        let separator = format!(
+            "Existing journal content\n\n## {}\n\n",
+            reference_datetime.format(constants::JOURNAL_HEADER_TIME_FORMAT)
+        );
         assert!(content.contains(&separator));
 
         // The original date header should still be there (only once)
