@@ -3,12 +3,15 @@
 //! This module provides secure temporary file operations, preferring RAM-based tmpfs
 //! filesystems when available to minimize disk persistence of decrypted content.
 
+use crate::crypto::age::{decrypt_file_streaming, encrypt_file_streaming};
 use crate::errors::AppResult;
 use age::secrecy::SecretString;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use tracing::{debug, warn};
 
 /// Temporary filesystem paths to check for RAM-based storage.
-#[allow(dead_code)]
 const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
 
 /// Get a secure temporary directory, preferring tmpfs when available.
@@ -29,7 +32,23 @@ const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub fn get_secure_temp_dir() -> AppResult<PathBuf> {
-    todo!("Implement get_secure_temp_dir")
+    // Try tmpfs paths first (RAM-based, more secure)
+    for tmpfs_path in TMPFS_PATHS {
+        let path = Path::new(tmpfs_path);
+        if path.exists() && path.is_dir() {
+            debug!("Using tmpfs directory: {}", tmpfs_path);
+            return Ok(path.to_path_buf());
+        }
+    }
+
+    // Fall back to system temp directory
+    let temp_dir = std::env::temp_dir();
+    warn!(
+        "tmpfs not available, using system temp directory: {:?}. \
+         Decrypted content may persist on disk.",
+        temp_dir
+    );
+    Ok(temp_dir)
 }
 
 /// Decrypt an encrypted file to a temporary location.
@@ -51,9 +70,29 @@ pub fn get_secure_temp_dir() -> AppResult<PathBuf> {
 /// // Use temp_path...
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[allow(unused_variables)]
 pub fn decrypt_to_temp(encrypted_path: &Path, passphrase: &SecretString) -> AppResult<PathBuf> {
-    todo!("Implement decrypt_to_temp")
+    let temp_dir = get_secure_temp_dir()?;
+
+    // Generate unique temp file name based on original file
+    let file_name = encrypted_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("temp");
+    let temp_path = temp_dir.join(format!("ponder-{}-{}", file_name, uuid::Uuid::new_v4()));
+
+    // Decrypt to temp file
+    decrypt_file_streaming(encrypted_path, &temp_path, passphrase)?;
+
+    // Set secure permissions (0o600 on Unix)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        fs::set_permissions(&temp_path, perms)?;
+        debug!("Set 0o600 permissions on temp file: {:?}", temp_path);
+    }
+
+    Ok(temp_path)
 }
 
 /// Re-encrypt a temporary file and securely delete the temp file.
@@ -80,13 +119,18 @@ pub fn decrypt_to_temp(encrypted_path: &Path, passphrase: &SecretString) -> AppR
 /// encrypt_from_temp(&temp_path, encrypted, &passphrase)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[allow(unused_variables)]
 pub fn encrypt_from_temp(
     temp_path: &Path,
     encrypted_path: &Path,
     passphrase: &SecretString,
 ) -> AppResult<()> {
-    todo!("Implement encrypt_from_temp")
+    // Encrypt from temp to target location
+    encrypt_file_streaming(temp_path, encrypted_path, passphrase)?;
+
+    // Securely delete temp file
+    secure_delete(temp_path)?;
+
+    Ok(())
 }
 
 /// Best-effort secure file deletion (overwrite + remove).
@@ -94,30 +138,190 @@ pub fn encrypt_from_temp(
 /// Overwrites the file with zeros before removing it. This is not
 /// cryptographically secure (SSD wear leveling, filesystem journals),
 /// but better than direct deletion.
-#[allow(dead_code, unused_variables)]
 fn secure_delete(path: &Path) -> AppResult<()> {
-    todo!("Implement secure_delete")
+    // Get file size
+    let metadata = fs::metadata(path)?;
+    let file_size = metadata.len() as usize;
+
+    // Overwrite with zeros
+    let mut file = File::create(path)?;
+    let zeros = vec![0u8; file_size.min(1024 * 1024)]; // Write in 1MB chunks max
+
+    let mut remaining = file_size;
+    while remaining > 0 {
+        let chunk_size = remaining.min(zeros.len());
+        file.write_all(&zeros[..chunk_size])?;
+        remaining -= chunk_size;
+    }
+    file.sync_all()?;
+
+    // Remove the file
+    fs::remove_file(path)?;
+    debug!("Securely deleted temp file: {:?}", path);
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use age::secrecy::SecretString;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
     #[test]
     fn test_get_secure_temp_dir() {
-        // TODO: Implement test
+        let temp_dir = get_secure_temp_dir();
+        assert!(temp_dir.is_ok());
+
+        let dir = temp_dir.unwrap();
+        assert!(dir.exists());
+        assert!(dir.is_dir());
+
+        // On macOS/non-Linux systems, should fall back to system temp
+        // On Linux, might find tmpfs
     }
 
     #[test]
     fn test_decrypt_to_temp_permissions() {
-        // TODO: Implement test
+        let passphrase = SecretString::new("test-passphrase".to_string());
+
+        // Create a test encrypted file
+        let plaintext = b"Test content for permissions check";
+        let encrypted_file = NamedTempFile::new().expect("create encrypted file");
+
+        // Encrypt the plaintext
+        let encrypted =
+            crate::crypto::age::encrypt_with_passphrase(plaintext, &passphrase).unwrap();
+        std::fs::write(encrypted_file.path(), encrypted).expect("write encrypted data");
+
+        // Decrypt to temp
+        let temp_path = decrypt_to_temp(encrypted_file.path(), &passphrase);
+        assert!(temp_path.is_ok());
+
+        let temp = temp_path.unwrap();
+        assert!(temp.exists());
+
+        // Check permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(&temp).expect("get metadata");
+            let perms = metadata.permissions();
+            assert_eq!(
+                perms.mode() & 0o777,
+                0o600,
+                "temp file should have 0o600 perms"
+            );
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&temp);
     }
 
     #[test]
     fn test_encrypt_from_temp_cleanup() {
-        // TODO: Implement test
+        let passphrase = SecretString::new("test-passphrase".to_string());
+
+        // Create a temp file with content
+        let mut temp_file = NamedTempFile::new().expect("create temp file");
+        let plaintext = b"Test content for cleanup";
+        temp_file.write_all(plaintext).expect("write plaintext");
+        temp_file.flush().expect("flush");
+
+        let temp_path = temp_file.path().to_path_buf();
+        let encrypted_file = NamedTempFile::new().expect("create encrypted file");
+
+        // Keep temp file from being auto-deleted - persist() doesn't delete the file
+        let temp_persisted = temp_file.into_temp_path();
+        assert!(
+            temp_path.exists(),
+            "temp file should exist before encryption"
+        );
+
+        // Encrypt from temp
+        let result = encrypt_from_temp(&temp_path, encrypted_file.path(), &passphrase);
+        assert!(result.is_ok(), "encryption should succeed: {:?}", result);
+
+        // Temp file should be deleted
+        assert!(
+            !temp_path.exists(),
+            "temp file should be deleted after encryption"
+        );
+
+        // Encrypted file should exist and be decryptable
+        assert!(encrypted_file.path().exists());
+
+        // Decrypt to verify
+        let output_path = temp_path.with_extension("decrypted");
+        let decrypted = crate::crypto::age::decrypt_file_streaming(
+            encrypted_file.path(),
+            &output_path,
+            &passphrase,
+        );
+        assert!(decrypted.is_ok());
+
+        // Clean up
+        let _ = fs::remove_file(&output_path);
+        let _ = temp_persisted.close(); // Explicitly clean up if it still exists
     }
 
     #[test]
     fn test_secure_delete() {
-        // TODO: Implement test
+        // Create a test file
+        let mut temp_file = NamedTempFile::new().expect("create temp file");
+        let content = b"Sensitive data that should be overwritten";
+        temp_file.write_all(content).expect("write content");
+        temp_file.flush().expect("flush");
+
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Keep file from being auto-deleted - persist keeps the file
+        let _temp_persisted = temp_file.into_temp_path();
+
+        // File should exist
+        assert!(temp_path.exists(), "file should exist before secure delete");
+
+        // Securely delete
+        let result = secure_delete(&temp_path);
+        assert!(result.is_ok(), "secure delete should succeed");
+
+        // File should no longer exist
+        assert!(!temp_path.exists(), "file should be deleted");
+    }
+
+    #[test]
+    fn test_decrypt_encrypt_roundtrip() {
+        let passphrase = SecretString::new("test-roundtrip-passphrase".to_string());
+        let plaintext = b"Full roundtrip test content with multiple lines\nLine 2\nLine 3";
+
+        // Create encrypted file
+        let encrypted_file = NamedTempFile::new().expect("create encrypted file");
+        let encrypted =
+            crate::crypto::age::encrypt_with_passphrase(plaintext, &passphrase).unwrap();
+        std::fs::write(encrypted_file.path(), encrypted).expect("write encrypted");
+
+        // Decrypt to temp
+        let temp_path = decrypt_to_temp(encrypted_file.path(), &passphrase).unwrap();
+        assert!(temp_path.exists());
+
+        // Verify content
+        let decrypted_content = fs::read(&temp_path).expect("read temp file");
+        assert_eq!(decrypted_content, plaintext);
+
+        // Re-encrypt from temp
+        let new_encrypted = NamedTempFile::new().expect("create new encrypted file");
+        encrypt_from_temp(&temp_path, new_encrypted.path(), &passphrase).unwrap();
+
+        // Temp should be deleted
+        assert!(!temp_path.exists());
+
+        // New encrypted file should be decryptable
+        let final_decrypted = crate::crypto::age::decrypt_with_passphrase(
+            &fs::read(new_encrypted.path()).unwrap(),
+            &passphrase,
+        )
+        .unwrap();
+        assert_eq!(final_decrypted, plaintext);
     }
 }
