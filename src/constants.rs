@@ -82,3 +82,22 @@ pub const RETRO_DAYS: i64 = 7;
 pub const TRACING_SERVICE_NAME: &str = "ponder";
 /// Name for the root tracing span covering an application invocation.
 pub const TRACING_ROOT_SPAN_NAME: &str = "app_invocation";
+
+// Cryptography Configuration
+/// Default session timeout in minutes for passphrase caching.
+///
+/// After this period of inactivity, the user will need to re-enter their passphrase.
+/// This balances security (shorter timeout = less exposure) with usability
+/// (longer timeout = fewer prompts).
+pub const DEFAULT_SESSION_TIMEOUT_MINUTES: u64 = 30;
+
+/// File extension for encrypted files using age encryption.
+///
+/// Encrypted journal entries will have this extension appended (e.g., "20240615.md.age").
+pub const ENCRYPTED_FILE_EXTENSION: &str = ".age";
+
+/// RAM-based temporary filesystem paths to check for secure temp file storage.
+///
+/// These tmpfs filesystems store files in RAM, minimizing disk persistence of
+/// decrypted content. Checked in order; falls back to system temp if none found.
+pub const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
