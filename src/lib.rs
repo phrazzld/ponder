@@ -62,6 +62,8 @@ pub mod config;
 pub mod constants;
 /// Cryptographic operations for journal encryption and security
 pub mod crypto;
+/// Database operations for journal metadata and embeddings
+pub mod db;
 /// Error types and utilities for error handling
 pub mod errors;
 /// Core journal functionality
@@ -72,5 +74,6 @@ pub mod journal_io;
 // Re-export important types for convenience
 pub use cli::CliArgs;
 pub use config::Config;
-pub use errors::{AppError, AppResult, LockError};
+pub use db::Database;
+pub use errors::{AppError, AppResult, DatabaseError, LockError};
 pub use journal_core::DateSpecifier;

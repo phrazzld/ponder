@@ -101,3 +101,21 @@ pub const ENCRYPTED_FILE_EXTENSION: &str = ".age";
 /// These tmpfs filesystems store files in RAM, minimizing disk persistence of
 /// decrypted content. Checked in order; falls back to system temp if none found.
 pub const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
+
+// Database Configuration
+/// Default database filename within the journal directory.
+///
+/// The encrypted database is stored alongside journal entries.
+pub const DEFAULT_DB_FILENAME: &str = "ponder.db";
+
+/// Embedding vector dimensions for the nomic-embed-text model.
+///
+/// nomic-embed-text produces 768-dimensional embeddings. This constant
+/// ensures consistency across embedding storage and retrieval operations.
+pub const EMBEDDING_DIMENSIONS: usize = 768;
+
+/// Default limit for vector similarity search results.
+///
+/// Controls how many similar chunks to return when performing semantic search.
+/// This balances result relevance with processing time and context window constraints.
+pub const VECTOR_SEARCH_LIMIT: usize = 12;

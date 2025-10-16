@@ -245,6 +245,38 @@ pub enum CryptoError {
     DecryptionFailed(#[source] age::DecryptError),
 }
 
+/// Represents specific error cases that can occur during database operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when interacting with the encrypted SQLite database.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::DatabaseError;
+///
+/// let error = DatabaseError::NotFound("Entry with id 123 not found".to_string());
+/// assert!(format!("{}", error).contains("not found"));
+/// ```
+#[derive(Debug, Error)]
+pub enum DatabaseError {
+    /// SQLite database error.
+    #[error("Database error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+
+    /// Connection pool error.
+    #[error("Failed to get connection from pool: {0}")]
+    Pool(#[from] r2d2::Error),
+
+    /// Requested entry not found in database.
+    #[error("Entry not found: {0}")]
+    NotFound(String),
+
+    /// Custom database error with detailed message.
+    #[error("Database error: {0}")]
+    Custom(String),
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Errors related to configuration loading or validation.
@@ -281,6 +313,13 @@ pub enum AppError {
     /// information about what went wrong with encryption, decryption, or key management.
     #[error("Cryptographic error: {0}")]
     Crypto(#[from] CryptoError),
+
+    /// Errors related to database operations.
+    ///
+    /// This variant uses a dedicated DatabaseError type to provide detailed
+    /// information about what went wrong with database operations.
+    #[error("Database error: {0}")]
+    Database(#[from] DatabaseError),
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
