@@ -60,6 +60,8 @@ pub mod cli;
 pub mod config;
 /// Centralized constants used throughout the application
 pub mod constants;
+/// Cryptographic operations for journal encryption and security
+pub mod crypto;
 /// Error types and utilities for error handling
 pub mod errors;
 /// Core journal functionality
