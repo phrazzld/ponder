@@ -205,6 +205,46 @@ pub enum LockError {
     },
 }
 
+/// Represents specific error cases that can occur during cryptographic operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when performing encryption, decryption, or key management operations.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::CryptoError;
+///
+/// let error = CryptoError::VaultLocked;
+/// assert!(format!("{}", error).contains("locked"));
+/// ```
+#[derive(Debug, Error)]
+pub enum CryptoError {
+    /// Vault is locked and needs to be unlocked before operations can proceed.
+    #[error("Vault is locked. Run command again to unlock.")]
+    VaultLocked,
+
+    /// Incorrect passphrase provided for decryption.
+    #[error("Incorrect passphrase")]
+    InvalidPassphrase(#[source] age::DecryptError),
+
+    /// Encrypted data uses unsupported encryption format.
+    #[error("Unsupported encryption format")]
+    UnsupportedFormat,
+
+    /// Invalid file path provided for encryption operation.
+    #[error("Invalid file path: {0}")]
+    InvalidPath(String),
+
+    /// Error during encryption operation.
+    #[error("Encryption failed: {0}")]
+    EncryptionFailed(#[source] age::EncryptError),
+
+    /// Error during decryption operation.
+    #[error("Decryption failed: {0}")]
+    DecryptionFailed(#[source] age::DecryptError),
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Errors related to configuration loading or validation.
@@ -234,6 +274,13 @@ pub enum AppError {
     /// information about what went wrong with file locking operations.
     #[error("File locking error: {0}")]
     Lock(#[from] LockError),
+
+    /// Errors related to cryptographic operations.
+    ///
+    /// This variant uses a dedicated CryptoError type to provide detailed
+    /// information about what went wrong with encryption, decryption, or key management.
+    #[error("Cryptographic error: {0}")]
+    Crypto(#[from] CryptoError),
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
