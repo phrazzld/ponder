@@ -71,7 +71,7 @@ pub struct CliArgs {
     /// Supported values are:
     /// - "text" (default): Human-readable output format
     /// - "json": Structured JSON format, useful for parsing and analysis
-    #[clap(long = "log-format", possible_values = &[constants::LOG_FORMAT_TEXT, constants::LOG_FORMAT_JSON], default_value = constants::LOG_FORMAT_TEXT)]
+    #[clap(long = "log-format", value_parser = [constants::LOG_FORMAT_TEXT, constants::LOG_FORMAT_JSON], default_value = constants::LOG_FORMAT_TEXT)]
     pub log_format: String,
 }
 

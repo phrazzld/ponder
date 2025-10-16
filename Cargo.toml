@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.26"
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 thiserror = "1.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt", "registry", "chrono"] }
+tracing-subscriber = { version = "0.3.20", features = ["json", "env-filter", "fmt", "registry", "chrono"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 shellexpand = "3.1"
 fs2 = "0.4.3"
