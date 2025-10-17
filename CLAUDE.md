@@ -33,70 +33,172 @@ pre-commit run --all-files  # Run hooks manually
 
 ## High-Level Architecture
 
-Ponder is a simple journaling CLI tool built in Rust with a modular architecture focused on simplicity and direct function calls rather than abstractions.
+Ponder v2.0 is an AI-powered encrypted journaling CLI tool built in Rust. The architecture follows a modular design with clear separation of concerns: CLI parsing, configuration, cryptography, database, AI operations, and high-level orchestration.
 
-### Core Modules
+### Core Modules (v2.0)
 
-- **`src/cli/`**: Command-line interface using clap. Handles argument parsing and provides methods to convert between CLI arguments and `DateSpecifier`.
+- **`src/cli/`**: Command-line interface using clap with subcommand architecture.
+  - Implements `PonderCommand` enum: Edit, Ask, Reflect, Search, Lock
+  - `EditArgs`: Supports retro/reminisce/date modes
+  - `AskArgs`, `ReflectArgs`, `SearchArgs`: AI operation parameters
+  - Redacts sensitive journal queries in Debug output
 
-- **`src/config/`**: Configuration management. Loads settings from environment variables (`PONDER_DIR`, `PONDER_EDITOR`, `EDITOR`) with defaults. Validates configuration and ensures paths are properly expanded. Note: Editor commands are strictly validated for security - they must be single commands without spaces, arguments, or shell metacharacters.
+- **`src/config/`**: Configuration management with v2.0 settings.
+  - Environment variables: `PONDER_DIR`, `PONDER_EDITOR`, `PONDER_DB`, `PONDER_SESSION_TIMEOUT`, `OLLAMA_URL`
+  - Validates paths, editor commands (strict security), and database locations
+  - Default: 30min session timeout, local Ollama at http://127.0.0.1:11434
 
-- **`src/errors/`**: Error handling infrastructure using `thiserror`. Defines `AppError` and `AppResult` types used throughout the codebase.
+- **`src/errors/`**: Comprehensive error handling using `thiserror`.
+  - `AppError`: Top-level error type with variants for Config, Crypto, Database, AI, Editor, Lock, I/O
+  - Specialized error types: `CryptoError`, `DatabaseError`, `AIError`, `EditorError`, `LockError`
+  - User-friendly error messages with actionable guidance (e.g., "Try: ollama pull {model}")
 
-- **`src/journal_core/`**: Core journal functionality without I/O operations. Contains:
-  - `DateSpecifier`: Enum defining different date selection modes (Today, Retro, Reminisce, Specific)
-  - Pure logic functions for date handling and calculations
-  - No filesystem or I/O operations
+- **`src/crypto/`**: Age encryption and secure session management.
+  - `age.rs`: File encryption/decryption with age passphrase-based encryption
+  - `session.rs`: SessionManager with auto-lock timeout, secure passphrase caching (zeroization)
+  - `temp.rs`: Secure temporary file handling with 0o600 permissions, automatic cleanup
 
-- **`src/journal_io/`**: Journal I/O operations and file management. Contains:
-  - `ensure_journal_directory_exists()`: Creates journal directory if needed
-  - `open_journal_entries()`: Main function that orchestrates opening journal entries
-  - Helper functions for file operations and editor launching
-  - All filesystem interactions
+- **`src/db/`**: SQLCipher encrypted database for metadata and embeddings.
+  - Connection pooling with r2d2
+  - `entries.rs`: Journal entry metadata (path, date, checksum, word count)
+  - `embeddings.rs`: Vector embeddings with HNSW index for semantic search
+  - Pragmas: journal_mode=WAL, synchronous=NORMAL, temp_store=MEMORY
 
-- **`src/main.rs`**: Application entry point. Coordinates the flow:
-  1. Parse CLI args
-  2. Load configuration
-  3. Ensure journal directory exists
-  4. Convert CLI args to DateSpecifier
-  5. Resolve dates based on DateSpecifier
-  6. Open journal entries for the resolved dates
+- **`src/ai/`**: Ollama integration for embeddings and LLM operations.
+  - `client.rs`: OllamaClient for API interactions (embed, chat)
+  - `chunking.rs`: Text chunking with configurable size/overlap (default: 512/50 chars)
+  - `prompts.rs`: Structured prompts for ask (RAG) and reflect operations
+  - Models: nomic-embed-text (embeddings), qwen2.5:3b (chat)
 
-### Module Flow
+- **`src/ops/`**: High-level user-facing operations combining crypto, DB, and AI.
+  - `edit.rs`: Edit encrypted entries (YYYY/MM/DD.md.age), auto-generate embeddings on change
+  - `ask.rs`: RAG query pipeline (embed → vector search → decrypt → LLM)
+  - `reflect.rs`: AI reflection on journal entries
+  - `search.rs`: Semantic search returning ranked excerpts with similarity scores
+
+- **`src/journal_core/`**: Pure date logic (v1.0 compatibility).
+  - `DateSpecifier`: Today, Retro, Reminisce, Specific date modes
+  - Date resolution without I/O
+
+- **`src/journal_io/`**: Legacy v1.0 journal I/O (maintained for compatibility).
+
+- **`src/main.rs`**: Application entry point with command dispatch.
+  1. Parse CLI subcommand
+  2. Load and validate config
+  3. Dispatch to command handler (cmd_edit, cmd_ask, cmd_reflect, cmd_search, cmd_lock)
+  4. Each handler initializes: SessionManager → Database → OllamaClient → ops:: function
+
+### Module Flow (v2.0)
 
 ```
 main.rs
-  ├─> cli/mod.rs (parse CLI args)
-  ├─> config/mod.rs (load and validate config)
-  ├─> journal_io/mod.rs (ensure journal directory exists)
-  ├─> journal_core/mod.rs (create DateSpecifier, resolve dates)
-  └─> journal_io/mod.rs (open journal entries)
-        ├─> get_entry_path_for_date()
-        ├─> append_date_header_if_needed()
-        └─> launch_editor()
+  ├─> cli/mod.rs (parse subcommand: Edit|Ask|Reflect|Search|Lock)
+  ├─> config/mod.rs (load config with v2.0 settings)
+  └─> Command dispatch:
+
+      cmd_edit (edit subcommand):
+        ├─> journal_io::ensure_journal_directory_exists()
+        ├─> journal_core::DateSpecifier (resolve dates)
+        ├─> crypto::SessionManager (unlock session)
+        ├─> db::Database::open() (encrypted SQLite)
+        ├─> ai::OllamaClient (for embeddings)
+        └─> ops::edit_entry() for each date
+              ├─> decrypt_to_temp() or create new
+              ├─> launch_editor()
+              ├─> encrypt_from_temp()
+              ├─> db::entries::upsert_entry()
+              └─> generate embeddings if content changed
+
+      cmd_ask (RAG query):
+        ├─> SessionManager + Database + OllamaClient
+        └─> ops::ask_question()
+              ├─> ai_client.embed(question)
+              ├─> db::embeddings::search_similar_chunks()
+              ├─> decrypt matching entries
+              └─> ai_client.chat(context + question)
+
+      cmd_reflect (AI reflection):
+        ├─> SessionManager + Database + OllamaClient
+        └─> ops::reflect_on_entry()
+              ├─> db::entries::get_entry_by_date()
+              ├─> decrypt entry
+              └─> ai_client.chat(reflection prompt)
+
+      cmd_search (semantic search):
+        ├─> SessionManager + Database + OllamaClient
+        └─> ops::search_entries()
+              ├─> ai_client.embed(query)
+              ├─> db::embeddings::search_similar_chunks()
+              ├─> decrypt matching chunks
+              └─> return SearchResults (date, excerpt, score)
+
+      cmd_lock:
+        └─> SessionManager::lock() (clear passphrase)
 ```
 
-### Key Design Decisions
+### Key Design Decisions (v2.0)
 
-- Direct function calls instead of trait abstractions for simplicity
-- Separation of pure logic (`journal_core`) from I/O operations (`journal_io`)
-- All filesystem operations isolated in the `journal_io` module
-- Journal entries stored as `YYYYMMDD.md` files in configured directory
-- Automatic timestamp header added to new journal files
-- Uses system environment for editor configuration
-- Strict validation of editor commands for security
+**Security:**
+- Age passphrase-based encryption for journal files (.md.age extension)
+- SQLCipher for encrypted database (metadata + embeddings)
+- Session manager with auto-lock timeout (configurable, default 30min)
+- Secure temp files with 0o600 permissions, automatic cleanup on panic
+- Passphrase zeroization via SecretString
+- Strict editor command validation (no spaces, args, shell metacharacters)
 
-## Testing Structure
+**Architecture:**
+- Direct function calls instead of trait abstractions (simplicity)
+- Modular design: crypto, db, ai, ops modules with clear boundaries
+- Separation of pure logic (journal_core) from I/O (journal_io, ops)
+- Deep modules: Simple interfaces hiding complex implementations
+- No information leakage: Return domain objects, not raw DB rows
 
-- Unit tests are colocated with modules using `#[cfg(test)]` modules
-- Integration tests in `tests/` directory:
-  - `cli_tests.rs`: Tests CLI argument parsing
-  - `journal_integration_tests.rs`: Tests full journal operations
-  - `config_tests.rs`: Tests configuration loading
-  - `editor_error_integration_tests.rs`: Tests error handling with robust patterns
-  - `locking_tests.rs`: Tests file locking mechanisms
+**Storage:**
+- Encrypted entries: YYYY/MM/DD.md.age directory structure
+- SQLite database: entry metadata + vector embeddings
+- BLAKE3 checksums for content change detection
+- Automatic embedding generation on content change only
 
-Tests use `tempfile` for isolated filesystem operations and mock the `EDITOR` environment variable for testing. Note: Test configurations should use simple editor commands like `echo` or `true` without arguments to pass validation.
+**AI Integration:**
+- Local Ollama for embeddings (nomic-embed-text) and chat (qwen2.5:3b)
+- Text chunking: 512 chars with 50 char overlap
+- Vector search with cosine similarity
+- RAG pipeline: embed query → vector search → decrypt → LLM
+- Graceful degradation when Ollama offline
+
+**v1.0 Compatibility:**
+- Legacy journal_io module maintained
+- DateSpecifier (Today/Retro/Reminisce/Specific) preserved
+- Edit command supports all v1.0 date modes
+
+## Testing Structure (v2.0)
+
+### Unit Tests
+- Colocated with modules using `#[cfg(test)]` modules
+- 129 unit tests covering:
+  - `crypto/`: Encryption, decryption, session management, temp file handling
+  - `db/`: Database operations, entries, embeddings, vector search
+  - `ai/`: Chunking, prompts (LLM tests require Ollama)
+  - `ops/`: Directory structure validation
+  - `cli/`: Subcommand parsing (12 tests)
+  - `config/`: v2.0 configuration loading
+  - `errors/`: Error types, messages, source chaining (20 tests)
+  - `journal_core/`: DateSpecifier resolution
+
+### Integration Tests (`tests/`)
+- `cli_tests.rs`: CLI argument parsing (v1.0)
+- `journal_integration_tests.rs`: Full journal operations (v1.0)
+- `config_tests.rs`: Configuration loading with v2.0 env vars
+- `editor_error_integration_tests.rs`: Robust error handling patterns
+- `locking_tests.rs`: File locking mechanisms
+- `ops_integration_tests.rs`: Full v2.0 pipeline tests (requires Ollama)
+- `security_tests.rs`: Security-focused tests (encryption, permissions, cleanup)
+
+### Test Dependencies
+- `tempfile`: Isolated filesystem operations
+- `rusqlite`: In-memory databases for testing
+- Mock `EDITOR` environment variable (use `echo` or `true` without args)
+- **Ollama required** for AI integration tests (optional, can skip)
 
 ### Error Testing Best Practices
 
@@ -146,3 +248,48 @@ The project uses pre-commit hooks and GitHub Actions CI:
 - Pre-commit runs `cargo fmt --check` and `cargo clippy`
 - CI runs formatting, clippy, build, and tests in separate jobs
 - Test code must meet same quality standards as production code
+
+## Dependencies (v2.0)
+
+### Core Dependencies
+- **Encryption:** `age` (passphrase-based), `age-core` for streaming
+- **Database:** `rusqlite` with `sqlcipher` feature, `r2d2` connection pool
+- **AI:** `reqwest` for Ollama HTTP API, `serde_json` for JSON parsing
+- **CLI:** `clap` with derive feature for subcommands
+- **Hashing:** `blake3` for checksums
+- **Utilities:** `chrono` (dates), `uuid` (temp files), `tracing`/`tracing-subscriber` (logging)
+
+### Security Dependencies
+- `age::secrecy::SecretString`: Zeroizing passphrase storage
+- `sqlcipher`: SQLite with transparent 256-bit AES encryption
+- `tempfile`: Secure temporary file creation with automatic cleanup
+
+### Development Dependencies
+- `tempfile`: Isolated test environments
+- `criterion`: Performance benchmarking
+- Pre-commit hooks: Python-based (cargo fmt, cargo clippy)
+
+## Security Considerations
+
+### Threat Model
+- **Protects against:** Unauthorized file system access, memory dumps, swap
+- **Does NOT protect against:** Malicious code execution, kernel-level attacks, physical RAM access with sophisticated tools
+
+### Security Properties
+1. **Encryption at rest:** All journal content encrypted with age, database encrypted with SQLCipher
+2. **Passphrase security:** Zeroized on drop, locked after timeout
+3. **Temp file safety:** 0o600 permissions, cleaned up even on panic
+4. **No plaintext leakage:** Database stores only encrypted paths and embeddings (not plaintext)
+5. **Metadata protection:** Entry dates/checksums encrypted in SQLCipher database
+
+### Security Assumptions
+- User's system is trusted (no keyloggers, screen capture malware)
+- Ollama instance is trusted (localhost recommended)
+- User chooses strong passphrase (no validation currently)
+- File system permissions are respected by OS
+
+### Known Limitations
+- Embeddings are semantic vectors (could leak topic information to Ollama)
+- Session timeout relies on system time (could be manipulated)
+- No passphrase strength validation
+- No rate limiting on passphrase attempts
