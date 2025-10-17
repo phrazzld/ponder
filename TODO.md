@@ -97,16 +97,24 @@
     - Gracefully handles no results case
   ```
 
-- [ ] **Implement ops/reflect.rs - Entry reflection** (2hr)
+- [x] **Implement ops/reflect.rs - Entry reflection** (2hr)
   ```
-  Files: src/ops/reflect.rs (~100 LOC)
-  Flow: decrypt entry → LLM reflection → save encrypted report
+  Files: src/ops/reflect.rs (72 LOC) ✅
+  Flow: lookup by date → decrypt entry → LLM reflection
+  Features:
+    - Returns reflection text directly
+    - Validates entry exists before processing
+    - Includes word count in debug logging
   ```
 
-- [ ] **Implement ops/search.rs - Semantic search** (2hr)
+- [x] **Implement ops/search.rs - Semantic search** (2hr)
   ```
-  Files: src/ops/search.rs (~120 LOC)
-  Flow: embed query → vector search → decrypt snippets → format
+  Files: src/ops/search.rs (145 LOC) ✅
+  Flow: embed query → vector search → decrypt → format with scores
+  Features:
+    - Groups chunks by entry to minimize decryptions
+    - Returns SearchResult with date, excerpt, score
+    - Sorted by similarity score descending
   ```
 
 - [x] **Add ops module to lib.rs** (5min)
