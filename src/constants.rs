@@ -25,6 +25,12 @@ pub const DEFAULT_LOG_LEVEL: &str = "info";
 pub const ENV_VAR_PONDER_DIR: &str = "PONDER_DIR";
 /// Environment variable for specifying the preferred Ponder editor.
 pub const ENV_VAR_PONDER_EDITOR: &str = "PONDER_EDITOR";
+/// Environment variable for specifying the database path.
+pub const ENV_VAR_PONDER_DB: &str = "PONDER_DB";
+/// Environment variable for specifying session timeout in minutes.
+pub const ENV_VAR_PONDER_SESSION_TIMEOUT: &str = "PONDER_SESSION_TIMEOUT";
+/// Environment variable for specifying Ollama API URL.
+pub const ENV_VAR_OLLAMA_URL: &str = "OLLAMA_URL";
 /// Standard environment variable for specifying the default editor.
 pub const ENV_VAR_EDITOR: &str = "EDITOR";
 /// Standard environment variable for the user's home directory.

@@ -1,6 +1,5 @@
 use serial_test::serial;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::tempdir;
 
 // We need to import the actual library code
@@ -28,15 +27,14 @@ fn get_fixed_test_datetime() -> DateTime<Local> {
 fn set_up_test_env() -> Result<(Config, tempfile::TempDir), Box<dyn std::error::Error>> {
     // Create a temporary directory for the journal files
     let temp_dir = tempdir()?;
-    let dir_path = temp_dir.path().to_string_lossy().to_string();
-
-    // Use "echo" as a safe editor for testing
-    let editor = "echo".to_string();
+    let dir_path = temp_dir.path().to_path_buf();
 
     // Create a Config instance pointing to the temp directory
     let config = Config {
-        editor,
-        journal_dir: PathBuf::from(&dir_path),
+        editor: "echo".to_string(),
+        journal_dir: dir_path.clone(),
+        db_path: dir_path.join("ponder.db"),
+        ..Config::default()
     };
 
     Ok((config, temp_dir))

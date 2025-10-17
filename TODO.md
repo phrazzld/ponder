@@ -161,12 +161,15 @@
     - Dispatch to ops:: based on command
   ```
 
-- [ ] **Extend config/mod.rs with v2.0 settings** (1hr)
+- [x] **Extend config/mod.rs with v2.0 settings** (1hr)
   ```
-  New fields:
+  New fields: ✅
     pub db_path: PathBuf,  // PONDER_DB or journal_dir/ponder.db
     pub session_timeout_minutes: u64,  // PONDER_SESSION_TIMEOUT or 30
     pub ollama_url: String,  // OLLAMA_URL or http://127.0.0.1:11434
+  Environment variables added:
+    ENV_VAR_PONDER_DB, ENV_VAR_PONDER_SESSION_TIMEOUT, ENV_VAR_OLLAMA_URL
+  All 121 tests passing, clippy clean
   ```
 
 ### Polish & Error Handling

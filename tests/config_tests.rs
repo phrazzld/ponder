@@ -106,13 +106,15 @@ fn test_config_validation() -> AppResult<()> {
     let valid_config = Config {
         editor: "vim".to_string(),
         journal_dir: PathBuf::from("/absolute/path"),
+        ..Config::default()
     };
     valid_config.validate()?;
 
     // Test empty editor
     let invalid_editor_config = Config {
-        editor: "".to_string(),
+        editor: String::new(),
         journal_dir: PathBuf::from("/absolute/path"),
+        ..Config::default()
     };
     let result = invalid_editor_config.validate();
     assert!(result.is_err());
@@ -139,6 +141,7 @@ fn test_config_validation() -> AppResult<()> {
     let relative_path_config = Config {
         editor: "vim".to_string(),
         journal_dir: PathBuf::from("relative/path"),
+        ..Config::default()
     };
     let result = relative_path_config.validate();
     assert!(result.is_err());
