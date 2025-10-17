@@ -3,7 +3,9 @@
 use crate::ai::chunking::chunk_text;
 use crate::ai::prompts::ask_prompt;
 use crate::ai::OllamaClient;
-use crate::constants::{DEFAULT_CHAT_MODEL, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_MODEL};
+use crate::constants::{
+    DEFAULT_CHAT_MODEL, DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_MODEL,
+};
 use crate::crypto::temp::decrypt_to_temp;
 use crate::crypto::SessionManager;
 use crate::db::embeddings::search_similar_chunks;

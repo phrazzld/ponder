@@ -72,11 +72,15 @@ pub mod errors;
 pub mod journal_core;
 /// Journal I/O operations
 pub mod journal_io;
+/// High-level operations combining encryption, AI, and database functionality
+pub mod ops;
 
 // Re-export important types for convenience
 pub use ai::OllamaClient;
 pub use cli::CliArgs;
 pub use config::Config;
+pub use crypto::SessionManager;
 pub use db::Database;
 pub use errors::{AIError, AppError, AppResult, DatabaseError, LockError};
 pub use journal_core::DateSpecifier;
+pub use ops::search::SearchResult;

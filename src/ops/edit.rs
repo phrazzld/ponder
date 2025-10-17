@@ -6,8 +6,8 @@ use crate::config::Config;
 use crate::constants::{DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_MODEL};
 use crate::crypto::temp::{decrypt_to_temp, encrypt_from_temp};
 use crate::crypto::SessionManager;
-use crate::db::entries::upsert_entry;
 use crate::db::embeddings::insert_embedding;
+use crate::db::entries::upsert_entry;
 use crate::db::Database;
 use crate::errors::{AppError, AppResult, EditorError};
 use chrono::{DateTime, Local, NaiveDate};
@@ -101,13 +101,7 @@ pub fn edit_entry(
     let word_count = content.split_whitespace().count();
 
     let conn = db.get_conn()?;
-    let entry_id = upsert_entry(
-        &conn,
-        &encrypted_path,
-        date,
-        &new_checksum,
-        word_count,
-    )?;
+    let entry_id = upsert_entry(&conn, &encrypted_path, date, &new_checksum, word_count)?;
 
     // Generate and store embeddings if content changed
     if content_changed {
@@ -197,7 +191,11 @@ fn generate_and_store_embeddings(
 
     // Generate and store embeddings for each chunk
     for (idx, chunk) in chunks.iter().enumerate() {
-        debug!("Generating embedding for chunk {}/{}", idx + 1, chunks.len());
+        debug!(
+            "Generating embedding for chunk {}/{}",
+            idx + 1,
+            chunks.len()
+        );
 
         let embedding = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
         let chunk_hash = blake3::hash(chunk.as_bytes());
