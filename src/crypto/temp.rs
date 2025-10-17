@@ -133,6 +133,57 @@ pub fn encrypt_from_temp(
     Ok(())
 }
 
+/// Read encrypted file content as UTF-8 string.
+///
+/// Decrypts the file to a temporary location, reads the content as UTF-8,
+/// and automatically cleans up the temporary file.
+///
+/// # Arguments
+///
+/// * `encrypted_path` - Path to the encrypted file (.age)
+/// * `passphrase` - Passphrase for decryption
+///
+/// # Returns
+///
+/// The decrypted file content as a String.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Decryption fails (wrong passphrase, corrupted file)
+/// - Content is not valid UTF-8
+/// - File I/O fails
+///
+/// # Example
+///
+/// ```no_run
+/// use ponder::crypto::temp::read_encrypted_string;
+/// use age::secrecy::SecretString;
+/// use std::path::Path;
+///
+/// let passphrase = SecretString::new("my-secret".to_string());
+/// let encrypted = Path::new("journal.md.age");
+///
+/// let content = read_encrypted_string(encrypted, &passphrase)?;
+/// println!("Journal content: {}", content);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn read_encrypted_string(
+    encrypted_path: &Path,
+    passphrase: &SecretString,
+) -> AppResult<String> {
+    // Decrypt to temp
+    let temp_path = decrypt_to_temp(encrypted_path, passphrase)?;
+
+    // Read content
+    let content = fs::read_to_string(&temp_path)?;
+
+    // Clean up temp file (guaranteed even on error above)
+    let _ = fs::remove_file(&temp_path);
+
+    Ok(content)
+}
+
 /// Best-effort secure file deletion (overwrite + remove).
 ///
 /// Overwrites the file with zeros before removing it. This is not

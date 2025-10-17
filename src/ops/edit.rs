@@ -92,13 +92,15 @@ pub fn edit_entry(
     let new_checksum = calculate_checksum(&temp_path)?;
     let content_changed = original_checksum != new_checksum;
 
-    // Re-encrypt
+    // Calculate word count from plaintext BEFORE encrypting
+    let content = fs::read_to_string(&temp_path)?;
+    let word_count = content.split_whitespace().count();
+
+    // Re-encrypt (this deletes temp file)
     encrypt_from_temp(&temp_path, &encrypted_path, passphrase)?;
     info!("Entry saved to {:?}", encrypted_path);
 
-    // Update database
-    let content = fs::read_to_string(&encrypted_path)?;
-    let word_count = content.split_whitespace().count();
+    // Update database with already-calculated word count
 
     let conn = db.get_conn()?;
     let entry_id = upsert_entry(&conn, &encrypted_path, date, &new_checksum, word_count)?;

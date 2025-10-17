@@ -36,4 +36,6 @@ pub use self::age::{
     encrypt_with_passphrase,
 };
 pub use self::session::SessionManager;
-pub use self::temp::{decrypt_to_temp, encrypt_from_temp, get_secure_temp_dir};
+pub use self::temp::{
+    decrypt_to_temp, encrypt_from_temp, get_secure_temp_dir, read_encrypted_string,
+};
