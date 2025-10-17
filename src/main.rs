@@ -48,13 +48,13 @@ use ponder::config::Config;
 use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
 use ponder::crypto::SessionManager;
 use ponder::db::Database;
-use ponder::errors::{AppError, AppResult};
+use ponder::errors::{AppError, AppResult, DatabaseError};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 use ponder::ops;
 use ponder::setup::ensure_model_available;
 use ponder::OllamaClient;
-use tracing::{debug, info, info_span};
+use tracing::{debug, info, info_span, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use uuid::Uuid;
 
@@ -132,6 +132,63 @@ fn run_application(
     }
 }
 
+/// Opens database with passphrase retry logic.
+///
+/// Attempts to open the database, retrying up to MAX_PASSPHRASE_ATTEMPTS times
+/// if the wrong passphrase is provided.
+///
+/// # Arguments
+///
+/// * `config` - Application configuration
+/// * `session` - Session manager
+///
+/// # Returns
+///
+/// Returns the opened database or error after max retries.
+fn open_database_with_retry(config: &Config, session: &mut SessionManager) -> AppResult<Database> {
+    const MAX_PASSPHRASE_ATTEMPTS: u32 = 3;
+
+    // Detect first-run vs existing database
+    let db_exists = config.db_path.exists();
+
+    for attempt in 1..=MAX_PASSPHRASE_ATTEMPTS {
+        // Get passphrase (prompts if locked)
+        let passphrase = session.get_passphrase_or_prompt(db_exists)?;
+
+        // Try to open database
+        match Database::open(&config.db_path, passphrase) {
+            Ok(db) => {
+                info!("Database opened successfully");
+                return Ok(db);
+            }
+            Err(AppError::Database(DatabaseError::WrongPassphrase)) => {
+                // Wrong passphrase - lock session to force re-prompt
+                session.lock();
+
+                if attempt < MAX_PASSPHRASE_ATTEMPTS {
+                    warn!(
+                        "Incorrect passphrase, attempt {}/{}",
+                        attempt, MAX_PASSPHRASE_ATTEMPTS
+                    );
+                    println!(
+                        "\nIncorrect passphrase. Please try again (attempt {}/{}).\n",
+                        attempt + 1,
+                        MAX_PASSPHRASE_ATTEMPTS
+                    );
+                } else {
+                    return Err(ponder::errors::CryptoError::MaxRetriesExceeded.into());
+                }
+            }
+            Err(e) => {
+                // Other error - propagate immediately
+                return Err(e);
+            }
+        }
+    }
+
+    unreachable!("Loop should always return or error before reaching here")
+}
+
 /// Ensures the embedding model is available, offering to install if missing.
 ///
 /// This checks if the embedding model is installed and prompts the user
@@ -188,7 +245,7 @@ fn cmd_edit(
 
     // v2.0: Initialize session, database, and AI client
     let mut session = SessionManager::new(config.session_timeout_minutes);
-    let db = Database::open(&config.db_path, session.get_passphrase()?)?;
+    let db = open_database_with_retry(config, &mut session)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
 
     // Ensure embedding model is available (for automatic embedding generation)
@@ -220,7 +277,7 @@ fn cmd_ask(config: &Config, ask_args: ponder::cli::AskArgs) -> AppResult<()> {
 
     // Initialize session, database, and AI client
     let mut session = SessionManager::new(config.session_timeout_minutes);
-    let db = Database::open(&config.db_path, session.get_passphrase()?)?;
+    let db = open_database_with_retry(config, &mut session)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
 
     // Ensure models are available (embedding for search, chat for LLM)
@@ -264,7 +321,7 @@ fn cmd_reflect(
 
     // Initialize session, database, and AI client
     let mut session = SessionManager::new(config.session_timeout_minutes);
-    let db = Database::open(&config.db_path, session.get_passphrase()?)?;
+    let db = open_database_with_retry(config, &mut session)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
 
     // Ensure chat model is available
@@ -288,7 +345,7 @@ fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResul
 
     // Initialize session, database, and AI client
     let mut session = SessionManager::new(config.session_timeout_minutes);
-    let db = Database::open(&config.db_path, session.get_passphrase()?)?;
+    let db = open_database_with_retry(config, &mut session)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
 
     // Ensure embedding model is available

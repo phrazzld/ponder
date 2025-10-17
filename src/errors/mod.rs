@@ -245,6 +245,22 @@ pub enum CryptoError {
     /// Error during decryption operation.
     #[error("Decryption failed: {0}")]
     DecryptionFailed(#[source] age::DecryptError),
+
+    /// Passphrase confirmation mismatch during setup.
+    #[error("Passphrase confirmation does not match. Please try again.")]
+    PassphraseMismatch,
+
+    /// Empty passphrase provided.
+    #[error("Passphrase cannot be empty. Please provide a strong passphrase.")]
+    EmptyPassphrase,
+
+    /// Error prompting for passphrase.
+    #[error("Failed to read passphrase: {0}\n\nMake sure you have a terminal available for interactive input.")]
+    PassphrasePrompt(String),
+
+    /// Maximum passphrase retry attempts exceeded.
+    #[error("Maximum passphrase attempts exceeded. Please try again later.")]
+    MaxRetriesExceeded,
 }
 
 /// Represents specific error cases that can occur during database operations.
@@ -277,6 +293,10 @@ pub enum DatabaseError {
     /// Custom database error with detailed message.
     #[error("Database error: {0}")]
     Custom(String),
+
+    /// Wrong passphrase provided for encrypted database.
+    #[error("Incorrect passphrase for database.\n\nThe passphrase you entered does not match the one used to encrypt this journal.\nPlease try again with the correct passphrase.")]
+    WrongPassphrase,
 }
 
 /// Represents specific error cases that can occur during AI operations.

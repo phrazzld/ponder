@@ -3,9 +3,10 @@
 //! This module manages encryption passphrases with automatic locking after a timeout period,
 //! and ensures secure memory zeroization when passphrases are no longer needed.
 
-use crate::errors::AppResult;
+use crate::errors::{AppResult, CryptoError};
 use age::secrecy::SecretString;
 use std::time::{Duration, Instant};
+use tracing::{debug, info};
 
 /// Manages encryption session state with auto-lock timeout.
 ///
@@ -152,6 +153,95 @@ impl SessionManager {
         // Drop the passphrase - SecretString will zeroize on drop
         self.passphrase = None;
         self.last_access = None;
+    }
+
+    /// Prompts user for a new passphrase with confirmation.
+    ///
+    /// Used during first-run when creating an encrypted journal.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CryptoError::PassphraseMismatch` if confirmations don't match.
+    fn prompt_for_new_passphrase() -> AppResult<SecretString> {
+        debug!("Prompting for new passphrase (first-run)");
+
+        println!("\n🔐 Creating new encrypted journal");
+        println!("Choose a strong passphrase to protect your journal entries.\n");
+
+        let passphrase = rpassword::prompt_password("Enter passphrase: ")
+            .map_err(|e| CryptoError::PassphrasePrompt(e.to_string()))?;
+
+        let confirmation = rpassword::prompt_password("Confirm passphrase: ")
+            .map_err(|e| CryptoError::PassphrasePrompt(e.to_string()))?;
+
+        if passphrase != confirmation {
+            return Err(CryptoError::PassphraseMismatch.into());
+        }
+
+        if passphrase.is_empty() {
+            return Err(CryptoError::EmptyPassphrase.into());
+        }
+
+        info!("New passphrase set successfully");
+        Ok(SecretString::new(passphrase))
+    }
+
+    /// Prompts user for existing passphrase.
+    ///
+    /// Used when unlocking an existing encrypted journal.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if stdin reading fails.
+    fn prompt_for_existing_passphrase() -> AppResult<SecretString> {
+        debug!("Prompting for existing passphrase");
+
+        println!("\n🔓 Unlocking encrypted journal");
+
+        let passphrase = rpassword::prompt_password("Enter passphrase: ")
+            .map_err(|e| CryptoError::PassphrasePrompt(e.to_string()))?;
+
+        if passphrase.is_empty() {
+            return Err(CryptoError::EmptyPassphrase.into());
+        }
+
+        Ok(SecretString::new(passphrase))
+    }
+
+    /// Gets cached passphrase or prompts user if vault is locked.
+    ///
+    /// # Arguments
+    ///
+    /// * `db_exists` - Whether the database file already exists (first-run detection)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - User declines passphrase prompt
+    /// - Passphrase confirmation fails (new passphrase)
+    /// - stdin reading fails
+    pub fn get_passphrase_or_prompt(&mut self, db_exists: bool) -> AppResult<&SecretString> {
+        if self.is_locked() {
+            debug!(
+                "Vault locked, prompting for passphrase (db_exists={})",
+                db_exists
+            );
+
+            let passphrase = if db_exists {
+                Self::prompt_for_existing_passphrase()?
+            } else {
+                Self::prompt_for_new_passphrase()?
+            };
+
+            self.unlock(passphrase);
+        } else {
+            debug!("Using cached passphrase");
+        }
+
+        self.last_access = Some(Instant::now());
+        self.passphrase
+            .as_ref()
+            .ok_or_else(|| CryptoError::VaultLocked.into())
     }
 }
 

@@ -21,6 +21,7 @@ age = "0.10"
 argon2 = "0.5"
 zeroize = "1.7"
 blake3 = "1.5"
+rpassword = "7.3"  # Secure passphrase prompting
 
 # Database dependencies (Phase 2)
 rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "blob"] }

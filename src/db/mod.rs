@@ -79,8 +79,21 @@ impl Database {
 
         // Test the connection and passphrase
         let conn = pool.get().map_err(crate::errors::DatabaseError::Pool)?;
-        conn.execute_batch("PRAGMA cipher_integrity_check")
-            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        // cipher_integrity_check will fail if passphrase is wrong
+        if let Err(e) = conn.execute_batch("PRAGMA cipher_integrity_check") {
+            // Check if this is a wrong passphrase error
+            let err_msg = e.to_string();
+            if err_msg.contains("file is not a database")
+                || err_msg.contains("file is encrypted")
+                || err_msg.contains("cipher")
+            {
+                debug!("Wrong passphrase detected: {}", err_msg);
+                return Err(crate::errors::DatabaseError::WrongPassphrase.into());
+            }
+            return Err(crate::errors::DatabaseError::Sqlite(e).into());
+        }
+
         drop(conn);
 
         info!("Database opened successfully");
