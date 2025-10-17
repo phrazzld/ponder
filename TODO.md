@@ -177,13 +177,17 @@
 
 ### Polish & Error Handling
 
-- [ ] **Improve error messages** (1.5hr)
+- [x] **Improve error messages** (1.5hr)
   ```
-  Add helpful context:
-    - CryptoError::VaultLocked → suggest unlocking
-    - AIError::OllamaOffline → suggest `ollama serve`
-    - AIError::ModelNotFound → suggest `ollama pull {model}`
-    - DatabaseError → suggest checking passphrase
+  Files: src/errors/mod.rs ✅
+  Enhanced error messages with actionable context:
+    - CryptoError::VaultLocked: Added session timeout hint + PONDER_SESSION_TIMEOUT
+    - CryptoError::InvalidPassphrase: Clearer message about correct passphrase
+    - DatabaseError::Sqlite: Context for wrong passphrase/corrupted db/format issues
+    - DatabaseError::Pool: Hint to close other ponder instances
+    - AIError::OllamaOffline: Already has "Try: ollama serve" ✅
+    - AIError::ModelNotFound: Already has "Try: ollama pull {model}" ✅
+  All 126 tests + 11 doctests passing
   ```
 
 - [ ] **Add validation for encrypted directory structure** (1hr)
