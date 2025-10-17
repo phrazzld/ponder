@@ -77,7 +77,7 @@ pub mod ops;
 
 // Re-export important types for convenience
 pub use ai::OllamaClient;
-pub use cli::CliArgs;
+pub use cli::{AskArgs, CliArgs, EditArgs, PonderCommand, ReflectArgs, SearchArgs};
 pub use config::Config;
 pub use crypto::SessionManager;
 pub use db::Database;
