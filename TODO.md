@@ -136,29 +136,32 @@
 
 ### CLI Refactoring
 
-- [ ] **Refactor cli/mod.rs for subcommands** (2hr)
+- [x] **Refactor cli/mod.rs for subcommands** (2hr)
   ```
-  Files: src/cli/mod.rs
-  Change CliArgs to enum:
-    pub enum PonderCli {
-        Edit { date, retro, reminisce },
-        Ask { question, window },
-        Reflect { date },
-        Search { query, window },
-        Lock,
-    }
+  Files: src/cli/mod.rs ✅
+  Implemented PonderCommand enum with subcommands:
+    - Edit(EditArgs): retro/reminisce/date flags
+    - Ask(AskArgs): question + optional date range
+    - Reflect(ReflectArgs): optional date (defaults today)
+    - Search(SearchArgs): query + limit + optional date range
+    - Lock: no arguments
+  Re-exported: AskArgs, EditArgs, ReflectArgs, SearchArgs
+  Tests: 12/12 CLI tests passing
   ```
 
-- [ ] **Update main.rs with command dispatch** (2.5hr)
+- [x] **Update main.rs with command dispatch** (2.5hr)
   ```
-  Files: src/main.rs
-  Flow:
-    - Parse CLI
-    - Load config
-    - Initialize session (unlock on first command)
-    - Open database
-    - Initialize AI client
-    - Dispatch to ops:: based on command
+  Files: src/main.rs ✅
+  Implemented command dispatch:
+    - run_application() matches on PonderCommand
+    - cmd_edit: SessionManager + Database + OllamaClient → ops::edit_entry
+    - cmd_ask: RAG query with date range parsing
+    - cmd_reflect: AI reflection with date default
+    - cmd_search: Semantic search with limit
+    - cmd_lock: Clear session passphrase
+    - None (default): Edit today for v1.0 compatibility
+  Helper: parse_date_range() for --from/--to validation
+  All library tests passing (126/126)
   ```
 
 - [x] **Extend config/mod.rs with v2.0 settings** (1hr)
