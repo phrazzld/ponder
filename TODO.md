@@ -2,12 +2,13 @@
 
 ## Progress Summary
 
-**Completed**: Phase 0 ✅ | Phase 1 (crypto) ✅ | Phase 2 (database) ✅ | Phase 3 (AI) ✅
-**Current**: Phase 4 (Operations)
-**Remaining**: Phases 4-6 (ops, CLI, testing/docs)
+**Completed**: Phase 0 ✅ | Phase 1 (crypto) ✅ | Phase 2 (database) ✅ | Phase 3 (AI) ✅ | Phase 4 (ops) ✅
+**Current**: Phase 5 (CLI Integration)
+**Remaining**: Phases 5-6 (CLI, testing/docs)
 
 **Tests**: 121 passing (93 unit + 28 integration)
-**Modules**: crypto/, db/, ai/ - all with error handling and constants
+**Modules**: crypto/, db/, ai/, ops/ - all with error handling and constants
+**Operations**: edit_entry, ask_question, reflect_on_entry, search_entries (574 LOC)
 
 ---
 
