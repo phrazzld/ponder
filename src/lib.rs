@@ -74,6 +74,8 @@ pub mod journal_core;
 pub mod journal_io;
 /// High-level operations combining encryption, AI, and database functionality
 pub mod ops;
+/// Setup and dependency management utilities
+pub mod setup;
 
 // Re-export important types for convenience
 pub use ai::OllamaClient;

@@ -134,13 +134,15 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 
 /// Default embedding model for semantic search.
 ///
-/// nomic-embed-text is optimized for retrieval tasks and produces 768-dimensional embeddings.
-pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
+/// embeddinggemma is a 300M parameter embedding model from Google optimized for retrieval tasks.
+/// It produces 768-dimensional embeddings and is the smallest high-quality embedding model available.
+pub const DEFAULT_EMBED_MODEL: &str = "embeddinggemma";
 
 /// Default chat model for insights and reflections.
 ///
-/// llama3.2:3b provides good quality responses with reasonable resource usage.
-pub const DEFAULT_CHAT_MODEL: &str = "llama3.2:3b";
+/// gemma3:4b is a high-quality model from Google suitable for local inference.
+/// It provides excellent performance for chat and reflection tasks.
+pub const DEFAULT_CHAT_MODEL: &str = "gemma3:4b";
 
 /// Default chunk size in words for text chunking.
 ///

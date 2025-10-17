@@ -45,13 +45,14 @@ use chrono::Local;
 use clap::Parser;
 use ponder::cli::{CliArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
-use ponder::constants;
+use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
 use ponder::crypto::SessionManager;
 use ponder::db::Database;
 use ponder::errors::{AppError, AppResult};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 use ponder::ops;
+use ponder::setup::ensure_model_available;
 use ponder::OllamaClient;
 use tracing::{debug, info, info_span};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -131,6 +132,38 @@ fn run_application(
     }
 }
 
+/// Ensures the embedding model is available, offering to install if missing.
+///
+/// This checks if the embedding model is installed and prompts the user
+/// to install it if not found.
+///
+/// # Arguments
+///
+/// * `client` - Ollama client instance
+///
+/// # Returns
+///
+/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
+    ensure_model_available(client, DEFAULT_EMBED_MODEL, "Embedding")
+}
+
+/// Ensures the chat model is available, offering to install if missing.
+///
+/// This checks if the chat model is installed and prompts the user
+/// to install it if not found.
+///
+/// # Arguments
+///
+/// * `client` - Ollama client instance
+///
+/// # Returns
+///
+/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+fn ensure_chat_available(client: &OllamaClient) -> AppResult<()> {
+    ensure_model_available(client, DEFAULT_CHAT_MODEL, "Chat")
+}
+
 /// Edit command: Edit journal entries with encryption and embedding.
 fn cmd_edit(
     config: &Config,
@@ -157,6 +190,9 @@ fn cmd_edit(
     let mut session = SessionManager::new(config.session_timeout_minutes);
     let db = Database::open(&config.db_path, session.get_passphrase()?)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure embedding model is available (for automatic embedding generation)
+    ensure_embedding_available(&ai_client)?;
 
     // Edit each entry
     for date in dates_to_open {
@@ -186,6 +222,10 @@ fn cmd_ask(config: &Config, ask_args: ponder::cli::AskArgs) -> AppResult<()> {
     let mut session = SessionManager::new(config.session_timeout_minutes);
     let db = Database::open(&config.db_path, session.get_passphrase()?)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure models are available (embedding for search, chat for LLM)
+    ensure_embedding_available(&ai_client)?;
+    ensure_chat_available(&ai_client)?;
 
     // Query
     let answer = ops::ask_question(
@@ -227,6 +267,9 @@ fn cmd_reflect(
     let db = Database::open(&config.db_path, session.get_passphrase()?)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
 
+    // Ensure chat model is available
+    ensure_chat_available(&ai_client)?;
+
     // Generate reflection
     let reflection = ops::reflect_on_entry(&db, &mut session, &ai_client, date)?;
 
@@ -247,6 +290,9 @@ fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResul
     let mut session = SessionManager::new(config.session_timeout_minutes);
     let db = Database::open(&config.db_path, session.get_passphrase()?)?;
     let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure embedding model is available
+    ensure_embedding_available(&ai_client)?;
 
     // Search
     let results = ops::search_entries(
