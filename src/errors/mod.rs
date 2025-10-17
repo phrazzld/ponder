@@ -277,6 +277,34 @@ pub enum DatabaseError {
     Custom(String),
 }
 
+/// Represents specific error cases that can occur during AI operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when interacting with the Ollama API or performing AI operations.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::AIError;
+///
+/// let error = AIError::ModelNotFound("llama3.2:3b".to_string());
+/// assert!(format!("{}", error).contains("llama3.2:3b"));
+/// ```
+#[derive(Debug, Error)]
+pub enum AIError {
+    /// Ollama API is not reachable.
+    #[error("Ollama API error: {0}. Is Ollama running? Try: ollama serve")]
+    OllamaOffline(#[source] reqwest::Error),
+
+    /// Requested model not found in Ollama.
+    #[error("Model not found: {0}. Try: ollama pull {0}")]
+    ModelNotFound(String),
+
+    /// Invalid or unexpected response from Ollama API.
+    #[error("Invalid response from Ollama: {0}")]
+    InvalidResponse(String),
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Errors related to configuration loading or validation.
@@ -320,6 +348,13 @@ pub enum AppError {
     /// information about what went wrong with database operations.
     #[error("Database error: {0}")]
     Database(#[from] DatabaseError),
+
+    /// Errors related to AI operations.
+    ///
+    /// This variant uses a dedicated AIError type to provide detailed
+    /// information about what went wrong with Ollama API interactions.
+    #[error("AI error: {0}")]
+    AI(#[from] AIError),
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.

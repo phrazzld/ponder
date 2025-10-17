@@ -54,6 +54,8 @@ fn main() -> AppResult<()> {
 ```
 */
 
+/// AI operations for journal insights and semantic search
+pub mod ai;
 /// Command-line interface for parsing and handling user arguments
 pub mod cli;
 /// Configuration loading and management
@@ -72,8 +74,9 @@ pub mod journal_core;
 pub mod journal_io;
 
 // Re-export important types for convenience
+pub use ai::OllamaClient;
 pub use cli::CliArgs;
 pub use config::Config;
 pub use db::Database;
-pub use errors::{AppError, AppResult, DatabaseError, LockError};
+pub use errors::{AIError, AppError, AppResult, DatabaseError, LockError};
 pub use journal_core::DateSpecifier;

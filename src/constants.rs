@@ -119,3 +119,31 @@ pub const EMBEDDING_DIMENSIONS: usize = 768;
 /// Controls how many similar chunks to return when performing semantic search.
 /// This balances result relevance with processing time and context window constraints.
 pub const VECTOR_SEARCH_LIMIT: usize = 12;
+
+// AI Configuration
+/// Default URL for Ollama API.
+///
+/// The local Ollama server typically runs on this address.
+pub const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
+
+/// Default embedding model for semantic search.
+///
+/// nomic-embed-text is optimized for retrieval tasks and produces 768-dimensional embeddings.
+pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
+
+/// Default chat model for insights and reflections.
+///
+/// llama3.2:3b provides good quality responses with reasonable resource usage.
+pub const DEFAULT_CHAT_MODEL: &str = "llama3.2:3b";
+
+/// Default chunk size in words for text chunking.
+///
+/// Approximately 700 words provides good balance between context and granularity
+/// for embedding generation. This is roughly equivalent to 2-3 paragraphs.
+pub const DEFAULT_CHUNK_SIZE: usize = 700;
+
+/// Default overlap in words between consecutive chunks.
+///
+/// 100 words of overlap helps maintain context continuity at chunk boundaries
+/// and improves retrieval quality for queries that span chunk edges.
+pub const DEFAULT_CHUNK_OVERLAP: usize = 100;
