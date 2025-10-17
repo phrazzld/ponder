@@ -2,12 +2,12 @@
 
 ## Progress Summary
 
-**Completed**: Phase 0 (dependencies) ✅ | Phase 1 (crypto) ✅ | Phase 2 (database) ✅
-**Current**: Phase 3 (AI integration)
-**Remaining**: Phases 3-6 (AI, ops, CLI, testing/docs)
+**Completed**: Phase 0 ✅ | Phase 1 (crypto) ✅ | Phase 2 (database) ✅ | Phase 3 (AI) ✅
+**Current**: Phase 4 (Operations)
+**Remaining**: Phases 4-6 (ops, CLI, testing/docs)
 
-**Tests**: 103 passing (75 unit + 28 integration)
-**Modules**: crypto/, db/, with full error handling and constants
+**Tests**: 121 passing (93 unit + 28 integration)
+**Modules**: crypto/, db/, ai/ - all with error handling and constants
 
 ---
 
@@ -48,100 +48,15 @@
 - ✅ DatabaseError enum + constants
 - ✅ 22 unit tests
 
-**All 103 tests passing** ✅
+### Phase 3: AI Integration ✅
+- ✅ ai/ollama.rs: HTTP client for embeddings/chat (250 LOC)
+- ✅ ai/chunking.rs: Sliding window text chunking (110 LOC)
+- ✅ ai/prompts.rs: System prompts + message builders (180 LOC)
+- ✅ AIError enum with helpful suggestions
+- ✅ AI constants (Ollama URL, models, chunk sizes)
+- ✅ 18 unit tests
 
----
-
-## Phase 3: AI Integration (Current, Est: 6-8hr)
-
-### Module: ai/ (Ollama Client)
-
-- [ ] **Create ai module structure** (30min)
-  ```
-  Files:
-    src/ai/mod.rs (new, public API)
-    src/ai/ollama.rs (new, HTTP client)
-    src/ai/embeddings.rs (new, embedding generation)
-    src/ai/chat.rs (new, LLM chat)
-    src/ai/chunking.rs (new, text chunking)
-    src/ai/prompts.rs (new, system prompts)
-  Success: Module compiles, can ping http://127.0.0.1:11434
-  Module: ai - Hides HTTP/JSON, exposes embed/chat functions
-  ```
-
-- [ ] **Implement ai/ollama.rs - HTTP client** (2hr)
-  ```
-  Files: src/ai/ollama.rs (~100 LOC)
-  Approach: Use reqwest::blocking::Client
-  Public API:
-    pub struct OllamaClient { /* private */ }
-    pub fn new() -> Self
-    pub fn embed(&self, model: &str, text: &str) -> AppResult<Vec<f32>>
-    pub fn chat(&self, model: &str, messages: &[Message]) -> AppResult<String>
-  Test: Unit tests with mockito for endpoint calls, error handling
-  ```
-
-- [ ] **Implement ai/chunking.rs - Text chunking** (1hr)
-  ```
-  Files: src/ai/chunking.rs (~60 LOC)
-  Approach: Word-based sliding window (700 words, 100 overlap)
-  Public API:
-    pub fn chunk_text(text: &str, chunk_size: usize, overlap: usize) -> Vec<String>
-  Test: Overlap correctness, edge cases (text < chunk_size, empty)
-  ```
-
-- [ ] **Implement ai/prompts.rs - System prompts** (1hr)
-  ```
-  Files: src/ai/prompts.rs (~80 LOC)
-  Approach: Const strings + builder functions
-  Public API:
-    pub const SYSTEM_PROMPT: &str = "...";
-    pub fn reflect_prompt(entry_content: &str) -> Vec<Message>
-    pub fn ask_prompt(question: &str, context_chunks: &[String]) -> Vec<Message>
-  Test: Message formatting, content inclusion
-  ```
-
-- [ ] **Extend errors/mod.rs with AIError** (20min)
-  ```
-  Files: src/errors/mod.rs
-  New variants:
-    pub enum AIError {
-        #[error("Ollama API error: {0}. Is Ollama running? Try: ollama serve")]
-        OllamaOffline(#[source] reqwest::Error),
-        #[error("Model not found: {0}. Try: ollama pull {0}")]
-        ModelNotFound(String),
-        #[error("Invalid response from Ollama: {0}")]
-        InvalidResponse(String),
-    }
-  Add to AppError:
-    AI(#[from] AIError),
-  ```
-
-- [ ] **Update constants.rs with AI defaults** (5min)
-  ```
-  Files: src/constants.rs
-  pub const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
-  pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
-  pub const DEFAULT_CHAT_MODEL: &str = "llama3.2:3b";
-  pub const DEFAULT_CHUNK_SIZE: usize = 700;
-  pub const DEFAULT_CHUNK_OVERLAP: usize = 100;
-  ```
-
-- [ ] **Add ai module to lib.rs exports** (5min)
-
-- [ ] **Create tests/ai_tests.rs - AI integration tests** (2hr)
-  ```
-  Files: tests/ai_tests.rs (~200 LOC)
-  Approach: Use mockito for HTTP mocking
-  Tests:
-    - OllamaClient embed() with mock server
-    - OllamaClient chat() with mock server
-    - Chunking preserves content
-    - Prompt generation correct
-    - Error handling (mock 500 errors, timeouts)
-  ```
-
-**Validation**: `cargo test -- --test-threads=1` all pass
+**All 121 tests passing** ✅
 
 ---
 
@@ -149,30 +64,37 @@
 
 ### Module: ops/ (User-Facing Operations)
 
-- [ ] **Create ops module structure** (20min)
+- [x] **Create ops module structure** (20min)
   ```
   Files:
-    src/ops/mod.rs (new, public API)
-    src/ops/edit.rs (new, edit with encryption + embedding)
-    src/ops/ask.rs (new, RAG query)
-    src/ops/reflect.rs (new, entry reflection)
-    src/ops/search.rs (new, semantic search)
+    src/ops/mod.rs (new, public API) ✅
+    src/ops/edit.rs (new, edit with encryption + embedding) ✅
+    src/ops/ask.rs (new, RAG query) ✅
+    src/ops/reflect.rs (new, entry reflection) ✅
+    src/ops/search.rs (new, semantic search) ✅
   ```
 
-- [ ] **Implement ops/edit.rs** (3hr)
+- [x] **Implement ops/edit.rs** (3hr)
   ```
-  Files: src/ops/edit.rs (~200 LOC)
+  Files: src/ops/edit.rs (217 LOC) ✅
   Flow: decrypt→editor→re-encrypt→checksum→embed if changed
-  Public API:
-    pub fn edit_entry(config: &Config, db: &Database, session: &mut SessionManager,
-                      ai_client: &OllamaClient, date: NaiveDate,
-                      reference_datetime: &DateTime<Local>) -> AppResult<()>
+  Features:
+    - YYYY/MM/DD.md.age directory structure
+    - BLAKE3 checksums for change detection
+    - Auto-generates embeddings on content change
+    - Secure temp file handling with cleanup
+    - Proper editor error handling
   ```
 
-- [ ] **Implement ops/ask.rs - RAG query** (2.5hr)
+- [x] **Implement ops/ask.rs - RAG query** (2.5hr)
   ```
-  Files: src/ops/ask.rs (~150 LOC)
+  Files: src/ops/ask.rs (140 LOC) ✅
   Flow: embed query → vector search → decrypt chunks → LLM
+  Features:
+    - Top-5 semantic similarity search
+    - Groups chunks by entry to minimize decryptions
+    - Includes entry dates in context for LLM
+    - Gracefully handles no results case
   ```
 
 - [ ] **Implement ops/reflect.rs - Entry reflection** (2hr)
@@ -187,7 +109,7 @@
   Flow: embed query → vector search → decrypt snippets → format
   ```
 
-- [ ] **Add ops module to lib.rs** (5min)
+- [x] **Add ops module to lib.rs** (5min)
 
 - [ ] **Create tests/ops_integration_tests.rs** (3hr)
   ```
@@ -355,17 +277,20 @@
 
 ## Time Estimates
 
-**Completed**: Phase 0-2 (~8hr actual)
+**Completed**:
+- Phase 0-2: ~8hr actual
+- Phase 3 (AI): ~2hr actual
+
 **Remaining**:
-- Phase 3 (AI): 6-8hr
 - Phase 4 (ops): 8-10hr
 - Phase 5 (CLI): 4-6hr
 - Phase 6 (testing/docs): 4-6hr
 
-**Total Remaining**: ~22-30hr
-**Total Project**: ~30-38hr
+**Total Completed**: ~10hr
+**Total Remaining**: ~16-22hr
+**Total Project**: ~26-32hr (revised down from 30-38hr)
 
-**Critical Path**: Phase 3 → Phase 4 → Phase 5 → Phase 6
+**Critical Path**: Phase 4 → Phase 5 → Phase 6
 
 ---
 
