@@ -114,7 +114,35 @@ pub fn edit_entry(
     Ok(())
 }
 
-/// Get the encrypted entry path for a given date (YYYY/MM/DD.md.age).
+/// Get the encrypted entry path for a given date.
+///
+/// Returns a path following the structure: `YYYY/MM/DD.md.age`
+///
+/// This deterministic structure:
+/// - Groups entries by year and month for organization
+/// - Uses zero-padded month and day (01-12, 01-31)
+/// - Always uses `.md.age` extension for encrypted markdown
+///
+/// # Example
+///
+/// ```
+/// use std::path::PathBuf;
+/// use chrono::NaiveDate;
+///
+/// let journal_dir = PathBuf::from("/journal");
+/// let date = NaiveDate::from_ymd_opt(2024, 3, 5).unwrap();
+///
+/// // Path will be: /journal/2024/03/05.md.age
+/// ```
+///
+/// # Arguments
+///
+/// * `journal_dir` - Base journal directory
+/// * `date` - Date of the entry
+///
+/// # Returns
+///
+/// PathBuf with structure: `journal_dir/YYYY/MM/DD.md.age`
 fn get_encrypted_entry_path(journal_dir: &std::path::Path, date: NaiveDate) -> PathBuf {
     let year = date.format("%Y").to_string();
     let month = date.format("%m").to_string();
@@ -210,5 +238,88 @@ fn generate_and_store_embeddings(
 
 #[cfg(test)]
 mod tests {
-    // Integration tests in tests/ops_integration_tests.rs
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_encrypted_entry_path_structure() {
+        let journal_dir = PathBuf::from("/journal");
+
+        // Test single-digit month and day
+        let date = NaiveDate::from_ymd_opt(2024, 3, 5).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+        assert_eq!(
+            path,
+            PathBuf::from("/journal/2024/03/05.md.age"),
+            "Path should use zero-padded month and day"
+        );
+
+        // Test double-digit month and day
+        let date = NaiveDate::from_ymd_opt(2024, 11, 25).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+        assert_eq!(
+            path,
+            PathBuf::from("/journal/2024/11/25.md.age"),
+            "Path should maintain structure for double-digit values"
+        );
+
+        // Test January 1st (edge case)
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+        assert_eq!(
+            path,
+            PathBuf::from("/journal/2024/01/01.md.age"),
+            "Path should handle January 1st correctly"
+        );
+
+        // Test December 31st (edge case)
+        let date = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+        assert_eq!(
+            path,
+            PathBuf::from("/journal/2024/12/31.md.age"),
+            "Path should handle December 31st correctly"
+        );
+    }
+
+    #[test]
+    fn test_encrypted_entry_path_always_has_age_extension() {
+        let journal_dir = PathBuf::from("/journal");
+        let date = NaiveDate::from_ymd_opt(2024, 6, 15).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+
+        assert!(
+            path.extension().is_some_and(|ext| ext == "age"),
+            "Path must have .age extension"
+        );
+        assert!(
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(".md.age")),
+            "Filename must end with .md.age"
+        );
+    }
+
+    #[test]
+    fn test_encrypted_entry_path_directory_structure() {
+        let journal_dir = PathBuf::from("/test");
+        let date = NaiveDate::from_ymd_opt(2024, 7, 20).unwrap();
+        let path = get_encrypted_entry_path(&journal_dir, date);
+
+        // Verify components
+        let components: Vec<_> = path.components().collect();
+        assert!(
+            components.len() >= 4,
+            "Path should have at least 4 components"
+        );
+
+        // Check that path contains year/month/day structure
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("2024"), "Path should contain year");
+        assert!(
+            path_str.contains("07"),
+            "Path should contain zero-padded month"
+        );
+        assert!(path_str.contains("20"), "Path should contain day");
+    }
 }
