@@ -190,10 +190,17 @@
   All 126 tests + 11 doctests passing
   ```
 
-- [ ] **Add validation for encrypted directory structure** (1hr)
+- [x] **Add validation for encrypted directory structure** (1hr)
   ```
-  Files: src/ops/edit.rs
-  Organize as: YYYY/MM/DD.md.age
+  Files: src/ops/edit.rs ✅
+  Enhanced get_encrypted_entry_path() with:
+    - Comprehensive documentation of YYYY/MM/DD.md.age structure
+    - Rationale for zero-padded months/days
+  Added 3 unit tests:
+    - test_encrypted_entry_path_structure (edge cases)
+    - test_encrypted_entry_path_always_has_age_extension
+    - test_encrypted_entry_path_directory_structure
+  Tests: 129 passing (126 → 129, +3)
   ```
 
 ---
