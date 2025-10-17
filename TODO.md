@@ -242,13 +242,18 @@
 
 ### Documentation
 
-- [ ] **Update README.md with v2.0 features** (1.5hr)
+- [x] **Update README.md with v2.0 features** (1.5hr)
   ```
-  Add sections:
-    - Encryption (age, SQLCipher)
-    - AI features (Ollama setup, models)
-    - New commands (ask, reflect, search)
-    - Configuration (new env vars)
+  Files: README.md ✅
+  Major overhaul:
+    - Introduction: AI-powered encrypted journaling with local-first privacy
+    - Features: Reorganized into Core (v1.0), Security (v2.0), AI (v2.0)
+    - Installation: SQLCipher + Ollama prerequisites, platform-specific setup
+    - Usage: Complete subcommand documentation (edit, ask, reflect, search, lock)
+    - Configuration: Core + v2.0 + logging env vars with defaults
+    - File Structure: YYYY/MM/DD.md.age + SQLCipher database explained
+    - Architecture: 9 modules with design principles, link to CLAUDE.md
+  Complete user-facing documentation for v2.0
   ```
 
 - [ ] **Create MIGRATION.md guide** (1hr)
