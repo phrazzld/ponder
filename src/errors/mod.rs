@@ -216,16 +216,18 @@ pub enum LockError {
 /// use ponder::errors::CryptoError;
 ///
 /// let error = CryptoError::VaultLocked;
-/// assert!(format!("{}", error).contains("locked"));
+/// let message = format!("{}", error);
+/// assert!(message.contains("locked"));
+/// assert!(message.contains("passphrase"));
 /// ```
 #[derive(Debug, Error)]
 pub enum CryptoError {
     /// Vault is locked and needs to be unlocked before operations can proceed.
-    #[error("Vault is locked. Run command again to unlock.")]
+    #[error("Session locked. Run command again to unlock with your passphrase.\n\nNote: Sessions automatically lock after inactivity (configurable via PONDER_SESSION_TIMEOUT).")]
     VaultLocked,
 
     /// Incorrect passphrase provided for decryption.
-    #[error("Incorrect passphrase")]
+    #[error("Incorrect passphrase. Please try again with the correct passphrase used to encrypt your journal.")]
     InvalidPassphrase(#[source] age::DecryptError),
 
     /// Encrypted data uses unsupported encryption format.
@@ -261,11 +263,11 @@ pub enum CryptoError {
 #[derive(Debug, Error)]
 pub enum DatabaseError {
     /// SQLite database error.
-    #[error("Database error: {0}")]
+    #[error("Database error: {0}\n\nIf you're seeing 'file is not a database' or cipher errors, this may indicate:\n- Wrong passphrase (the database is encrypted with SQLCipher)\n- Corrupted database file\n- Incompatible database format")]
     Sqlite(#[from] rusqlite::Error),
 
     /// Connection pool error.
-    #[error("Failed to get connection from pool: {0}")]
+    #[error("Failed to get connection from pool: {0}\n\nThis may indicate database connection issues. Try closing other ponder instances.")]
     Pool(#[from] r2d2::Error),
 
     /// Requested entry not found in database.
