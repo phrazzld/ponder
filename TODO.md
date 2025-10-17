@@ -261,13 +261,16 @@
     - Rollback procedure
   ```
 
-- [ ] **Update CLAUDE.md with v2.0 architecture** (30min)
+- [x] **Update CLAUDE.md with v2.0 architecture** (30min)
   ```
-  Updates:
-    - New module structure (crypto, db, ai, ops)
-    - New dependencies
-    - New test structure
-    - Security considerations
+  Files: CLAUDE.md ✅
+  Major documentation overhaul:
+    - Core Modules: Detailed descriptions of crypto, db, ai, ops modules
+    - Module Flow: Command-specific flow diagrams (edit, ask, reflect, search, lock)
+    - Key Design Decisions: Security, architecture, storage, AI, v1.0 compat
+    - Testing Structure: 129 unit tests, integration suites, dependencies
+    - New sections: Dependencies (core/security/dev), Security Considerations
+  Complete context for AI assistants and developers on v2.0 architecture
   ```
 
 ---
