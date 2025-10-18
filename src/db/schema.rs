@@ -6,7 +6,12 @@
 
 use crate::errors::{AppResult, DatabaseError};
 use rusqlite::Connection;
-use tracing::debug;
+use tracing::{debug, info};
+
+/// Current schema version.
+///
+/// Increment this whenever schema changes are made to support future migrations.
+pub const SCHEMA_VERSION: i32 = 1;
 
 /// Creates all database tables and indexes.
 ///
@@ -119,8 +124,54 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
     )
     .map_err(DatabaseError::Sqlite)?;
 
+    // Schema version tracking table
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER NOT NULL,
+            applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Record schema version if not already recorded
+    let current_version = get_schema_version(conn)?;
+    if current_version.is_none() {
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?)",
+            [SCHEMA_VERSION],
+        )
+        .map_err(DatabaseError::Sqlite)?;
+        info!("Initialized database schema version {}", SCHEMA_VERSION);
+    } else {
+        debug!("Schema version already recorded: {:?}", current_version);
+    }
+
     debug!("Database tables created successfully");
     Ok(())
+}
+
+/// Gets the current schema version from the database.
+///
+/// Returns `None` if the schema_version table doesn't exist or is empty.
+///
+/// # Errors
+///
+/// Returns an error if the query fails for reasons other than missing table.
+pub fn get_schema_version(conn: &Connection) -> AppResult<Option<i32>> {
+    let result = conn.query_row(
+        "SELECT version FROM schema_version ORDER BY applied_at DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    );
+
+    match result {
+        Ok(version) => Ok(Some(version)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) if e.to_string().contains("no such table") => Ok(None),
+        Err(e) => Err(DatabaseError::Sqlite(e).into()),
+    }
 }
 
 #[cfg(test)]

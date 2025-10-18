@@ -34,7 +34,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 use std::path::Path;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Type alias for a pooled SQLite connection.
 pub type PooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
@@ -96,8 +96,13 @@ impl Database {
 
         drop(conn);
 
+        let db = Database { pool };
+
+        // Auto-initialize schema (idempotent - safe on existing databases)
+        db.initialize_schema()?;
+
         info!("Database opened successfully");
-        Ok(Database { pool })
+        Ok(db)
     }
 
     /// Gets a connection from the pool.
@@ -123,6 +128,67 @@ impl Database {
         let conn = self.get_conn()?;
         schema::create_tables(&conn)?;
         info!("Database schema initialized");
+        Ok(())
+    }
+
+    /// Validates that the database schema is correct and complete.
+    ///
+    /// Checks that all required tables exist and schema version is compatible.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Required tables are missing
+    /// - Schema version is incompatible
+    pub fn validate_schema(&self) -> AppResult<()> {
+        let conn = self.get_conn()?;
+
+        // Check required tables exist
+        let required_tables = vec!["entries", "embeddings", "schema_version"];
+        for table in required_tables {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+                    [table],
+                    |row| row.get(0),
+                )
+                .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+            if !exists {
+                return Err(crate::errors::AppError::Database(
+                    crate::errors::DatabaseError::Custom(format!(
+                        "Required table '{}' missing. Database may be corrupted or incompletely initialized.",
+                        table
+                    )),
+                ));
+            }
+        }
+
+        // Check schema version
+        let version = schema::get_schema_version(&conn)?;
+        match version {
+            Some(v) if v == schema::SCHEMA_VERSION => {
+                debug!("Schema version {} is current", v);
+            }
+            Some(v) if v < schema::SCHEMA_VERSION => {
+                warn!(
+                    "Schema version {} is older than current version {}. Migration may be needed.",
+                    v,
+                    schema::SCHEMA_VERSION
+                );
+            }
+            Some(v) => {
+                warn!(
+                    "Schema version {} is newer than expected {}. Application may be out of date.",
+                    v,
+                    schema::SCHEMA_VERSION
+                );
+            }
+            None => {
+                warn!("Schema version not found. Database may be from an older version.");
+            }
+        }
+
         Ok(())
     }
 }
