@@ -72,14 +72,42 @@ pub fn edit_entry(
         let temp_dir = crate::crypto::temp::get_secure_temp_dir()?;
         let temp_path = temp_dir.join(format!("ponder-new-{}.md", uuid::Uuid::new_v4()));
 
-        // Initialize with date header
-        let header = format!("# {}\n\n", date.format("%Y-%m-%d"));
+        // Initialize with date and time headers (v1.0 format)
+        let header = format!(
+            "# {}\n\n## {}\n\n",
+            _reference_datetime.format(crate::constants::JOURNAL_HEADER_DATE_FORMAT),
+            _reference_datetime.format(crate::constants::JOURNAL_HEADER_TIME_FORMAT)
+        );
         fs::write(&temp_path, header)?;
 
         debug!("Created new temp file with header: {:?}", temp_path);
         temp_path
     } else {
-        decrypt_to_temp(&encrypted_path, passphrase)?
+        let temp_path = decrypt_to_temp(&encrypted_path, passphrase)?;
+
+        // Append timestamp header to existing entry (v1.0 behavior)
+        let content = fs::read_to_string(&temp_path)?;
+        let timestamp = if content.ends_with('\n') {
+            format!(
+                "\n## {}\n\n\n",
+                _reference_datetime.format(crate::constants::JOURNAL_HEADER_TIME_FORMAT)
+            )
+        } else {
+            format!(
+                "\n\n## {}\n\n\n",
+                _reference_datetime.format(crate::constants::JOURNAL_HEADER_TIME_FORMAT)
+            )
+        };
+
+        let mut file = std::fs::OpenOptions::new().append(true).open(&temp_path)?;
+        use std::io::Write;
+        file.write_all(timestamp.as_bytes())?;
+
+        debug!(
+            "Appended timestamp header to existing entry: {:?}",
+            temp_path
+        );
+        temp_path
     };
 
     // Get checksum before editing
