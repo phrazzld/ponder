@@ -116,6 +116,9 @@ pub fn edit_entry(
     // Launch editor
     launch_editor(config, &temp_path)?;
 
+    // User-facing feedback: saving started
+    eprintln!("💾 Saving...");
+
     // Get checksum after editing
     let new_checksum = calculate_checksum(&temp_path)?;
     let content_changed = original_checksum != new_checksum;
@@ -135,10 +138,22 @@ pub fn edit_entry(
 
     // Generate and store embeddings if content changed
     if content_changed {
+        // User-facing feedback: generating embeddings
+        eprintln!("🔄 Generating embeddings...");
         info!("Content changed, generating embeddings...");
         generate_and_store_embeddings(&conn, ai_client, entry_id, &encrypted_path, passphrase)?;
+
+        // User-facing feedback: completion with word count
+        println!(
+            "✓ Entry saved ({} word{})",
+            word_count,
+            if word_count == 1 { "" } else { "s" }
+        );
     } else {
         debug!("Content unchanged, skipping embedding generation");
+
+        // User-facing feedback: completion, no changes
+        println!("✓ Entry saved (no changes)");
     }
 
     Ok(())
