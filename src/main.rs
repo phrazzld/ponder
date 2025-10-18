@@ -429,8 +429,15 @@ fn main() {
     let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
         || std::env::var(constants::ENV_VAR_CI).is_ok();
 
+    // Default to "warn" level for clean UX, "info" with --verbose flag
+    let default_level = if args.verbose {
+        constants::DEFAULT_LOG_LEVEL // "info" - show diagnostics
+    } else {
+        "warn" // Only warnings and errors on happy path
+    };
+
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
+        .or_else(|_| EnvFilter::try_new(default_level))
         .unwrap_or_else(|e| {
             eprintln!("Error: Invalid log level configuration: {}", e);
             std::process::exit(1);
