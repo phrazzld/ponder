@@ -322,6 +322,17 @@ pub enum AIError {
     #[error("Model not found: {0}. Try: ollama pull {0}")]
     ModelNotFound(String),
 
+    /// Model exists but doesn't support the requested operation.
+    #[error("Model '{model}' doesn't support {operation}.\n\nThis usually means:\n1. You're using a chat model for embeddings (or vice versa)\n2. Your Ollama version is too old for this model\n\nSuggested fixes:\n- For embeddings, try: ollama pull {suggestion}\n- Update Ollama: https://ollama.com/download\n- Check model type: ollama show {model}")]
+    ModelNotSupported {
+        /// The model that doesn't support the operation
+        model: String,
+        /// The operation that's not supported (e.g., "embeddings", "chat")
+        operation: String,
+        /// Suggested alternative model
+        suggestion: String,
+    },
+
     /// Invalid or unexpected response from Ollama API.
     #[error("Invalid response from Ollama: {0}")]
     InvalidResponse(String),

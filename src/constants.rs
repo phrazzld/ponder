@@ -134,9 +134,10 @@ pub const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 
 /// Default embedding model for semantic search.
 ///
-/// embeddinggemma is a 300M parameter embedding model from Google optimized for retrieval tasks.
-/// It produces 768-dimensional embeddings and is the smallest high-quality embedding model available.
-pub const DEFAULT_EMBED_MODEL: &str = "embeddinggemma";
+/// nomic-embed-text is a battle-tested 137M parameter embedding model optimized for retrieval tasks.
+/// It produces 768-dimensional embeddings and is widely supported across all Ollama versions.
+/// This model is chosen for maximum compatibility and proven stability.
+pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
 
 /// Default chat model for insights and reflections.
 ///

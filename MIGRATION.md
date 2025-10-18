@@ -114,11 +114,11 @@ Choose a strong passphrase to protect your journal entries.
 Enter passphrase: ****
 Confirm passphrase: ****
 
-Embedding model 'embeddinggemma' is not installed.
+Embedding model 'nomic-embed-text' is not installed.
 Would you like to pull it now? [Y/n] y
 
-Pulling embeddinggemma (this may take a minute)...
-✓ embeddinggemma ready!
+Pulling nomic-embed-text (this may take a minute)...
+✓ nomic-embed-text ready!
 
 [Editor opens]
 ```
@@ -165,7 +165,7 @@ Error: Maximum passphrase attempts exceeded. Please try again later.
   curl -fsSL https://ollama.com/install.sh | sh
 
   # Pull required models
-  ollama pull embeddinggemma
+  ollama pull nomic-embed-text
   ollama pull gemma3:4b
   ```
 
@@ -174,7 +174,7 @@ Error: Maximum passphrase attempts exceeded. Please try again later.
 - Ponder binary: ~15MB
 - SQLCipher database: ~10MB per 1000 entries
 - Encrypted entries: ~1.1x plaintext size
-- Ollama models: ~2.3GB total (embeddinggemma + gemma3:4b)
+- Ollama models: ~3.6GB total (nomic-embed-text ~270MB + gemma3:4b ~3.3GB)
 
 ## Configuration
 
@@ -308,13 +308,13 @@ curl -fsSL https://ollama.com/install.sh | sh
 ollama serve &
 
 # Pull required models
-ollama pull embeddinggemma
+ollama pull nomic-embed-text
 ollama pull gemma3:4b
 ```
 
 ### Models not installed
 
-**Symptom**: `Embedding model 'embeddinggemma' is not installed`
+**Symptom**: `Embedding model 'nomic-embed-text' is not installed`
 
 **Cause**: Ollama models not pulled
 
@@ -324,7 +324,7 @@ ollama pull gemma3:4b
 ponder edit  # Will prompt to install
 
 # Option 2: Manual installation
-ollama pull embeddinggemma
+ollama pull nomic-embed-text
 ollama pull gemma3:4b
 ```
 
@@ -375,7 +375,7 @@ A: Approximately 10MB per 1000 entries (768-dimensional vectors + metadata).
 
 **Q: Can I use different Ollama models?**
 A: Not currently configurable. The defaults are:
-- `embeddinggemma` for embeddings
+- `nomic-embed-text` for embeddings
 - `gemma3:4b` for chat/reflections
 
 ## Getting Help

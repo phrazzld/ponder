@@ -71,6 +71,12 @@ pub fn check_model_installed(client: &OllamaClient, model: &str) -> AppResult<bo
             debug!("Model '{}' not found", model);
             Ok(false)
         }
+        Err(AppError::AI(AIError::ModelNotSupported { .. })) => {
+            // Model exists but doesn't support embeddings (wrong model type)
+            // Treat as "not available" for embedding purposes
+            warn!("Model '{}' doesn't support embeddings", model);
+            Ok(false)
+        }
         Err(e) => {
             // Other errors (Ollama offline, etc) should propagate
             Err(e)

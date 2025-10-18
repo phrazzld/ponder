@@ -126,6 +126,19 @@ impl OllamaClient {
                 return Err(AIError::ModelNotFound(model.to_string()).into());
             }
 
+            // Check if this is a "model doesn't support operation" error
+            if error_text.contains("does not support embedding")
+                || error_text.contains("doesn't support embedding")
+                || error_text.contains("not support embeddings")
+            {
+                return Err(AIError::ModelNotSupported {
+                    model: model.to_string(),
+                    operation: "embeddings".to_string(),
+                    suggestion: crate::constants::DEFAULT_EMBED_MODEL.to_string(),
+                }
+                .into());
+            }
+
             return Err(
                 AIError::InvalidResponse(format!("HTTP {}: {}", status, error_text)).into(),
             );
