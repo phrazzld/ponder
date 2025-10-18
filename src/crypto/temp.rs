@@ -9,7 +9,11 @@ use age::secrecy::SecretString;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
 use tracing::{debug, warn};
+
+#[cfg(not(target_os = "linux"))]
+use tracing::debug;
 
 /// Temporary filesystem paths to check for RAM-based storage.
 const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
@@ -43,11 +47,22 @@ pub fn get_secure_temp_dir() -> AppResult<PathBuf> {
 
     // Fall back to system temp directory
     let temp_dir = std::env::temp_dir();
+
+    // Only warn on Linux where tmpfs is expected and actionable
+    // On macOS/Windows, tmpfs doesn't exist so warning is not useful
+    #[cfg(target_os = "linux")]
     warn!(
         "tmpfs not available, using system temp directory: {:?}. \
-         Decrypted content may persist on disk.",
+         Decrypted content may persist on disk. Consider creating /dev/shm.",
         temp_dir
     );
+
+    #[cfg(not(target_os = "linux"))]
+    debug!(
+        "Using system temp directory: {:?} (tmpfs not available on this platform)",
+        temp_dir
+    );
+
     Ok(temp_dir)
 }
 
