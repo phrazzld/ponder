@@ -340,9 +340,11 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             let instance_a_child = std::process::Command::new("cargo")
                 .arg("run")
                 .arg("--")
+                .arg("edit") // v2.0: add edit subcommand
                 .arg("--date")
                 .arg(&today_date_str)
                 .env("PONDER_EDITOR", &slow_editor_script)
+                .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
                 .env(
                     "PONDER_DIR",
                     journal_dir.to_str().ok_or_else(|| {
@@ -394,6 +396,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             let second_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create second ponder command for lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
+            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -406,6 +409,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     .to_str()
                     .ok_or_else(|| format!("Failed to convert HOME directory path to string for second instance: {}", journal_dir.display()))?,
             )
+            .arg("edit") // v2.0: add edit subcommand
             .arg("--date")
             .arg(&today_date_str)
             .assert()
@@ -418,6 +422,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     Command::cargo_bin("ponder")
                     .map_err(|e| format!("Failed to create command for lock error verification: {}", e))?
                     .env("PONDER_EDITOR", "true")
+                    .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
                     .env(
                         "PONDER_DIR",
                         journal_dir
@@ -430,6 +435,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                             .to_str()
                             .ok_or_else(|| format!("Failed to convert HOME directory path to string for lock verification: {}", journal_dir.display()))?,
                     )
+                    .arg("edit") // v2.0: add edit subcommand
                     .arg("--date")
                     .arg(&today_date_str)
                     .assert()
@@ -484,6 +490,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             let third_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create third ponder command for post-lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
+            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -496,6 +503,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     .to_str()
                     .ok_or_else(|| format!("Failed to convert HOME directory path to string for third instance: {}", journal_dir.display()))?,
             )
+            .arg("edit") // v2.0: add edit subcommand
             .arg("--date")
             .arg(&today_date_str)
             .assert();
@@ -587,9 +595,11 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
             let instance_a_child = std::process::Command::new("cargo")
             .arg("run")
             .arg("--")
+            .arg("edit") // v2.0: add edit subcommand
             .arg("--date")
             .arg(&today_date_str)
             .env("PONDER_EDITOR", &slow_editor_script)
+            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -625,6 +635,7 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
             let yesterday_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create command for yesterday's file test: {}", e))?
             .env("PONDER_EDITOR", "true")
+            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -637,6 +648,7 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
                     .to_str()
                     .ok_or_else(|| format!("Failed to convert HOME directory path to string for yesterday test: {}", journal_dir.display()))?,
             )
+            .arg("edit") // v2.0: add edit subcommand
             .arg("--date")
             .arg(&yesterday_date_str)
             .assert();

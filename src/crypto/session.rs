@@ -220,6 +220,11 @@ impl SessionManager {
     /// - User declines passphrase prompt
     /// - Passphrase confirmation fails (new passphrase)
     /// - stdin reading fails
+    ///
+    /// # Testing
+    ///
+    /// For non-interactive testing, set `PONDER_TEST_PASSPHRASE` environment variable.
+    /// This bypasses interactive prompting and uses the provided value.
     pub fn get_passphrase_or_prompt(&mut self, db_exists: bool) -> AppResult<&SecretString> {
         if self.is_locked() {
             debug!(
@@ -227,7 +232,11 @@ impl SessionManager {
                 db_exists
             );
 
-            let passphrase = if db_exists {
+            // Check for test passphrase env var (for non-interactive testing)
+            let passphrase = if let Ok(test_passphrase) = std::env::var("PONDER_TEST_PASSPHRASE") {
+                debug!("Using PONDER_TEST_PASSPHRASE for non-interactive testing");
+                SecretString::new(test_passphrase)
+            } else if db_exists {
                 Self::prompt_for_existing_passphrase()?
             } else {
                 Self::prompt_for_new_passphrase()?
