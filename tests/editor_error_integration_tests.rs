@@ -20,15 +20,18 @@ fn run_with_editor(editor_command: &str) -> Result<(bool, String), Box<dyn std::
     // Set up the PONDER_EDITOR environment variable
     env::set_var("PONDER_EDITOR", editor_command);
     env::set_var("PONDER_DIR", temp_path);
+    // v2.0: Set test passphrase for non-interactive testing
+    env::set_var("PONDER_TEST_PASSPHRASE", "test-passphrase");
 
-    // Run the command and capture its output
+    // v2.0: Run with "edit" subcommand
     let output = std::process::Command::new("cargo")
-        .args(["run", "--quiet"])
+        .args(["run", "--quiet", "--", "edit"])
         .output()?;
 
     // Clean up the environment
     env::remove_var("PONDER_EDITOR");
     env::remove_var("PONDER_DIR");
+    env::remove_var("PONDER_TEST_PASSPHRASE");
 
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     Ok((output.status.success(), stderr))
