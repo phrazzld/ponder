@@ -13,6 +13,10 @@ fn set_up_command() -> Command {
     let mut cmd = Command::cargo_bin("ponder").unwrap();
     // Clear environment for test isolation
     cmd.env_clear();
+    // Set test passphrase for non-interactive testing (v2.0)
+    cmd.env("PONDER_TEST_PASSPHRASE", "test-passphrase");
+    // v2.0: Add edit subcommand as default
+    cmd.arg("edit");
     cmd
 }
 

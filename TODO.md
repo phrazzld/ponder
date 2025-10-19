@@ -241,6 +241,127 @@
   Success: All tests pass, >85% coverage
   ```
 
+### Quality Infrastructure
+
+- [ ] **Fix Ollama test dependency blocking CI** (2hr) **CRITICAL**
+  ```
+  Problem: ops_integration_tests.rs hangs in CI waiting for Ollama service
+  Files: tests/ops_integration_tests.rs, Cargo.toml (add mockito)
+  Solution A (Recommended): Mock Ollama HTTP API with mockito::Server
+    - Create setup_mock_ollama() helper in test module
+    - Mock POST /api/embed with 768-dim vector response
+    - Mock POST /api/chat with completion response
+  Solution B: Skip in CI environment
+    - Add #[cfg_attr(ci, ignore)] to Ollama-dependent tests
+    - Or check std::env::var("CI") and skip/mock dynamically
+  Success criteria: CI passes without hanging, tests still verify behavior
+  ```
+
+- [ ] **Add secrets scanning with Gitleaks** (30min) **CRITICAL**
+  ```
+  Files: .pre-commit-config.yaml, .github/workflows/security.yml (new)
+  Pre-commit hook:
+    - Add gitleaks/gitleaks repo to .pre-commit-config.yaml
+    - Hook: gitleaks protect --staged --verbose --redact
+    - Run on commit to catch PONDER_TEST_PASSPHRASE, API keys
+  CI workflow (security.yml):
+    - Add gitleaks-action@v2 with fetch-depth: 0
+    - Scan full git history for leaked secrets
+  Success criteria: pre-commit blocks commits with secrets, CI fails on leaks
+  ```
+
+- [ ] **Configure Dependabot for automated dependency updates** (15min) **CRITICAL**
+  ```
+  Files: .github/dependabot.yml (new)
+  Configuration:
+    package-ecosystem: "cargo"
+    directory: "/"
+    schedule: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+  Success criteria: Dependabot creates weekly PRs for outdated deps
+  ```
+
+- [ ] **Add cargo-audit to CI for vulnerability scanning** (20min)
+  ```
+  Files: .github/workflows/ci.yml or security.yml
+  Job: audit
+    - Install cargo-audit: cargo install cargo-audit
+    - Run: cargo audit --deny warnings
+    - Schedule: weekly cron or on dependency changes
+  Alternative: Add cargo-deny for more control
+  Success criteria: CI fails on HIGH/CRITICAL vulnerabilities
+  ```
+
+- [ ] **Add coverage tracking with cargo-tarpaulin** (1hr)
+  ```
+  Files: .github/workflows/ci.yml, .gitignore (add coverage/)
+  Installation: cargo install cargo-tarpaulin
+  Run command: cargo tarpaulin --out Html --exclude-files tests/ --output-dir coverage
+  Set coverage floors for critical modules:
+    --fail-under 90 (for src/crypto/)
+    --fail-under 80 (for src/db/)
+    --fail-under 75 (for src/ops/)
+  Optional: Upload to Coveralls or Codecov
+  Success criteria: Coverage report generated, critical paths meet thresholds
+  ```
+
+- [ ] **Categorize tests by speed/dependencies** (1.5hr)
+  ```
+  Files: All test files (tests/*.rs, src/*/mod.rs #[cfg(test)])
+  Add attributes:
+    #[test] - Fast unit tests (no I/O, no external deps)
+    #[test]
+    #[ignore = "integration"] - Integration tests (I/O, no Ollama)
+    #[test]
+    #[ignore = "e2e"] - E2E tests (requires Ollama)
+  Update CI:
+    - Default: cargo test (fast unit tests only)
+    - Integration: cargo test -- --ignored --skip e2e
+    - E2E: cargo test -- --ignored (only with Ollama setup)
+  Success criteria: cargo test <2min, full suite with --ignored <5min
+  ```
+
+- [ ] **Move cargo clippy to pre-push hook** (15min)
+  ```
+  Files: .pre-commit-config.yaml
+  Problem: clippy on every commit slows workflow (5-10s)
+  Solution:
+    - Remove clippy from pre-commit hooks
+    - Add to pre-push hooks instead
+    - Keeps commits fast (<2s), catches issues before CI
+  Pre-commit (fast): cargo fmt, gitleaks only
+  Pre-push (thorough): cargo clippy, cargo test --lib
+  Success criteria: Commits <2s, push <30s with checks
+  ```
+
+- [ ] **Set up git-cliff for automated changelog** (45min)
+  ```
+  Files: cliff.toml (new), .github/workflows/release.yml (optional)
+  Installation: cargo install git-cliff
+  Configuration (cliff.toml):
+    conventional_commits = true
+    commit_parsers:
+      - { message = "^feat", group = "Features" }
+      - { message = "^fix", group = "Bug Fixes" }
+      - { message = "^perf", group = "Performance" }
+  Generate: git cliff --output CHANGELOG.md
+  Automate: Add to release workflow or git tag hook
+  Success criteria: CHANGELOG.md generated from commit history
+  ```
+
+- [ ] **Add security.yml workflow** (30min)
+  ```
+  Files: .github/workflows/security.yml (new)
+  Jobs:
+    1. secrets: gitleaks/gitleaks-action@v2 (scan git history)
+    2. audit: cargo audit --deny warnings (vulnerabilities)
+  Triggers: push, pull_request, schedule (weekly)
+  Success criteria: Automated security scanning on all PRs and weekly
+  ```
+
 ### Documentation
 
 - [x] **Update README.md with v2.0 features** (1.5hr)

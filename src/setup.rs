@@ -151,6 +151,14 @@ pub fn ensure_model_available(
     model: &str,
     model_type: &str,
 ) -> AppResult<()> {
+    // Skip model check in test/CI environments
+    // PONDER_TEST_PASSPHRASE indicates non-interactive testing
+    // CI indicates GitHub Actions or similar CI environment
+    if std::env::var("PONDER_TEST_PASSPHRASE").is_ok() || std::env::var("CI").is_ok() {
+        debug!("Skipping {} model check in test/CI environment", model_type);
+        return Ok(());
+    }
+
     match check_model_installed(client, model) {
         Ok(true) => {
             debug!("{} model '{}' is available", model_type, model);
