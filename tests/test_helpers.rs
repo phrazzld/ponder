@@ -4,6 +4,7 @@ pub const TEST_PASSPHRASE: &str = "test-passphrase";
 
 /// Creates a `Command` for the `ponder` binary with a clean, non-interactive environment.
 /// Additional environment variables or arguments can be configured by the caller.
+#[allow(dead_code)] // Used in conditionally compiled test files (editor_security_tests, etc.)
 pub fn base_ponder_command() -> Command {
     let mut cmd = Command::cargo_bin("ponder").expect("ponder binary not built");
     configure_ponder_command(&mut cmd);
@@ -11,6 +12,7 @@ pub fn base_ponder_command() -> Command {
 }
 
 /// Applies the standard non-interactive environment to an existing `Command`.
+#[allow(dead_code)] // Used in conditionally compiled test files (editor_security_tests, etc.)
 pub fn configure_ponder_command(cmd: &mut Command) {
     #[cfg(target_os = "macos")]
     {
