@@ -7,9 +7,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tempfile::tempdir;
 
-mod debug_helpers;
-use debug_helpers::{debug_command_context, debug_environment_state, debug_file_info};
-
 // This function runs the ponder binary with a specific editor
 // and returns a Result with whether the process succeeded and the stderr if it failed
 fn run_with_editor(editor_command: &str) -> Result<(bool, String), Box<dyn std::error::Error>> {
@@ -65,22 +62,11 @@ fn test_editor_command_not_found() -> Result<(), Box<dyn std::error::Error>> {
 
     // Use robust pattern matching instead of checking for enum variant names
     // This safeguards against test brittleness when error message formats change
-    if !stderr.contains("not found") || !stderr.contains("nonexistent_editor_command") {
-        let debug_context = format!(
-            "Error message validation failed for nonexistent editor command.\n\
-            \n\
-            Expected: Error message should contain 'not found' and the command name\n\
-            Actual stderr output: {}\n\
-            \n\
-            Command execution context:\n{}\n\
-            \n\
-            Environment:\n{}",
-            stderr,
-            debug_command_context("nonexistent_editor_command", &[], None),
-            debug_environment_state()
-        );
-        panic!("{}", debug_context);
-    }
+    assert!(
+        stderr.contains("not found") && stderr.contains("nonexistent_editor_command"),
+        "Error message should contain 'not found' and the command name. Stderr: {}",
+        stderr
+    );
     Ok(())
 }
 
@@ -109,26 +95,11 @@ fn test_editor_permission_denied() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!success, "Command with non-executable editor should fail");
     // The exact error might be platform-dependent, but should mention permission
     // On some platforms it could be "permission denied"
-
-    if !(stderr.contains("PermissionDenied") || stderr.contains("permission")) {
-        let debug_context = format!(
-            "Error message validation failed for non-executable editor.\n\
-            \n\
-            Expected: Error message should contain 'PermissionDenied' or 'permission'\n\
-            Actual stderr output: {}\n\
-            \n\
-            Script file information:\n{}\n\
-            \n\
-            Command execution context:\n{}\n\
-            \n\
-            Environment:\n{}",
-            stderr,
-            debug_file_info(&script_path),
-            debug_command_context(script_path_str, &[], Some(temp_dir.path())),
-            debug_environment_state()
-        );
-        panic!("{}", debug_context);
-    }
+    assert!(
+        stderr.contains("PermissionDenied") || stderr.contains("permission"),
+        "Error message should contain 'PermissionDenied' or 'permission'. Stderr: {}",
+        stderr
+    );
     Ok(())
 }
 

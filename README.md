@@ -386,6 +386,27 @@ Ponder v2.0 follows a modular architecture with clear separation of concerns:
 - **Security First**: Encryption, zeroization, secure temp files
 - **Local-First AI**: Ollama runs locally, your data stays private
 
+### Concurrent Edits
+
+Ponder is designed as a single-user journaling tool with per-file encryption. The v2.0 architecture naturally minimizes conflicts:
+
+- Each date has a separate encrypted file (`YYYY/MM/DD.md.age`)
+- Only concurrent edits to the **same date** can conflict (rare scenario)
+- If a conflict occurs, you'll receive a warning before saving
+- **Last-write-wins**: Your save proceeds and overwrites any concurrent changes
+
+**Conflict Detection Example**:
+```
+⚠️  Warning: This entry was modified while you were editing.
+   Your changes will overwrite those modifications.
+```
+
+This design is intentionally simple:
+- No complex file locking mechanisms
+- No platform-specific behavior
+- Clear user feedback for rare edge cases
+- Reliability over paranoia for single-user workflows
+
 For detailed architecture documentation, see [CLAUDE.md](./CLAUDE.md).
 
 ## Contributing 🤝

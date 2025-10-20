@@ -7,7 +7,7 @@ use crate::constants::{DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_
 use crate::crypto::temp::{decrypt_to_temp, encrypt_from_temp};
 use crate::crypto::SessionManager;
 use crate::db::embeddings::insert_embedding;
-use crate::db::entries::upsert_entry;
+use crate::db::entries::{get_entry_checksum, upsert_entry};
 use crate::db::Database;
 use crate::errors::{AppError, AppResult, EditorError};
 use chrono::{DateTime, Local, NaiveDate};
@@ -123,6 +123,15 @@ pub fn edit_entry(
     let new_checksum = calculate_checksum(&temp_path)?;
     let content_changed = original_checksum != new_checksum;
 
+    // Conflict detection: Check if file was modified while user was editing
+    let conn = db.get_conn()?;
+    if let Ok(Some(db_checksum)) = get_entry_checksum(&conn, date) {
+        if db_checksum != original_checksum {
+            eprintln!("⚠️  Warning: This entry was modified while you were editing.");
+            eprintln!("   Your changes will overwrite those modifications.");
+        }
+    }
+
     // Calculate word count from plaintext BEFORE encrypting
     let content = fs::read_to_string(&temp_path)?;
     let word_count = content.split_whitespace().count();
@@ -132,8 +141,6 @@ pub fn edit_entry(
     info!("Entry saved to {:?}", encrypted_path);
 
     // Update database with already-calculated word count
-
-    let conn = db.get_conn()?;
     let entry_id = upsert_entry(&conn, &encrypted_path, date, &new_checksum, word_count)?;
 
     // Generate and store embeddings if content changed

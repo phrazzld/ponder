@@ -161,6 +161,33 @@ pub fn get_entry_path(conn: &Connection, entry_id: i64) -> AppResult<PathBuf> {
     Ok(PathBuf::from(path_str))
 }
 
+/// Gets the checksum for an entry by date.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+/// * `date` - Date of the entry
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+/// Returns `Ok(None)` if no entry exists for the given date.
+pub fn get_entry_checksum(conn: &Connection, date: NaiveDate) -> AppResult<Option<String>> {
+    debug!("Getting checksum for entry date {}", date);
+
+    let result = conn.query_row(
+        "SELECT checksum FROM entries WHERE date = ?1",
+        params![date.to_string()],
+        |row| row.get(0),
+    );
+
+    match result {
+        Ok(checksum) => Ok(Some(checksum)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(DatabaseError::Sqlite(e).into()),
+    }
+}
+
 /// Checks if an entry needs embedding update based on checksum.
 ///
 /// Returns `true` if:
@@ -380,5 +407,62 @@ mod tests {
         let conn = setup_test_db();
         let result = mark_embedded(&conn, 999);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_entry_checksum() {
+        let conn = setup_test_db();
+        let path = PathBuf::from("/tmp/20240101.md");
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+
+        // No entry yet
+        let checksum = get_entry_checksum(&conn, date).unwrap();
+        assert!(checksum.is_none());
+
+        // Create entry
+        upsert_entry(&conn, &path, date, "abc123", 100).unwrap();
+
+        // Retrieve checksum
+        let checksum = get_entry_checksum(&conn, date).unwrap();
+        assert_eq!(checksum, Some("abc123".to_string()));
+
+        // Update checksum
+        upsert_entry(&conn, &path, date, "def456", 100).unwrap();
+        let checksum = get_entry_checksum(&conn, date).unwrap();
+        assert_eq!(checksum, Some("def456".to_string()));
+    }
+
+    #[test]
+    fn test_conflict_detection_scenario() {
+        let conn = setup_test_db();
+        let path = PathBuf::from("/tmp/20240101.md");
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+
+        // Simulate: User starts editing with checksum A
+        let original_checksum = "checksum_a";
+        upsert_entry(&conn, &path, date, original_checksum, 100).unwrap();
+
+        // Simulate: External process modifies entry (checksum B)
+        let external_checksum = "checksum_b";
+        upsert_entry(&conn, &path, date, external_checksum, 150).unwrap();
+
+        // Simulate: User saves their changes (detect conflict)
+        let db_checksum = get_entry_checksum(&conn, date).unwrap().unwrap();
+        assert_ne!(
+            db_checksum, original_checksum,
+            "Conflict should be detected: DB checksum changed"
+        );
+        assert_eq!(
+            db_checksum, external_checksum,
+            "DB should have external checksum"
+        );
+
+        // User's save proceeds (last-write-wins)
+        let user_checksum = "checksum_user";
+        upsert_entry(&conn, &path, date, user_checksum, 200).unwrap();
+
+        // Verify user's checksum is now in DB
+        let final_checksum = get_entry_checksum(&conn, date).unwrap().unwrap();
+        assert_eq!(final_checksum, user_checksum, "Last write should win");
     }
 }
