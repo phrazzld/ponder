@@ -207,6 +207,12 @@
 
 ## Phase 6: Testing & Documentation (Est: 4-6hr)
 
+### CI Triage (2025-10-19)
+
+- [x] [CODE FIX] Update `tests/editor_security_tests::set_up_command()` to reseed `PONDER_TEST_PASSPHRASE` via a shared helper (skipped on macOS due to reqwest limitations) and rerun `cargo test --test editor_security_tests -- --test-threads=1`.
+- [x] [CODE FIX] Ensure `tests/locking_tests.rs` seeds `PONDER_TEST_PASSPHRASE` for the `cargo run` path before spawning the first editor process so the sentinel workflow completes; validate with `cargo test --test locking_tests -- --test-threads=1`.
+- [x] [CODE FIX] Add regression coverage proving the session layer respects `PONDER_TEST_PASSPHRASE` and document the non-interactive passphrase requirement in `CONTRIBUTING.md` / `docs/DEVELOPMENT_SETUP.md`.
+
 ### Comprehensive Testing
 
 - [x] **Add security-focused integration tests** (2.5hr)

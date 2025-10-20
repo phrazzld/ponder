@@ -8,13 +8,12 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+mod test_helpers;
+use test_helpers::base_ponder_command;
+
 // Helper function to set up a test Command instance with clean environment
 fn set_up_command() -> Command {
-    let mut cmd = Command::cargo_bin("ponder").unwrap();
-    // Clear environment for test isolation
-    cmd.env_clear();
-    // Set test passphrase for non-interactive testing (v2.0)
-    cmd.env("PONDER_TEST_PASSPHRASE", "test-passphrase");
+    let mut cmd = base_ponder_command();
     // v2.0: Add edit subcommand as default
     cmd.arg("edit");
     cmd

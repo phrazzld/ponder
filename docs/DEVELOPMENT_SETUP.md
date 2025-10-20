@@ -232,6 +232,10 @@ After setting up your IDE, verify the configuration works correctly:
 - View LSP logs: `:LspLog`
 - Ensure your Neovim version supports LSP (0.5.0+)
 
+### CLI prompts for a passphrase during tests
+- The application now enforces encrypted sessions. Export `PONDER_TEST_PASSPHRASE` (for example `export PONDER_TEST_PASSPHRASE=test-passphrase`) before running `cargo test` or invoking the CLI from scripts so automated workflows do not hang waiting for interactive input.
+- CI and pre-commit hooks assume this variable is present; keep it set in your shell profile or tooling configuration.
+
 ## Additional Resources
 
 - [rust-analyzer Manual](https://rust-analyzer.github.io/manual.html)

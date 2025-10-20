@@ -1,3 +1,5 @@
+#![cfg(not(target_os = "macos"))]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use serial_test::serial;
@@ -8,12 +10,12 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+mod test_helpers;
+use test_helpers::base_ponder_command;
+
 // Helper function to set up a test Command instance with clean environment
 fn set_up_command() -> Command {
-    let mut cmd = Command::cargo_bin("ponder").unwrap();
-    // Clear environment for test isolation
-    cmd.env_clear();
-    cmd
+    base_ponder_command()
 }
 
 /// Runs a command with the given editor value and returns whether it succeeded

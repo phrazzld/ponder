@@ -263,7 +263,7 @@ impl Drop for SessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use age::secrecy::SecretString;
+    use age::secrecy::{ExposeSecret, SecretString};
     use std::thread;
 
     #[test]
@@ -359,5 +359,18 @@ mod tests {
             let result = session.get_passphrase();
             assert!(result.is_ok());
         }
+    }
+
+    #[test]
+    fn test_session_uses_test_passphrase_env_var() {
+        std::env::set_var("PONDER_TEST_PASSPHRASE", "unit-test-passphrase");
+        let mut session = SessionManager::new(30);
+
+        let secret = session
+            .get_passphrase_or_prompt(true)
+            .expect("env-provided passphrase should unlock session");
+        assert_eq!(secret.expose_secret(), "unit-test-passphrase");
+
+        std::env::remove_var("PONDER_TEST_PASSPHRASE");
     }
 }

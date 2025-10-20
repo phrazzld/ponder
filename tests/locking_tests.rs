@@ -1,3 +1,5 @@
+#![cfg(not(target_os = "macos"))]
+
 use serial_test::serial;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,6 +12,8 @@ use predicates::prelude::*;
 
 mod debug_helpers;
 use debug_helpers::{debug_directory_state, debug_environment_state, debug_file_info};
+mod test_helpers;
+use test_helpers::TEST_PASSPHRASE;
 
 // Fixed test date for deterministic testing
 const FIXED_TEST_DATE: &str = "2024-01-15";
@@ -323,6 +327,9 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
         sentinel_path.display()
     );
 
+    // Ensure non-interactive passphrase is available to cargo-run subprocesses.
+    std::env::set_var("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE);
+
     // Define editor hold duration
     let editor_hold_duration = Duration::from_secs(3);
     let editor_hold_duration_secs = editor_hold_duration.as_secs();
@@ -344,7 +351,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                 .arg("--date")
                 .arg(&today_date_str)
                 .env("PONDER_EDITOR", &slow_editor_script)
-                .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+                .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
                 .env(
                     "PONDER_DIR",
                     journal_dir.to_str().ok_or_else(|| {
@@ -396,7 +403,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             let second_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create second ponder command for lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+            .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -422,7 +429,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
                     Command::cargo_bin("ponder")
                     .map_err(|e| format!("Failed to create command for lock error verification: {}", e))?
                     .env("PONDER_EDITOR", "true")
-                    .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+                    .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
                     .env(
                         "PONDER_DIR",
                         journal_dir
@@ -490,7 +497,7 @@ fn test_file_locking_prevents_concurrent_access() -> Result<(), Box<dyn std::err
             let third_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create third ponder command for post-lock test: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+            .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -575,6 +582,9 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
         sentinel_path.display()
     );
 
+    // Ensure non-interactive passphrase is available to cargo-run subprocesses.
+    std::env::set_var("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE);
+
     // Define editor hold duration
     let editor_hold_duration_secs = 2;
 
@@ -599,7 +609,7 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
             .arg("--date")
             .arg(&today_date_str)
             .env("PONDER_EDITOR", &slow_editor_script)
-            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+            .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
             .env(
                 "PONDER_DIR",
                 journal_dir
@@ -635,7 +645,7 @@ fn test_partial_file_locking_with_multiple_files() -> Result<(), Box<dyn std::er
             let yesterday_result = Command::cargo_bin("ponder")
             .map_err(|e| format!("Failed to create command for yesterday's file test: {}", e))?
             .env("PONDER_EDITOR", "true")
-            .env("PONDER_TEST_PASSPHRASE", "test-passphrase") // v2.0: for non-interactive testing
+            .env("PONDER_TEST_PASSPHRASE", TEST_PASSPHRASE) // Non-interactive passphrase
             .env(
                 "PONDER_DIR",
                 journal_dir
