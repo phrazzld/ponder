@@ -301,6 +301,9 @@ impl Config {
     /// let valid_config = Config {
     ///     editor: "vim".to_string(),
     ///     journal_dir: PathBuf::from("/absolute/path"),
+    ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
+    ///     session_timeout_minutes: 30,
+    ///     ollama_url: "http://127.0.0.1:11434".to_string(),
     /// };
     /// assert!(valid_config.validate().is_ok());
     ///
@@ -308,6 +311,9 @@ impl Config {
     /// let invalid_config = Config {
     ///     editor: "".to_string(),
     ///     journal_dir: PathBuf::from("/absolute/path"),
+    ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
+    ///     session_timeout_minutes: 30,
+    ///     ollama_url: "http://127.0.0.1:11434".to_string(),
     /// };
     /// assert!(invalid_config.validate().is_err());
     /// ```

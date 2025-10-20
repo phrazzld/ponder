@@ -28,7 +28,7 @@ use tracing::debug;
 ///
 /// let text = "word1 word2 word3 word4 word5 word6";
 /// let chunks = chunk_text(text, 3, 1);
-/// assert_eq!(chunks.len(), 2);
+/// assert_eq!(chunks.len(), 3); // 6 words with chunk_size=3, overlap=1 produces 3 chunks
 /// ```
 pub fn chunk_text(text: &str, chunk_size: usize, overlap: usize) -> Vec<String> {
     if text.is_empty() {

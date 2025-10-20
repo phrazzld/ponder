@@ -15,15 +15,18 @@
 //! ```no_run
 //! use ponder::crypto::{SessionManager, encrypt_with_passphrase, decrypt_with_passphrase};
 //! use age::secrecy::SecretString;
+//! use ponder::AppResult;
 //!
+//! # fn example() -> AppResult<()> {
 //! let mut session = SessionManager::new(30); // 30-minute timeout
-//! let passphrase = session.unlock()?;
+//! let passphrase = session.get_passphrase_or_prompt(false)?;
 //!
 //! let plaintext = b"Secret journal entry";
-//! let encrypted = encrypt_with_passphrase(plaintext, passphrase)?;
-//! let decrypted = decrypt_with_passphrase(&encrypted, passphrase)?;
+//! let encrypted = encrypt_with_passphrase(plaintext, &passphrase)?;
+//! let decrypted = decrypt_with_passphrase(&encrypted, &passphrase)?;
 //! assert_eq!(plaintext, decrypted.as_slice());
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod age;
