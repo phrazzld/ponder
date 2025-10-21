@@ -25,6 +25,8 @@ pub const SCHEMA_VERSION: i32 = 1;
 /// - `entries_fts`: Full-text search index
 /// - `insights`: AI-generated insights
 /// - `reports`: Generated reports
+/// - `backup_log`: History of all backups
+/// - `backup_state`: Singleton tracking latest backup state
 ///
 /// # Errors
 ///
@@ -120,6 +122,36 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
 
         CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(type);
         CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at DESC);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Backup log table: history of all backups
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS backup_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            backup_path TEXT NOT NULL,
+            backup_type TEXT NOT NULL CHECK(backup_type IN ('full', 'incremental')),
+            entries_count INTEGER NOT NULL,
+            archive_size INTEGER NOT NULL,
+            checksum TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_backup_log_created_at ON backup_log(created_at DESC);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Backup state table: singleton tracking latest backup state
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS backup_state (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            last_backup_at DATETIME NOT NULL,
+            last_backup_checksum TEXT NOT NULL
+        );
         "#,
     )
     .map_err(DatabaseError::Sqlite)?;
@@ -286,5 +318,84 @@ mod tests {
         // Create tables twice - should not error
         create_tables(&conn).unwrap();
         create_tables(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_backup_tables_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify backup_log table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='backup_log'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+
+        // Verify backup_state table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='backup_state'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_backup_type_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid backup types should succeed
+        conn.execute(
+            "INSERT INTO backup_log (backup_path, backup_type, entries_count, archive_size, checksum) VALUES (?, ?, ?, ?, ?)",
+            ["test.tar.gz.age", "full", "10", "1024", "abc123"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO backup_log (backup_path, backup_type, entries_count, archive_size, checksum) VALUES (?, ?, ?, ?, ?)",
+            ["test2.tar.gz.age", "incremental", "5", "512", "def456"],
+        )
+        .unwrap();
+
+        // Invalid backup type should fail
+        let result = conn.execute(
+            "INSERT INTO backup_log (backup_path, backup_type, entries_count, archive_size, checksum) VALUES (?, ?, ?, ?, ?)",
+            ["test3.tar.gz.age", "invalid", "5", "512", "ghi789"],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_backup_state_singleton() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // First insert should succeed
+        conn.execute(
+            "INSERT INTO backup_state (id, last_backup_at, last_backup_checksum) VALUES (?, ?, ?)",
+            rusqlite::params![1, "2024-01-01 00:00:00", "abc123"],
+        )
+        .unwrap();
+
+        // Second insert with id=1 should fail (unique constraint)
+        let result = conn.execute(
+            "INSERT INTO backup_state (id, last_backup_at, last_backup_checksum) VALUES (?, ?, ?)",
+            rusqlite::params![1, "2024-01-02 00:00:00", "def456"],
+        );
+        assert!(result.is_err());
+
+        // Update should work
+        conn.execute(
+            "UPDATE backup_state SET last_backup_at = ?, last_backup_checksum = ? WHERE id = 1",
+            rusqlite::params!["2024-01-03 00:00:00", "ghi789"],
+        )
+        .unwrap();
     }
 }
