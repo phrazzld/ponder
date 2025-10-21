@@ -179,7 +179,7 @@
   Success: Commits with PONDER_TEST_PASSPHRASE or secrets blocked locally and in CI
   ```
 
-- [ ] **Configure Dependabot for dependency updates** (15min)
+- [x] **Configure Dependabot for dependency updates** (15min)
   ```
   File: .github/dependabot.yml (new)
   Config:
