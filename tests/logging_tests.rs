@@ -44,6 +44,7 @@ fn create_slow_editor_script(
 
 /// Test basic tracing infrastructure setup
 #[test]
+#[ignore = "integration"]
 fn test_tracing_setup() {
     // This test exists just to verify that the tracing and UUID dependencies
     // are correctly included and linked. If this test compiles and runs,
@@ -57,6 +58,7 @@ fn test_tracing_setup() {
 /// This verifies that T002 (removal of double logging) is working correctly
 /// NOTE: v2.0 uses per-file encryption, reducing lock conflicts compared to v1.0
 #[test]
+#[ignore = "integration"]
 #[serial]
 #[ignore = "v2.0: per-file encryption architecture reduces lock conflicts"]
 fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error::Error>> {
@@ -150,6 +152,7 @@ fn test_single_error_logging_for_lock_failure() -> Result<(), Box<dyn std::error
 /// Test that editor failures are logged exactly once at the application boundary
 /// This verifies that T003 (removal of double logging) is working correctly
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for testing
@@ -221,6 +224,7 @@ fn test_single_error_logging_for_editor_failure() -> Result<(), Box<dyn std::err
 /// Test that application errors are logged with structured format at the boundary
 /// This verifies that issue #43 (structured error logging) is properly implemented
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_structured_error_logging_boundary() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for testing
@@ -301,6 +305,7 @@ fn test_structured_error_logging_boundary() -> Result<(), Box<dyn std::error::Er
 /// Test that main() properly propagates and formats various AppError types
 /// This verifies that T001 and T004 work together correctly
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_main_error_propagation() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for testing

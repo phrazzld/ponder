@@ -15,6 +15,7 @@ fn set_up_command() -> Command {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_cli_no_args() {
     let mut cmd = set_up_command();
@@ -30,6 +31,7 @@ fn test_cli_no_args() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 #[ignore] // TODO: Fix retro mode behavior with multiple new entries in test environment
 fn test_cli_retro_flag() {
@@ -45,6 +47,7 @@ fn test_cli_retro_flag() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 #[ignore] // TODO: Fix reminisce mode behavior with multiple new entries in test environment
 fn test_cli_reminisce_flag() {
@@ -60,6 +63,7 @@ fn test_cli_reminisce_flag() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_cli_specific_date() {
     let mut cmd = set_up_command();
@@ -76,6 +80,7 @@ fn test_cli_specific_date() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_cli_invalid_date() {
     let mut cmd = set_up_command();
@@ -90,6 +95,7 @@ fn test_cli_invalid_date() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_cli_verbose_flag() {
     let mut cmd = set_up_command();
@@ -102,6 +108,7 @@ fn test_cli_verbose_flag() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_cli_invalid_flags_combination() {
     let mut cmd = set_up_command();

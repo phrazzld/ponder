@@ -55,6 +55,7 @@ fn create_mock_editor(
 
 // This test needs to be run serially to prevent environment variable conflicts
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_editor_command_not_found() -> Result<(), Box<dyn std::error::Error>> {
     let (success, stderr) = run_with_editor("nonexistent_editor_command")?;
@@ -71,6 +72,7 @@ fn test_editor_command_not_found() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_editor_permission_denied() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for our test script
@@ -104,6 +106,7 @@ fn test_editor_permission_denied() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_editor_non_zero_exit() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for our test script
@@ -136,6 +139,7 @@ fn test_editor_non_zero_exit() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_successful_editor() -> Result<(), Box<dyn std::error::Error>> {
     // Create a temporary directory for our test script

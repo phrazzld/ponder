@@ -61,13 +61,35 @@ jobs:
       run: cargo build --verbose
       timeout-minutes: 5
     
-    - name: Run tests
+    - name: Run unit tests (fast)
       run: cargo test --verbose -- --test-threads=1
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
-      timeout-minutes: 5
+      timeout-minutes: 3
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Run integration tests
+      run: cargo test --verbose -- --ignored --test-threads=1
+      env:
+        PONDER_EDITOR: echo
+        PONDER_DIR: /tmp/ponder_integration_tests
+        PONDER_TEST_PASSPHRASE: test-passphrase
+        RUST_BACKTRACE: 1
+      timeout-minutes: 8
 
   coverage:
     runs-on: ubuntu-latest

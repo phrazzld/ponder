@@ -7,6 +7,9 @@
 //! - No plaintext in database
 //! - Session timeout enforcement
 //! - Passphrase zeroization
+//!
+//! All tests in this file are integration tests (do I/O) and are marked with
+//! `#[ignore = "integration"]` to allow fast unit test runs.
 
 use age::secrecy::{ExposeSecret, SecretString};
 use ponder::crypto::{
@@ -28,6 +31,7 @@ use std::os::unix::fs::PermissionsExt;
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_encrypted_file_unreadable_without_passphrase() {
     let passphrase = SecretString::new("test-encryption-passphrase".to_string());
     let plaintext = b"Sensitive journal entry that must remain encrypted";
@@ -66,6 +70,7 @@ fn test_encrypted_file_unreadable_without_passphrase() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_wrong_passphrase_cannot_decrypt() {
     let correct_passphrase = SecretString::new("correct-passphrase".to_string());
     let wrong_passphrase = SecretString::new("wrong-passphrase".to_string());
@@ -107,6 +112,7 @@ fn test_wrong_passphrase_cannot_decrypt() {
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_temp_file_cleanup_on_normal_completion() {
     let passphrase = SecretString::new("cleanup-test".to_string());
     let plaintext = b"Test content for cleanup";
@@ -137,6 +143,7 @@ fn test_temp_file_cleanup_on_normal_completion() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_temp_file_cleanup_on_scope_exit() {
     let passphrase = SecretString::new("scope-cleanup-test".to_string());
     let plaintext = b"Test content for scope cleanup";
@@ -173,6 +180,7 @@ fn test_temp_file_cleanup_on_scope_exit() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "integration"]
 fn test_temp_file_permissions_are_secure() {
     let passphrase = SecretString::new("permissions-test".to_string());
     let plaintext = b"Sensitive content requiring secure permissions";
@@ -206,6 +214,7 @@ fn test_temp_file_permissions_are_secure() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "integration"]
 fn test_encrypted_file_permissions_not_too_permissive() {
     let passphrase = SecretString::new("encrypted-permissions-test".to_string());
     let plaintext = b"Content for encrypted file permissions test";
@@ -238,6 +247,7 @@ fn test_encrypted_file_permissions_not_too_permissive() {
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_database_contains_no_plaintext() {
     let passphrase = SecretString::new("db-plaintext-test".to_string());
     let sensitive_content =
@@ -293,6 +303,7 @@ fn test_database_contains_no_plaintext() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_database_embeddings_are_numeric_not_plaintext() {
     let passphrase = SecretString::new("embeddings-test".to_string());
 
@@ -345,6 +356,7 @@ fn test_database_embeddings_are_numeric_not_plaintext() {
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_session_timeout_enforced() {
     // Use 0-minute timeout for fast testing (0 seconds)
     let mut session = SessionManager::new(0);
@@ -376,6 +388,7 @@ fn test_session_timeout_enforced() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_session_timeout_resets_on_access() {
     // Use longer timeout for this test
     let mut session = SessionManager::new(30);
@@ -402,6 +415,7 @@ fn test_session_timeout_resets_on_access() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_explicit_lock_clears_session() {
     let mut session = SessionManager::new(30);
     let passphrase = SecretString::new("explicit-lock-test".to_string());
@@ -427,6 +441,7 @@ fn test_explicit_lock_clears_session() {
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_passphrase_zeroization_on_lock() {
     let mut session = SessionManager::new(30);
     let passphrase = SecretString::new("zeroization-test-passphrase".to_string());
@@ -463,6 +478,7 @@ fn test_passphrase_zeroization_on_lock() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_session_manager_drop_clears_passphrase() {
     let passphrase = SecretString::new("drop-test-passphrase".to_string());
 
@@ -486,6 +502,7 @@ fn test_session_manager_drop_clears_passphrase() {
 // ============================================================================
 
 #[test]
+#[ignore = "integration"]
 fn test_full_security_workflow() {
     let passphrase = SecretString::new("full-workflow-test".to_string());
     let sensitive_journal = b"My most private thoughts and secrets";
@@ -564,6 +581,7 @@ fn test_full_security_workflow() {
 }
 
 #[test]
+#[ignore = "integration"]
 fn test_encryption_strength_basic_check() {
     let passphrase = SecretString::new("strength-test".to_string());
 

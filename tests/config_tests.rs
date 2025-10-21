@@ -8,6 +8,7 @@ use ponder::errors::{AppError, AppResult};
 use ponder::journal_io;
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_load_with_environment_vars() {
     // Save the original environment variables
@@ -47,6 +48,7 @@ fn test_config_load_with_environment_vars() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_load_with_fallbacks() {
     // Save the original environment variables
@@ -100,6 +102,7 @@ fn test_config_load_with_fallbacks() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_validation() -> AppResult<()> {
     // Test valid configuration
@@ -168,6 +171,7 @@ fn test_config_validation() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_ensure_journal_directory_exists() -> AppResult<()> {
     // Create a temporary directory for testing

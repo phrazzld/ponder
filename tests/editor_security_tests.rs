@@ -39,6 +39,7 @@ fn run_with_editor(editor_value: &str) -> (bool, String) {
 // Basic validation tests
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_valid_single_command() {
     let editor_values = &["true"]; // Use a command that should be available everywhere
@@ -67,6 +68,7 @@ fn test_valid_single_command() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_valid_paths() {
     // Use a minimal set of paths to test, focusing on paths likely to exist
@@ -100,6 +102,7 @@ fn test_valid_paths() {
 // Command injection tests
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_commands_with_spaces() {
     // Simplify to just a few test cases to avoid timeouts
@@ -122,6 +125,7 @@ fn test_reject_commands_with_spaces() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_shell_metacharacters() {
     let shell_metacharacter_commands = &[
@@ -168,6 +172,7 @@ fn test_reject_shell_metacharacters() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_empty_editor() {
     let (success, stderr) = run_with_editor("");
@@ -190,6 +195,7 @@ fn test_reject_empty_editor() {
 // Verify that injection attempts actually don't create files
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_injection_attempts_dont_create_files() {
     let temp_dir = TempDir::new().unwrap();
@@ -228,6 +234,7 @@ fn test_injection_attempts_dont_create_files() {
 // Test EDITOR variable fallback
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_editor_fallback_validation() {
     let temp_dir = TempDir::new().unwrap();
@@ -249,6 +256,7 @@ fn test_editor_fallback_validation() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_ponder_editor_precedence() {
     let temp_dir = TempDir::new().unwrap();
@@ -268,6 +276,7 @@ fn test_ponder_editor_precedence() {
 // Test actual execution to ensure validation is connected to launching
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_validated_editor_is_actually_used() {
     let temp_dir = TempDir::new().unwrap();
@@ -311,6 +320,7 @@ fn test_validated_editor_is_actually_used() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_actual_process_has_no_shell() {
     // Skip this test if we're in the Github CI environment
@@ -373,6 +383,7 @@ fn test_actual_process_has_no_shell() {
 // Unicode/Encoding tests
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_unicode_characters_in_editor() {
     // Test with various Unicode characters that shouldn't be rejected
@@ -408,6 +419,7 @@ fn test_unicode_characters_in_editor() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_unicode_spaces_and_metacharacters() {
     // Test with Unicode characters that look like spaces or could be used for obfuscation

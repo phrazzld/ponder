@@ -20,6 +20,7 @@ fn set_up_command() -> Command {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_editor_with_spaces() {
     let temp_dir = TempDir::new().unwrap();
@@ -40,6 +41,7 @@ fn test_reject_editor_with_spaces() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_editor_with_shell_metacharacters() {
     let temp_dir = TempDir::new().unwrap();
@@ -71,6 +73,7 @@ fn test_reject_editor_with_shell_metacharacters() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_editor_with_shell_invocation() {
     let temp_dir = TempDir::new().unwrap();
@@ -101,6 +104,7 @@ fn test_reject_editor_with_shell_invocation() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_launch_valid_editor_successfully() {
     let temp_dir = TempDir::new().unwrap();
@@ -156,6 +160,7 @@ fn test_launch_valid_editor_successfully() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_reject_empty_editor_string() {
     let temp_dir = TempDir::new().unwrap();
@@ -172,6 +177,7 @@ fn test_reject_empty_editor_string() {
 
 // Additional test to verify we accept simple commands without arguments
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_accept_simple_editor_command() {
     let temp_dir = TempDir::new().unwrap();
@@ -187,6 +193,7 @@ fn test_accept_simple_editor_command() {
 
 // Test with absolute path to ensure that's accepted
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_accept_absolute_path_editor() {
     let temp_dir = TempDir::new().unwrap();

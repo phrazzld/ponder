@@ -15,6 +15,7 @@ use tempfile::TempDir;
 /// from the encrypted file instead of the plaintext temp file, causing
 /// "stream did not contain valid UTF-8" errors.
 #[test]
+#[ignore = "integration"]
 fn test_word_count_uses_plaintext_not_encrypted() {
     // Setup
     let temp_dir = TempDir::new().expect("create temp dir");
@@ -71,6 +72,7 @@ fn test_word_count_uses_plaintext_not_encrypted() {
 
 /// Test that read_encrypted_string helper properly cleans up temp files.
 #[test]
+#[ignore = "integration"]
 fn test_read_encrypted_string_cleans_up_temp() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let encrypted_path = temp_dir.path().join("test.md.age");
@@ -115,6 +117,7 @@ fn test_read_encrypted_string_cleans_up_temp() {
 ///
 /// This documents the error case that the helper function prevents.
 #[test]
+#[ignore = "integration"]
 fn test_reading_encrypted_as_utf8_fails() {
     let temp_dir = TempDir::new().expect("create temp dir");
     let encrypted_path = temp_dir.path().join("test.md.age");

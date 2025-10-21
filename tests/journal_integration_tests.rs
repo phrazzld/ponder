@@ -38,6 +38,7 @@ fn set_up_test_env() -> Result<(Config, tempfile::TempDir), Box<dyn std::error::
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_basic_flow() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -74,6 +75,7 @@ fn test_journal_basic_flow() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_specific_date() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -109,6 +111,7 @@ fn test_journal_specific_date() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_retro() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -135,6 +138,7 @@ fn test_journal_retro() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_reminisce() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -161,6 +165,7 @@ fn test_journal_reminisce() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_relative_journal_path_rejected() {
     use ponder::errors::AppError;
