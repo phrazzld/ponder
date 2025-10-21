@@ -12,7 +12,7 @@ pub mod search;
 
 // Re-export commonly used functions
 pub use ask::ask_question;
-pub use backup::{create_backup, verify_backup};
+pub use backup::{create_backup, restore_backup, verify_backup, RestoreReport};
 pub use edit::edit_entry;
 pub use reflect::reflect_on_entry;
 pub use search::search_entries;

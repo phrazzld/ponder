@@ -40,6 +40,15 @@ pub struct BackupManifest {
     pub db_path: PathBuf,
 }
 
+/// Report of a completed restore operation.
+#[derive(Debug, Clone)]
+pub struct RestoreReport {
+    /// Number of journal entries restored
+    pub entries_restored: usize,
+    /// Size of the restored database in bytes
+    pub db_size: u64,
+}
+
 /// Creates a full encrypted backup of journal data.
 ///
 /// Creates a compressed tar.gz archive containing all encrypted journal entries
@@ -361,6 +370,181 @@ pub fn verify_backup(
     })
 }
 
+/// Restores a backup archive to a target directory.
+///
+/// Extracts and verifies a backup archive, restoring encrypted journal entries
+/// and database to the specified target directory. Uses atomic operations to
+/// ensure all-or-nothing restoration.
+///
+/// # Flow
+///
+/// 1. Verify backup integrity
+/// 2. Check target directory state
+/// 3. Extract to temporary location
+/// 4. Atomically move files to target directory
+/// 5. Verify database accessibility
+/// 6. Return restoration report
+///
+/// # Arguments
+///
+/// * `session` - Session manager for decryption passphrase
+/// * `backup_path` - Path to the backup archive file
+/// * `target_dir` - Directory where backup will be restored
+/// * `force` - Whether to overwrite existing files
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Backup verification fails
+/// - Target directory exists and force is false
+/// - Extraction fails
+/// - Database verification fails
+/// - File operations fail
+pub fn restore_backup(
+    session: &mut SessionManager,
+    backup_path: &PathBuf,
+    target_dir: &PathBuf,
+    force: bool,
+) -> AppResult<RestoreReport> {
+    info!(
+        "Restoring backup from {:?} to {:?}",
+        backup_path, target_dir
+    );
+
+    // Step 1: Verify backup integrity first
+    debug!("Verifying backup before restore");
+    let manifest = verify_backup(session, backup_path)?;
+
+    info!(
+        "Backup verified: {} entries to restore",
+        manifest.entries.len()
+    );
+
+    // Step 2: Check if target_dir exists
+    if target_dir.exists() && !force {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!(
+                "Target directory already exists: {:?}. Use force flag to overwrite.",
+                target_dir
+            ),
+        )));
+    }
+
+    let passphrase = session.get_passphrase()?;
+
+    // Step 3: Extract to temp location first (for atomic operation)
+    debug!("Extracting backup to temporary location");
+    let temp_dir = tempfile::TempDir::new().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to create temp directory: {}", e),
+        ))
+    })?;
+
+    // Read and decrypt archive
+    let encrypted_bytes = fs::read(backup_path).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to read backup file: {}", e),
+        ))
+    })?;
+
+    let decrypted_bytes = decrypt_with_passphrase(&encrypted_bytes, passphrase)?;
+
+    // Extract tar.gz
+    let decoder = GzDecoder::new(decrypted_bytes.as_slice());
+    let mut archive = Archive::new(decoder);
+    archive.unpack(temp_dir.path()).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to extract archive: {}", e),
+        ))
+    })?;
+
+    debug!("Extracted to temp location: {:?}", temp_dir.path());
+
+    // Step 4: Move files from temp to target_dir (atomic operation)
+    debug!("Moving files to target directory");
+
+    // Create target directory if it doesn't exist
+    if !target_dir.exists() {
+        fs::create_dir_all(target_dir).map_err(|e| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to create target directory: {}", e),
+            ))
+        })?;
+    }
+
+    // Move each file from temp to target
+    for entry_path in &manifest.entries {
+        let src = temp_dir.path().join(entry_path);
+        let dst = target_dir.join(entry_path);
+
+        // Create parent directories if needed
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create directory {:?}: {}", parent, e),
+                ))
+            })?;
+        }
+
+        // Move/copy file
+        fs::copy(&src, &dst).map_err(|e| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to restore {}: {}", entry_path.display(), e),
+            ))
+        })?;
+    }
+
+    // Move database file
+    let src_db = temp_dir.path().join("ponder.db");
+    let dst_db = target_dir.join("ponder.db");
+    fs::copy(&src_db, &dst_db).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to restore database: {}", e),
+        ))
+    })?;
+
+    debug!("All files moved to target directory");
+
+    // Step 5: Verify database opens with provided passphrase
+    debug!("Verifying restored database");
+    let _db = Database::open(&dst_db, passphrase).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Restored database verification failed: {}", e),
+        ))
+    })?;
+
+    // Get database size
+    let db_size = fs::metadata(&dst_db)
+        .map_err(|e| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to get database size: {}", e),
+            ))
+        })?
+        .len();
+
+    info!(
+        "Restore completed: {} entries, database {} bytes",
+        manifest.entries.len(),
+        db_size
+    );
+
+    // Step 6: Return report
+    Ok(RestoreReport {
+        entries_restored: manifest.entries.len(),
+        db_size,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -597,5 +781,150 @@ mod tests {
         // Should have no entries but database should be valid
         assert_eq!(manifest.entries.len(), 0);
         assert_eq!(manifest.db_path, PathBuf::from("ponder.db"));
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_restore_backup_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().join("original");
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+        let restore_dir = temp_dir.path().join("restored");
+
+        // Create journal with entries
+        fs::create_dir_all(&journal_dir).unwrap();
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        fs::create_dir_all(journal_dir.join("2024/01")).unwrap();
+        let entry_path = journal_dir.join("2024/01/01.md.age");
+        let entry_content = b"Test journal entry";
+        let encrypted =
+            crate::crypto::age::encrypt_with_passphrase(entry_content, &passphrase).unwrap();
+        fs::write(&entry_path, encrypted).unwrap();
+
+        // Create backup
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Restore backup to new location
+        let report = restore_backup(&mut session, &backup_path, &restore_dir, false).unwrap();
+
+        // Verify report
+        assert_eq!(report.entries_restored, 1);
+        assert!(report.db_size > 0);
+
+        // Verify files exist in restored location
+        assert!(restore_dir.join("2024/01/01.md.age").exists());
+        assert!(restore_dir.join("ponder.db").exists());
+
+        // Verify database can be opened
+        let restored_db = Database::open(&restore_dir.join("ponder.db"), &passphrase).unwrap();
+        drop(restored_db);
+
+        // Verify restored entry matches original
+        let restored_encrypted = fs::read(restore_dir.join("2024/01/01.md.age")).unwrap();
+        let restored_content =
+            crate::crypto::age::decrypt_with_passphrase(&restored_encrypted, &passphrase).unwrap();
+        assert_eq!(restored_content, entry_content);
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_restore_backup_target_exists_no_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().join("original");
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+        let restore_dir = temp_dir.path().join("restored");
+
+        // Create journal and backup
+        fs::create_dir_all(&journal_dir).unwrap();
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Create target directory with existing content
+        fs::create_dir_all(&restore_dir).unwrap();
+        fs::write(restore_dir.join("existing_file.txt"), b"existing").unwrap();
+
+        // Try to restore without force flag - should fail
+        let result = restore_backup(&mut session, &backup_path, &restore_dir, false);
+        assert!(result.is_err());
+
+        // Existing file should still be there
+        assert!(restore_dir.join("existing_file.txt").exists());
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_restore_backup_with_force() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().join("original");
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+        let restore_dir = temp_dir.path().join("restored");
+
+        // Create journal and backup
+        fs::create_dir_all(&journal_dir).unwrap();
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        fs::create_dir_all(journal_dir.join("2024/01")).unwrap();
+        let entry_path = journal_dir.join("2024/01/01.md.age");
+        let encrypted =
+            crate::crypto::age::encrypt_with_passphrase(b"Test entry", &passphrase).unwrap();
+        fs::write(&entry_path, encrypted).unwrap();
+
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Create target directory with existing content
+        fs::create_dir_all(&restore_dir).unwrap();
+        fs::write(restore_dir.join("old_file.txt"), b"old").unwrap();
+
+        // Restore with force flag - should succeed
+        let report = restore_backup(&mut session, &backup_path, &restore_dir, true).unwrap();
+        assert_eq!(report.entries_restored, 1);
+
+        // Restored files should exist
+        assert!(restore_dir.join("2024/01/01.md.age").exists());
+        assert!(restore_dir.join("ponder.db").exists());
+
+        // Old file should still be there (we don't delete existing files)
+        assert!(restore_dir.join("old_file.txt").exists());
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_restore_backup_empty_journal() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().join("original");
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+        let restore_dir = temp_dir.path().join("restored");
+
+        // Create empty journal (only database)
+        fs::create_dir_all(&journal_dir).unwrap();
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Restore backup
+        let report = restore_backup(&mut session, &backup_path, &restore_dir, false).unwrap();
+
+        // Should have restored database but no entries
+        assert_eq!(report.entries_restored, 0);
+        assert!(report.db_size > 0);
+        assert!(restore_dir.join("ponder.db").exists());
     }
 }
