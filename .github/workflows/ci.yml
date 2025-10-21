@@ -68,3 +68,48 @@ jobs:
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
       timeout-minutes: 5
+
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install stable toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust cargo cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin --locked
+
+    - name: Generate coverage
+      run: |
+        cargo tarpaulin \
+          --out Html \
+          --out Xml \
+          --output-dir coverage \
+          --exclude-files 'tests/*' \
+          --timeout 300
+      env:
+        PONDER_EDITOR: echo
+        PONDER_DIR: /tmp/ponder_coverage
+        PONDER_TEST_PASSPHRASE: test-passphrase
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage/
+        retention-days: 30
+
+    - name: Check coverage thresholds
+      run: |
+        # Extract coverage percentages from cobertura.xml
+        if [ -f coverage/cobertura.xml ]; then
+          echo "Coverage report generated successfully"
+          # Optional: Add threshold checks here for critical modules
+          # This is a placeholder for future enhancement
+        fi

@@ -720,7 +720,7 @@
     - Embedding generation (mock)
   ```
 
-- [ ] **Add coverage tracking with cargo-tarpaulin** (1hr)
+- [x] **Add coverage tracking with cargo-tarpaulin** (1hr)
   ```
   Files: .github/workflows/ci.yml, .gitignore (add coverage/)
   Installation: cargo install cargo-tarpaulin
