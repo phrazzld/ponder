@@ -749,7 +749,7 @@
   Success criteria: cargo test <2min, full suite with --ignored <5min
   ```
 
-- [ ] **Move cargo clippy to pre-push hook** (15min)
+- [x] **Move cargo clippy to pre-push hook** (15min)
   ```
   Files: .pre-commit-config.yaml
   Problem: clippy on every commit slows workflow (5-10s)

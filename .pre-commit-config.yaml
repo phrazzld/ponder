@@ -20,7 +20,7 @@ repos:
         language: system # Assumes 'cargo' is in the system PATH
         types: [rust]    # Only run on Rust files
         pass_filenames: false # 'cargo clippy' typically operates on the whole project/crate
-        stages: [pre-commit]
+        stages: [pre-push]  # Run on push, not commit (faster commits)
 
       - id: glance-update
         name: glance documentation update
