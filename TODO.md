@@ -166,7 +166,7 @@
   - Task was anticipatory or already solved differently
   ```
 
-- [ ] **Add secrets scanning with Gitleaks** (30min) **CRITICAL**
+- [x] **Add secrets scanning with Gitleaks** (30min) **CRITICAL**
   ```
   Files: .pre-commit-config.yaml, .github/workflows/security.yml (new)
   Pre-commit:

@@ -30,3 +30,13 @@ repos:
         files: '^(src/.*\.(rs|toml)|Cargo\.(toml|lock)|README\.md|CONTRIBUTING\.md|PRD\.md|CLAUDE\.md|\.pre-commit-config\.yaml)$'
         pass_filenames: false # glance operates on the entire project
         stages: [pre-commit]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks secrets scanner
+        description: "Scans staged changes for secrets and credentials."
+        entry: gitleaks protect --staged --verbose --redact
+        language: system
+        stages: [pre-commit]
