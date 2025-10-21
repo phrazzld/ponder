@@ -137,7 +137,7 @@
   Status: All passing
   ```
 
-- [ ] **Add performance benchmarks** (1.5hr)
+- [x] **Add performance benchmarks** (1.5hr)
   ```
   Files: benches/crypto_bench.rs (new)
   Dependencies: Add criterion = "0.5" to [dev-dependencies]
