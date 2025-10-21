@@ -191,6 +191,139 @@ impl Database {
 
         Ok(())
     }
+
+    /// Records a backup operation in the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `backup_path` - Path to the backup archive file
+    /// * `backup_type` - Type of backup ("full" or "incremental")
+    /// * `entries_count` - Number of entries in the backup
+    /// * `archive_size` - Size of the archive in bytes
+    /// * `checksum` - BLAKE3 checksum of the archive
+    ///
+    /// # Returns
+    ///
+    /// Returns the ID of the inserted backup record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
+    pub fn record_backup(
+        &self,
+        backup_path: &str,
+        backup_type: &str,
+        entries_count: i64,
+        archive_size: i64,
+        checksum: &str,
+    ) -> AppResult<i64> {
+        let conn = self.get_conn()?;
+        conn.execute(
+            "INSERT INTO backup_log (backup_path, backup_type, entries_count, archive_size, checksum) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params![backup_path, backup_type, entries_count, archive_size, checksum],
+        )
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        let id = conn.last_insert_rowid();
+        debug!("Recorded backup {} with ID {}", backup_path, id);
+        Ok(id)
+    }
+
+    /// Gets the most recent backup record.
+    ///
+    /// # Returns
+    ///
+    /// Returns `None` if no backups have been recorded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_last_backup(&self) -> AppResult<Option<BackupRecord>> {
+        let conn = self.get_conn()?;
+        let result = conn.query_row(
+            "SELECT id, backup_path, backup_type, entries_count, archive_size, checksum, created_at
+             FROM backup_log
+             ORDER BY created_at DESC
+             LIMIT 1",
+            [],
+            |row| {
+                Ok(BackupRecord {
+                    id: row.get(0)?,
+                    backup_path: row.get(1)?,
+                    backup_type: row.get(2)?,
+                    entries_count: row.get(3)?,
+                    archive_size: row.get(4)?,
+                    checksum: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(crate::errors::DatabaseError::Sqlite(e).into()),
+        }
+    }
+
+    /// Gets backup history with a limit.
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of records to return
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_backup_history(&self, limit: usize) -> AppResult<Vec<BackupRecord>> {
+        let conn = self.get_conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, backup_path, backup_type, entries_count, archive_size, checksum, created_at
+                 FROM backup_log
+                 ORDER BY created_at DESC
+                 LIMIT ?",
+            )
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        let records = stmt
+            .query_map([limit], |row| {
+                Ok(BackupRecord {
+                    id: row.get(0)?,
+                    backup_path: row.get(1)?,
+                    backup_type: row.get(2)?,
+                    entries_count: row.get(3)?,
+                    archive_size: row.get(4)?,
+                    checksum: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(crate::errors::DatabaseError::Sqlite)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        debug!("Retrieved {} backup records", records.len());
+        Ok(records)
+    }
+}
+
+/// Record of a backup operation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackupRecord {
+    /// Unique identifier
+    pub id: i64,
+    /// Path to the backup archive
+    pub backup_path: String,
+    /// Type of backup ("full" or "incremental")
+    pub backup_type: String,
+    /// Number of entries in the backup
+    pub entries_count: i64,
+    /// Size of the archive in bytes
+    pub archive_size: i64,
+    /// BLAKE3 checksum of the archive
+    pub checksum: String,
+    /// Timestamp when backup was created
+    pub created_at: String,
 }
 
 /// Connection customizer that sets the SQLCipher key pragma.
@@ -283,5 +416,105 @@ mod tests {
         // Initialize schema twice - should not error
         db.initialize_schema().unwrap();
         db.initialize_schema().unwrap();
+    }
+
+    #[test]
+    fn test_record_backup() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Record a backup
+        let id = db
+            .record_backup("backup.tar.gz.age", "full", 10, 1024, "abc123")
+            .unwrap();
+
+        assert!(id > 0);
+
+        // Verify it was recorded
+        let conn = db.get_conn().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM backup_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_get_last_backup() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Initially no backups
+        let last = db.get_last_backup().unwrap();
+        assert!(last.is_none());
+
+        // Record two backups
+        let id1 = db
+            .record_backup("backup1.tar.gz.age", "full", 10, 1024, "abc123")
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1)); // Ensure different timestamps
+        let id2 = db
+            .record_backup("backup2.tar.gz.age", "incremental", 5, 512, "def456")
+            .unwrap();
+
+        assert!(id2 > id1);
+
+        // Get last backup - should be the second one (highest ID)
+        let last = db.get_last_backup().unwrap();
+        assert!(last.is_some());
+        let record = last.unwrap();
+        assert_eq!(record.id, id2);
+        assert_eq!(record.backup_path, "backup2.tar.gz.age");
+        assert_eq!(record.backup_type, "incremental");
+        assert_eq!(record.entries_count, 5);
+        assert_eq!(record.archive_size, 512);
+        assert_eq!(record.checksum, "def456");
+    }
+
+    #[test]
+    fn test_get_backup_history() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Record three backups
+        let id1 = db
+            .record_backup("backup1.tar.gz.age", "full", 10, 1024, "abc123")
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let id2 = db
+            .record_backup("backup2.tar.gz.age", "incremental", 5, 512, "def456")
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let id3 = db
+            .record_backup("backup3.tar.gz.age", "incremental", 3, 256, "ghi789")
+            .unwrap();
+
+        assert!(id2 > id1);
+        assert!(id3 > id2);
+
+        // Get history with limit 2
+        let history = db.get_backup_history(2).unwrap();
+        assert_eq!(history.len(), 2);
+
+        // Should be ordered by most recent first (highest ID)
+        assert_eq!(history[0].id, id3);
+        assert_eq!(history[0].backup_path, "backup3.tar.gz.age");
+        assert_eq!(history[1].id, id2);
+        assert_eq!(history[1].backup_path, "backup2.tar.gz.age");
+
+        // Get all history
+        let all_history = db.get_backup_history(10).unwrap();
+        assert_eq!(all_history.len(), 3);
+        assert_eq!(all_history[0].id, id3);
+        assert_eq!(all_history[1].id, id2);
+        assert_eq!(all_history[2].id, id1);
     }
 }
