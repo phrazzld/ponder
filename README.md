@@ -51,7 +51,7 @@ Ponder v2.0 is an AI-powered encrypted journaling tool for daily reflections. It
 
    # Pull required models
    ollama pull nomic-embed-text    # For embeddings
-   ollama pull qwen2.5:3b          # For chat/reflections
+   ollama pull gemma3:4b           # For chat/reflections
    ```
 
 ### From Source
