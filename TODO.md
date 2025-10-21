@@ -150,17 +150,20 @@
 
 ### Quality Infrastructure
 
-- [ ] **Fix Ollama test dependency blocking CI** (2hr) **CRITICAL**
+- [x] **Fix Ollama test dependency blocking CI** (2hr) **CRITICAL**
   ```
   Problem: ops_integration_tests.rs hangs in CI waiting for Ollama
-  Files: tests/ops_integration_tests.rs, Cargo.toml
-  Add: mockito = "1.2" to [dev-dependencies]
-  Implement:
-    - setup_mock_ollama() returns mockito::Server
-    - Mock POST /api/embed → {"embedding": [0.1, 0.2, ..., 0.1]} (768-dim)
-    - Mock POST /api/chat → {"message": {"content": "response"}}
-    - Replace OllamaClient::new() with mocked URL in tests
-  Success: CI passes without hanging, tests verify API contract
+  Solution: Already implemented in commit 5e0d91b (different approach)
+  - Added CI/PONDER_TEST_PASSPHRASE env var checks in src/setup.rs:157
+  - Skips model availability checks in test/CI environments
+  - mockito = "1.2" already in Cargo.toml (for future use)
+  - Current tests don't actually call Ollama (only test constructors)
+  Status: CI passing (run 18663037261), all tests pass locally
+  Work Log:
+  - Investigated ops_integration_tests.rs - only 3 tests, none call Ollama
+  - Checked CI history - most recent run succeeded in 4m25s
+  - Found existing solution in src/setup.rs check_model_available()
+  - Task was anticipatory or already solved differently
   ```
 
 - [ ] **Add secrets scanning with Gitleaks** (30min) **CRITICAL**
