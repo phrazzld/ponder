@@ -3,16 +3,18 @@
 //! This module provides functionality to create encrypted backups of journal
 //! entries and database, verify backup integrity, and restore from backups.
 
-use crate::crypto::age::encrypt_with_passphrase;
+use crate::crypto::age::{decrypt_with_passphrase, encrypt_with_passphrase};
 use crate::crypto::SessionManager;
 use crate::db::Database;
 use crate::errors::{AppError, AppResult};
 use blake3::Hasher;
+use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tar::Archive;
 use tracing::{debug, info};
 use walkdir::WalkDir;
 
@@ -254,13 +256,107 @@ pub fn create_backup(
 /// - Archive is corrupted
 /// - Database verification fails
 pub fn verify_backup(
-    _session: &mut SessionManager,
-    _backup_path: &PathBuf,
+    session: &mut SessionManager,
+    backup_path: &PathBuf,
 ) -> AppResult<BackupManifest> {
-    // TODO: Implement in Phase 7
-    // Stub returns dummy data for compilation
+    info!("Verifying backup: {:?}", backup_path);
+
+    // Step 1: Read encrypted archive from path
+    if !backup_path.exists() {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Backup file not found: {:?}", backup_path),
+        )));
+    }
+
+    let encrypted_bytes = fs::read(backup_path).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to read backup file: {}", e),
+        ))
+    })?;
+
+    debug!("Read {} encrypted bytes", encrypted_bytes.len());
+
+    // Ensure session is unlocked for decryption
+    let passphrase = session.get_passphrase()?;
+
+    // Step 2: Decrypt with passphrase
+    debug!("Decrypting backup archive");
+    let decrypted_bytes = decrypt_with_passphrase(&encrypted_bytes, passphrase)?;
+
+    debug!("Decrypted to {} bytes", decrypted_bytes.len());
+
+    // Step 3: Extract tar.gz to temporary directory
+    debug!("Extracting archive to temporary directory");
+    let temp_dir = tempfile::TempDir::new().map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to create temp directory: {}", e),
+        ))
+    })?;
+
+    let decoder = GzDecoder::new(decrypted_bytes.as_slice());
+    let mut archive = Archive::new(decoder);
+
+    archive.unpack(temp_dir.path()).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to extract archive: {}", e),
+        ))
+    })?;
+
+    debug!("Extracted to: {:?}", temp_dir.path());
+
+    // Step 4: Verify database file exists and can be opened
+    let db_path = temp_dir.path().join("ponder.db");
+    if !db_path.exists() {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Database file missing from backup archive",
+        )));
+    }
+
+    // Try to open the database to verify it's valid
+    debug!("Verifying database integrity");
+    let _db = Database::open(&db_path, passphrase).map_err(|e| {
+        AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Database verification failed: {}", e),
+        ))
+    })?;
+
+    debug!("Database verified successfully");
+
+    // Step 5: Count .md.age files and collect paths
+    debug!("Collecting entry paths");
+    let mut entry_paths = Vec::new();
+    for entry in WalkDir::new(temp_dir.path())
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+        if path.is_file() && path.extension().map_or(false, |ext| ext == "age") {
+            // Store relative path
+            if let Ok(rel_path) = path.strip_prefix(temp_dir.path()) {
+                entry_paths.push(rel_path.to_path_buf());
+            }
+        }
+    }
+
+    debug!("Found {} journal entries in backup", entry_paths.len());
+
+    info!(
+        "Backup verified: {} entries, database OK",
+        entry_paths.len()
+    );
+
+    // Step 6: Cleanup handled automatically by TempDir drop
+
+    // Step 7: Return manifest
     Ok(BackupManifest {
-        entries: Vec::new(),
+        entries: entry_paths,
         db_path: PathBuf::from("ponder.db"),
     })
 }
@@ -402,5 +498,104 @@ mod tests {
         // Should fail with NotFound error
         let result = create_backup(&db, &mut session, &journal_dir, &output_path, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_verify_backup_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().to_path_buf();
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+
+        // Create database and entries
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        fs::create_dir_all(journal_dir.join("2024/01")).unwrap();
+        let entry1_path = journal_dir.join("2024/01/01.md.age");
+        let entry1_content = b"Test entry 1";
+        let encrypted1 =
+            crate::crypto::age::encrypt_with_passphrase(entry1_content, &passphrase).unwrap();
+        fs::write(&entry1_path, encrypted1).unwrap();
+
+        // Create backup
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Verify backup
+        let manifest = verify_backup(&mut session, &backup_path).unwrap();
+
+        // Check manifest
+        assert_eq!(manifest.entries.len(), 1);
+        assert_eq!(manifest.db_path, PathBuf::from("ponder.db"));
+        assert!(manifest
+            .entries
+            .contains(&PathBuf::from("2024/01/01.md.age")));
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_verify_backup_missing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let backup_path = temp_dir.path().join("nonexistent.tar.gz.age");
+
+        let passphrase = SecretString::new("test_password".to_string());
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+
+        // Should fail with NotFound error
+        let result = verify_backup(&mut session, &backup_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_verify_backup_wrong_passphrase() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().to_path_buf();
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+
+        // Create backup with first passphrase
+        let passphrase1 = SecretString::new("correct_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase1).unwrap();
+
+        let mut session1 = SessionManager::new(30);
+        session1.unlock(passphrase1.clone());
+        create_backup(&db, &mut session1, &journal_dir, &backup_path, false).unwrap();
+
+        // Try to verify with wrong passphrase
+        let passphrase2 = SecretString::new("wrong_password".to_string());
+        let mut session2 = SessionManager::new(30);
+        session2.unlock(passphrase2.clone());
+
+        let result = verify_backup(&mut session2, &backup_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "integration"]
+    fn test_verify_backup_empty_journal() {
+        let temp_dir = TempDir::new().unwrap();
+        let journal_dir = temp_dir.path().to_path_buf();
+        let backup_path = temp_dir.path().join("backup.tar.gz.age");
+
+        // Create empty backup (only database)
+        let passphrase = SecretString::new("test_password".to_string());
+        let db_path = journal_dir.join("ponder.db");
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        let mut session = SessionManager::new(30);
+        session.unlock(passphrase.clone());
+        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+
+        // Verify backup
+        let manifest = verify_backup(&mut session, &backup_path).unwrap();
+
+        // Should have no entries but database should be valid
+        assert_eq!(manifest.entries.len(), 0);
+        assert_eq!(manifest.db_path, PathBuf::from("ponder.db"));
     }
 }
