@@ -86,7 +86,7 @@
   Success: Grep shows no qwen2.5 references in user-facing docs
   ```
 
-- [~] **Fix model references in CLAUDE.md** (5min)
+- [x] **Fix model references in CLAUDE.md** (5min)
   ```
   Files: CLAUDE.md lines 71, 163
   Change: Replace all `qwen2.5:3b` with `gemma3:4b`

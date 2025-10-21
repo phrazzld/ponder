@@ -68,7 +68,7 @@ Ponder v2.0 is an AI-powered encrypted journaling CLI tool built in Rust. The ar
   - `client.rs`: OllamaClient for API interactions (embed, chat)
   - `chunking.rs`: Text chunking with configurable size/overlap (default: 512/50 chars)
   - `prompts.rs`: Structured prompts for ask (RAG) and reflect operations
-  - Models: nomic-embed-text (embeddings), qwen2.5:3b (chat)
+  - Models: nomic-embed-text (embeddings), gemma3:4b (chat)
 
 - **`src/ops/`**: High-level user-facing operations combining crypto, DB, and AI.
   - `edit.rs`: Edit encrypted entries (YYYY/MM/DD.md.age), auto-generate embeddings on change
@@ -160,7 +160,7 @@ main.rs
 - Automatic embedding generation on content change only
 
 **AI Integration:**
-- Local Ollama for embeddings (nomic-embed-text) and chat (qwen2.5:3b)
+- Local Ollama for embeddings (nomic-embed-text) and chat (gemma3:4b)
 - Text chunking: 512 chars with 50 char overlap
 - Vector search with cosine similarity
 - RAG pipeline: embed query → vector search → decrypt → LLM
