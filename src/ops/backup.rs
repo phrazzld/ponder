@@ -68,7 +68,6 @@ pub struct RestoreReport {
 /// * `session` - Session manager for encryption passphrase
 /// * `journal_dir` - Directory containing encrypted journal entries
 /// * `output_path` - Path where backup archive will be written
-/// * `incremental` - Whether to create incremental backup (not yet implemented)
 ///
 /// # Errors
 ///
@@ -83,7 +82,6 @@ pub fn create_backup(
     session: &mut SessionManager,
     journal_dir: &PathBuf,
     output_path: &PathBuf,
-    _incremental: bool, // TODO: Implement incremental in future task
 ) -> AppResult<BackupReport> {
     let start_time = Instant::now();
     info!(
@@ -213,10 +211,9 @@ pub fn create_backup(
     debug!("Backup checksum: {}", checksum);
 
     // Step 9: Record in database
-    let backup_type = "full"; // TODO: Support incremental
     db.record_backup(
         output_path.to_str().unwrap_or("unknown"),
-        backup_type,
+        "full",
         entry_paths.len() as i64,
         encrypted_bytes.len() as i64,
         &checksum,
