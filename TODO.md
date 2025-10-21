@@ -762,7 +762,7 @@
   Success criteria: Commits <2s, push <30s with checks
   ```
 
-- [ ] **Set up git-cliff for automated changelog** (45min)
+- [x] **Set up git-cliff for automated changelog** (45min)
   ```
   Files: cliff.toml (new), .github/workflows/release.yml (optional)
   Installation: cargo install git-cliff
