@@ -191,7 +191,7 @@
   Success: Dependabot creates weekly PRs for outdated crates
   ```
 
-- [ ] **Add cargo-audit to CI** (20min)
+- [x] **Add cargo-audit to CI** (20min)
   ```
   File: .github/workflows/ci.yml or security.yml
   Job: audit
