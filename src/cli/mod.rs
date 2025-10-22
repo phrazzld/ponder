@@ -77,6 +77,9 @@ pub enum PonderCommand {
 
     /// Restore from encrypted backup archive
     Restore(RestoreArgs),
+
+    /// Clean up v1.0 entries after successful migration (deletes only verified entries)
+    CleanupV1(CleanupV1Args),
 }
 
 /// Arguments for the `edit` subcommand.
@@ -162,6 +165,14 @@ pub struct RestoreArgs {
     /// Force overwrite if target directory exists
     #[clap(short = 'f', long)]
     pub force: bool,
+}
+
+/// Arguments for the `cleanup-v1` subcommand.
+#[derive(Parser)]
+pub struct CleanupV1Args {
+    /// Skip confirmation prompt (dangerous - deletes files)
+    #[clap(short = 'y', long)]
+    pub yes: bool,
 }
 
 impl fmt::Debug for CliArgs {
@@ -383,6 +394,35 @@ mod tests {
         match args.command {
             Some(PonderCommand::Lock) => {} // Success
             _ => panic!("Expected Lock command"),
+        }
+    }
+
+    #[test]
+    fn test_cleanup_v1_command() {
+        let args = CliArgs::parse_from(vec!["ponder", "cleanup-v1"]);
+        match args.command {
+            Some(PonderCommand::CleanupV1(cleanup_args)) => {
+                assert!(!cleanup_args.yes);
+            }
+            _ => panic!("Expected CleanupV1 command"),
+        }
+
+        // Test with --yes flag
+        let args = CliArgs::parse_from(vec!["ponder", "cleanup-v1", "--yes"]);
+        match args.command {
+            Some(PonderCommand::CleanupV1(cleanup_args)) => {
+                assert!(cleanup_args.yes);
+            }
+            _ => panic!("Expected CleanupV1 command"),
+        }
+
+        // Test with -y short form
+        let args = CliArgs::parse_from(vec!["ponder", "cleanup-v1", "-y"]);
+        match args.command {
+            Some(PonderCommand::CleanupV1(cleanup_args)) => {
+                assert!(cleanup_args.yes);
+            }
+            _ => panic!("Expected CleanupV1 command"),
         }
     }
 
