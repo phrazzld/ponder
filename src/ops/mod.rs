@@ -6,6 +6,7 @@
 
 pub mod ask;
 pub mod backup;
+pub mod detection;
 pub mod edit;
 pub mod reflect;
 pub mod search;
@@ -13,6 +14,9 @@ pub mod search;
 // Re-export commonly used functions
 pub use ask::ask_question;
 pub use backup::{create_backup, restore_backup, verify_backup, RestoreReport};
+pub use detection::{
+    detect_migration_state, is_migrated, scan_v1_entries, MigrationDetectionResult,
+};
 pub use edit::edit_entry;
 pub use reflect::reflect_on_entry;
 pub use search::search_entries;
