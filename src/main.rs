@@ -116,19 +116,8 @@ fn run_application(
         }
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
-        Some(PonderCommand::Backup(backup_args)) => {
-            eprintln!("Backup command not yet implemented");
-            eprintln!(
-                "Will create backup from journal to: {:?}",
-                backup_args.output
-            );
-            std::process::exit(1);
-        }
-        Some(PonderCommand::Restore(restore_args)) => {
-            eprintln!("Restore command not yet implemented");
-            eprintln!("Will restore backup from: {:?}", restore_args.backup);
-            std::process::exit(1);
-        }
+        Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
+        Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
         None => {
             // Default: edit today's entry (v1.0 compatibility)
             cmd_edit(
@@ -398,6 +387,61 @@ fn cmd_lock(config: &Config) -> AppResult<()> {
     session.lock();
 
     println!("Session locked successfully.");
+
+    Ok(())
+}
+
+/// Backup command: Create encrypted backup of journal entries and database.
+fn cmd_backup(config: &Config, backup_args: ponder::cli::BackupArgs) -> AppResult<()> {
+    info!("Command: backup");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Create backup
+    let report = ops::create_backup(&db, &mut session, &config.journal_dir, &backup_args.output)?;
+
+    println!("✓ Backup created successfully");
+    println!("  Entries: {}", report.total_entries);
+    println!("  Size: {} bytes", report.archive_size);
+    println!("  Checksum: {}", report.checksum);
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+    println!("  Output: {:?}", backup_args.output);
+
+    // Verify if requested
+    if backup_args.verify {
+        println!("\nVerifying backup...");
+        let manifest = ops::verify_backup(&mut session, &backup_args.output)?;
+        println!("✓ Backup verification passed");
+        println!("  Verified entries: {}", manifest.entries.len());
+        println!("  Database: {:?}", manifest.db_path);
+    }
+
+    Ok(())
+}
+
+/// Restore command: Restore from encrypted backup archive.
+fn cmd_restore(config: &Config, restore_args: ponder::cli::RestoreArgs) -> AppResult<()> {
+    info!("Command: restore");
+
+    // Initialize session
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+
+    // Restore backup
+    let report = ops::restore_backup(
+        &mut session,
+        &restore_args.backup,
+        &config.journal_dir,
+        restore_args.force,
+    )?;
+
+    println!("✓ Restore completed successfully");
+    println!("  Entries restored: {}", report.entries_restored);
+    println!("  Database size: {} bytes", report.db_size);
+    println!("  Checksum: {}", report.checksum);
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+    println!("  Target: {:?}", config.journal_dir);
 
     Ok(())
 }
