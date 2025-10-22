@@ -27,6 +27,8 @@ pub const SCHEMA_VERSION: i32 = 1;
 /// - `reports`: Generated reports
 /// - `backup_log`: History of all backups
 /// - `backup_state`: Singleton tracking latest backup state
+/// - `migration_log`: v1.0 to v2.0 migration tracking per entry
+/// - `migration_state`: Overall migration progress state
 ///
 /// # Errors
 ///
@@ -151,6 +153,43 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
             id INTEGER PRIMARY KEY CHECK(id = 1),
             last_backup_at DATETIME NOT NULL,
             last_backup_checksum TEXT NOT NULL
+        );
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Migration log table: tracks individual entry migrations from v1.0 to v2.0
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS migration_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            v1_path TEXT NOT NULL UNIQUE,
+            v2_path TEXT NOT NULL UNIQUE,
+            date DATE NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('pending', 'migrated', 'verified', 'failed')),
+            checksum_match INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT,
+            migrated_at DATETIME,
+            verified_at DATETIME
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_migration_log_status ON migration_log(status);
+        CREATE INDEX IF NOT EXISTS idx_migration_log_date ON migration_log(date);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Migration state table: singleton tracking overall migration progress
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS migration_state (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            started_at DATETIME NOT NULL,
+            completed_at DATETIME,
+            total_entries INTEGER NOT NULL DEFAULT 0,
+            migrated_count INTEGER NOT NULL DEFAULT 0,
+            verified_count INTEGER NOT NULL DEFAULT 0,
+            failed_count INTEGER NOT NULL DEFAULT 0
         );
         "#,
     )
@@ -397,5 +436,117 @@ mod tests {
             rusqlite::params!["2024-01-03 00:00:00", "ghi789"],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_migration_tables_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify migration_log table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_log'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+
+        // Verify migration_state table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_state'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_migration_status_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid status values should succeed
+        for status in &["pending", "migrated", "verified", "failed"] {
+            conn.execute(
+                "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+                rusqlite::params![
+                    format!("v1_{}.md", status),
+                    format!("2024/01/{}.md.age", status),
+                    "2024-01-01",
+                    status
+                ],
+            )
+            .unwrap();
+        }
+
+        // Invalid status should fail
+        let result = conn.execute(
+            "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+            [
+                "v1_invalid.md",
+                "2024/01/05.md.age",
+                "2024-01-05",
+                "invalid",
+            ],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migration_state_singleton() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // First insert should succeed
+        conn.execute(
+            "INSERT INTO migration_state (id, started_at, total_entries) VALUES (?, ?, ?)",
+            rusqlite::params![1, "2024-01-01 00:00:00", 10],
+        )
+        .unwrap();
+
+        // Second insert with id=1 should fail (unique constraint)
+        let result = conn.execute(
+            "INSERT INTO migration_state (id, started_at, total_entries) VALUES (?, ?, ?)",
+            rusqlite::params![1, "2024-01-02 00:00:00", 20],
+        );
+        assert!(result.is_err());
+
+        // Update should work
+        conn.execute(
+            "UPDATE migration_state SET migrated_count = ?, completed_at = ? WHERE id = 1",
+            rusqlite::params![10, "2024-01-01 01:00:00"],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_migration_log_unique_paths() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Insert first entry
+        conn.execute(
+            "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+            ["20240101.md", "2024/01/01.md.age", "2024-01-01", "pending"],
+        )
+        .unwrap();
+
+        // Duplicate v1_path should fail
+        let result = conn.execute(
+            "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+            ["20240101.md", "2024/01/02.md.age", "2024-01-02", "pending"],
+        );
+        assert!(result.is_err());
+
+        // Duplicate v2_path should fail
+        let result = conn.execute(
+            "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+            ["20240102.md", "2024/01/01.md.age", "2024-01-02", "pending"],
+        );
+        assert!(result.is_err());
     }
 }
