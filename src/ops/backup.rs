@@ -607,7 +607,7 @@ mod tests {
         session.unlock(passphrase.clone());
 
         // Create backup
-        let report = create_backup(&db, &mut session, &journal_dir, &output_path, false).unwrap();
+        let report = create_backup(&db, &mut session, &journal_dir, &output_path).unwrap();
 
         // Verify report
         assert_eq!(report.total_entries, 0); // No journal entries
@@ -655,7 +655,7 @@ mod tests {
         session.unlock(passphrase.clone());
 
         // Create backup
-        let report = create_backup(&db, &mut session, &journal_dir, &output_path, false).unwrap();
+        let report = create_backup(&db, &mut session, &journal_dir, &output_path).unwrap();
 
         // Verify report
         assert_eq!(report.total_entries, 2);
@@ -691,7 +691,7 @@ mod tests {
         session.unlock(passphrase.clone());
 
         // Should fail with NotFound error
-        let result = create_backup(&db, &mut session, &journal_dir, &output_path, false);
+        let result = create_backup(&db, &mut session, &journal_dir, &output_path);
         assert!(result.is_err());
     }
 
@@ -717,7 +717,7 @@ mod tests {
         // Create backup
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Verify backup
         let manifest = verify_backup(&mut session, &backup_path).unwrap();
@@ -759,7 +759,7 @@ mod tests {
 
         let mut session1 = SessionManager::new(30);
         session1.unlock(passphrase1.clone());
-        create_backup(&db, &mut session1, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session1, &journal_dir, &backup_path).unwrap();
 
         // Try to verify with wrong passphrase
         let passphrase2 = SecretString::new("wrong_password".to_string());
@@ -784,7 +784,7 @@ mod tests {
 
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Verify backup
         let manifest = verify_backup(&mut session, &backup_path).unwrap();
@@ -818,7 +818,7 @@ mod tests {
         // Create backup
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Restore backup to new location
         let report = restore_backup(&mut session, &backup_path, &restore_dir, false).unwrap();
@@ -858,7 +858,7 @@ mod tests {
 
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Create target directory with existing content
         fs::create_dir_all(&restore_dir).unwrap();
@@ -894,7 +894,7 @@ mod tests {
 
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Create target directory with existing content
         fs::create_dir_all(&restore_dir).unwrap();
@@ -928,7 +928,7 @@ mod tests {
 
         let mut session = SessionManager::new(30);
         session.unlock(passphrase.clone());
-        create_backup(&db, &mut session, &journal_dir, &backup_path, false).unwrap();
+        create_backup(&db, &mut session, &journal_dir, &backup_path).unwrap();
 
         // Restore backup
         let report = restore_backup(&mut session, &backup_path, &restore_dir, false).unwrap();

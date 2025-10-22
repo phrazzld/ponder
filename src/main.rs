@@ -116,6 +116,19 @@ fn run_application(
         }
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
+        Some(PonderCommand::Backup(backup_args)) => {
+            eprintln!("Backup command not yet implemented");
+            eprintln!(
+                "Will create backup from journal to: {:?}",
+                backup_args.output
+            );
+            std::process::exit(1);
+        }
+        Some(PonderCommand::Restore(restore_args)) => {
+            eprintln!("Restore command not yet implemented");
+            eprintln!("Will restore backup from: {:?}", restore_args.backup);
+            std::process::exit(1);
+        }
         None => {
             // Default: edit today's entry (v1.0 compatibility)
             cmd_edit(

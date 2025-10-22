@@ -16,6 +16,8 @@ use std::fmt;
 /// - `reflect`: Generate AI reflection on an entry
 /// - `search`: Semantic search over journal entries
 /// - `lock`: Lock the encrypted session
+/// - `backup`: Create encrypted backup of journal and database
+/// - `restore`: Restore from encrypted backup
 ///
 /// # Examples
 ///
@@ -69,6 +71,12 @@ pub enum PonderCommand {
 
     /// Lock the encrypted session (clear passphrase from memory)
     Lock,
+
+    /// Create encrypted backup of journal entries and database
+    Backup(BackupArgs),
+
+    /// Restore from encrypted backup archive
+    Restore(RestoreArgs),
 }
 
 /// Arguments for the `edit` subcommand.
@@ -128,6 +136,28 @@ pub struct SearchArgs {
     /// Optional date range end (YYYY-MM-DD)
     #[clap(long)]
     pub to: Option<String>,
+}
+
+/// Arguments for the `backup` subcommand.
+#[derive(Parser)]
+pub struct BackupArgs {
+    /// Output path for the backup archive (will be encrypted with .age extension)
+    pub output: std::path::PathBuf,
+
+    /// Verify backup integrity after creation
+    #[clap(long)]
+    pub verify: bool,
+}
+
+/// Arguments for the `restore` subcommand.
+#[derive(Parser)]
+pub struct RestoreArgs {
+    /// Path to the encrypted backup archive
+    pub backup: std::path::PathBuf,
+
+    /// Force overwrite if target directory exists
+    #[clap(short = 'f', long)]
+    pub force: bool,
 }
 
 impl fmt::Debug for CliArgs {
@@ -383,5 +413,62 @@ mod tests {
         assert!(debug_output.contains("[REDACTED]"));
         // Sensitive query should not appear
         assert!(!debug_output.contains("anxiety"));
+    }
+
+    #[test]
+    fn test_backup_command() {
+        let args = CliArgs::parse_from(vec!["ponder", "backup", "backup.tar.gz.age"]);
+        match args.command {
+            Some(PonderCommand::Backup(backup_args)) => {
+                assert_eq!(
+                    backup_args.output,
+                    std::path::PathBuf::from("backup.tar.gz.age")
+                );
+                assert!(!backup_args.verify);
+            }
+            _ => panic!("Expected Backup command"),
+        }
+
+        // Test with verify flag
+        let args = CliArgs::parse_from(vec!["ponder", "backup", "output.age", "--verify"]);
+        match args.command {
+            Some(PonderCommand::Backup(backup_args)) => {
+                assert!(backup_args.verify);
+            }
+            _ => panic!("Expected Backup command"),
+        }
+    }
+
+    #[test]
+    fn test_restore_command() {
+        let args = CliArgs::parse_from(vec!["ponder", "restore", "backup.tar.gz.age"]);
+        match args.command {
+            Some(PonderCommand::Restore(restore_args)) => {
+                assert_eq!(
+                    restore_args.backup,
+                    std::path::PathBuf::from("backup.tar.gz.age")
+                );
+                assert!(!restore_args.force);
+            }
+            _ => panic!("Expected Restore command"),
+        }
+
+        // Test with force flag
+        let args = CliArgs::parse_from(vec!["ponder", "restore", "backup.age", "--force"]);
+        match args.command {
+            Some(PonderCommand::Restore(restore_args)) => {
+                assert!(restore_args.force);
+            }
+            _ => panic!("Expected Restore command"),
+        }
+
+        // Test short form
+        let args = CliArgs::parse_from(vec!["ponder", "restore", "backup.age", "-f"]);
+        match args.command {
+            Some(PonderCommand::Restore(restore_args)) => {
+                assert!(restore_args.force);
+            }
+            _ => panic!("Expected Restore command"),
+        }
     }
 }
