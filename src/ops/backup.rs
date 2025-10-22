@@ -47,6 +47,10 @@ pub struct RestoreReport {
     pub entries_restored: usize,
     /// Size of the restored database in bytes
     pub db_size: u64,
+    /// BLAKE3 checksum of the backup archive
+    pub checksum: String,
+    /// Duration taken to restore the backup
+    pub duration: Duration,
 }
 
 /// Creates a full encrypted backup of journal data.
@@ -403,6 +407,7 @@ pub fn restore_backup(
     target_dir: &PathBuf,
     force: bool,
 ) -> AppResult<RestoreReport> {
+    let start_time = Instant::now();
     info!(
         "Restoring backup from {:?} to {:?}",
         backup_path, target_dir
@@ -446,6 +451,11 @@ pub fn restore_backup(
             format!("Failed to read backup file: {}", e),
         ))
     })?;
+
+    // Calculate checksum of backup archive
+    let mut hasher = Hasher::new();
+    hasher.update(&encrypted_bytes);
+    let checksum = hasher.finalize().to_hex().to_string();
 
     let decrypted_bytes = decrypt_with_passphrase(&encrypted_bytes, passphrase)?;
 
@@ -529,16 +539,20 @@ pub fn restore_backup(
         })?
         .len();
 
+    let duration = start_time.elapsed();
     info!(
-        "Restore completed: {} entries, database {} bytes",
+        "Restore completed: {} entries, database {} bytes, {} seconds",
         manifest.entries.len(),
-        db_size
+        db_size,
+        duration.as_secs()
     );
 
     // Step 6: Return report
     Ok(RestoreReport {
         entries_restored: manifest.entries.len(),
         db_size,
+        checksum,
+        duration,
     })
 }
 
