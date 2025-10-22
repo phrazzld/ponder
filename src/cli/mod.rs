@@ -94,6 +94,10 @@ pub struct EditArgs {
     /// Opens an entry for a specific date (YYYY-MM-DD or YYYYMMDD)
     #[clap(short = 'd', long, conflicts_with_all = &["retro", "reminisce"])]
     pub date: Option<String>,
+
+    /// Migrate v1.0 plaintext entries to v2.0 encrypted format
+    #[clap(long)]
+    pub migrate: bool,
 }
 
 /// Arguments for the `ask` subcommand.
@@ -256,6 +260,29 @@ mod tests {
         match args.command {
             Some(PonderCommand::Edit(edit_args)) => {
                 assert_eq!(edit_args.date, Some("20230115".to_string()));
+            }
+            _ => panic!("Expected Edit command"),
+        }
+    }
+
+    #[test]
+    fn test_edit_migrate_flag() {
+        let args = CliArgs::parse_from(vec!["ponder", "edit", "--migrate"]);
+        match args.command {
+            Some(PonderCommand::Edit(edit_args)) => {
+                assert!(edit_args.migrate);
+                assert!(!edit_args.retro);
+                assert!(!edit_args.reminisce);
+                assert!(edit_args.date.is_none());
+            }
+            _ => panic!("Expected Edit command"),
+        }
+
+        // Test migrate with today (implicit)
+        let args = CliArgs::parse_from(vec!["ponder", "edit"]);
+        match args.command {
+            Some(PonderCommand::Edit(edit_args)) => {
+                assert!(!edit_args.migrate);
             }
             _ => panic!("Expected Edit command"),
         }
