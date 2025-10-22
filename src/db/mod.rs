@@ -305,6 +305,242 @@ impl Database {
         debug!("Retrieved {} backup records", records.len());
         Ok(records)
     }
+
+    /// Records a migration entry in the migration log.
+    ///
+    /// # Arguments
+    ///
+    /// * `v1_path` - Path to the v1.0 entry (e.g., "20240115.md")
+    /// * `v2_path` - Path to the v2.0 encrypted entry (e.g., "2024/01/15.md.age")
+    /// * `date` - Date of the entry in YYYY-MM-DD format
+    /// * `status` - Migration status: "pending", "migrated", "verified", or "failed"
+    ///
+    /// # Returns
+    ///
+    /// Returns the ID of the inserted migration record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
+    pub fn record_migration(
+        &self,
+        v1_path: &str,
+        v2_path: &str,
+        date: &str,
+        status: &str,
+    ) -> AppResult<i64> {
+        let conn = self.get_conn()?;
+        conn.execute(
+            "INSERT INTO migration_log (v1_path, v2_path, date, status) VALUES (?, ?, ?, ?)",
+            rusqlite::params![v1_path, v2_path, date, status],
+        )
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        let id = conn.last_insert_rowid();
+        debug!(
+            "Recorded migration {} → {} with ID {}",
+            v1_path, v2_path, id
+        );
+        Ok(id)
+    }
+
+    /// Updates the status of a migration entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `v1_path` - Path to the v1.0 entry
+    /// * `status` - New status: "pending", "migrated", "verified", or "failed"
+    /// * `checksum_match` - Whether checksums match (true = 1, false = 0)
+    /// * `error_message` - Optional error message if migration failed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update fails.
+    pub fn update_migration_status(
+        &self,
+        v1_path: &str,
+        status: &str,
+        checksum_match: bool,
+        error_message: Option<&str>,
+    ) -> AppResult<()> {
+        let conn = self.get_conn()?;
+
+        let timestamp_col = match status {
+            "migrated" => Some("migrated_at"),
+            "verified" => Some("verified_at"),
+            _ => None,
+        };
+
+        if let Some(col) = timestamp_col {
+            conn.execute(
+                &format!(
+                    "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ?, {} = CURRENT_TIMESTAMP WHERE v1_path = ?",
+                    col
+                ),
+                rusqlite::params![status, checksum_match as i32, error_message, v1_path],
+            )
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+        } else {
+            conn.execute(
+                "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ? WHERE v1_path = ?",
+                rusqlite::params![status, checksum_match as i32, error_message, v1_path],
+            )
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+        }
+
+        debug!("Updated migration status for {} to {}", v1_path, status);
+        Ok(())
+    }
+
+    /// Checks if a v1.0 entry has been migrated.
+    ///
+    /// # Arguments
+    ///
+    /// * `v1_path` - Path to the v1.0 entry
+    ///
+    /// # Returns
+    ///
+    /// Returns the migration status if found, or None if not migrated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_migration_status(&self, v1_path: &str) -> AppResult<Option<MigrationRecord>> {
+        let conn = self.get_conn()?;
+        let result = conn.query_row(
+            "SELECT id, v1_path, v2_path, date, status, checksum_match, error_message, migrated_at, verified_at
+             FROM migration_log
+             WHERE v1_path = ?",
+            [v1_path],
+            |row| {
+                Ok(MigrationRecord {
+                    id: row.get(0)?,
+                    v1_path: row.get(1)?,
+                    v2_path: row.get(2)?,
+                    date: row.get(3)?,
+                    status: row.get(4)?,
+                    checksum_match: row.get(5)?,
+                    error_message: row.get(6)?,
+                    migrated_at: row.get(7)?,
+                    verified_at: row.get(8)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(crate::errors::DatabaseError::Sqlite(e).into()),
+        }
+    }
+
+    /// Initializes the migration state.
+    ///
+    /// # Arguments
+    ///
+    /// * `total_entries` - Total number of entries to migrate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails or state already exists.
+    pub fn init_migration_state(&self, total_entries: i64) -> AppResult<()> {
+        let conn = self.get_conn()?;
+        conn.execute(
+            "INSERT INTO migration_state (id, started_at, total_entries) VALUES (1, CURRENT_TIMESTAMP, ?)",
+            [total_entries],
+        )
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        debug!(
+            "Initialized migration state with {} total entries",
+            total_entries
+        );
+        Ok(())
+    }
+
+    /// Updates migration progress counters.
+    ///
+    /// # Arguments
+    ///
+    /// * `migrated_count` - Number of entries successfully migrated
+    /// * `verified_count` - Number of entries verified
+    /// * `failed_count` - Number of entries that failed to migrate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update fails.
+    pub fn update_migration_progress(
+        &self,
+        migrated_count: i64,
+        verified_count: i64,
+        failed_count: i64,
+    ) -> AppResult<()> {
+        let conn = self.get_conn()?;
+        conn.execute(
+            "UPDATE migration_state SET migrated_count = ?, verified_count = ?, failed_count = ? WHERE id = 1",
+            rusqlite::params![migrated_count, verified_count, failed_count],
+        )
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        debug!(
+            "Updated migration progress: {} migrated, {} verified, {} failed",
+            migrated_count, verified_count, failed_count
+        );
+        Ok(())
+    }
+
+    /// Marks the migration as completed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update fails.
+    pub fn complete_migration(&self) -> AppResult<()> {
+        let conn = self.get_conn()?;
+        conn.execute(
+            "UPDATE migration_state SET completed_at = CURRENT_TIMESTAMP WHERE id = 1",
+            [],
+        )
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        debug!("Migration marked as completed");
+        Ok(())
+    }
+
+    /// Gets the current migration state.
+    ///
+    /// # Returns
+    ///
+    /// Returns the migration state if found, or None if migration hasn't started.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_migration_state(&self) -> AppResult<Option<MigrationState>> {
+        let conn = self.get_conn()?;
+        let result = conn.query_row(
+            "SELECT id, started_at, completed_at, total_entries, migrated_count, verified_count, failed_count
+             FROM migration_state
+             WHERE id = 1",
+            [],
+            |row| {
+                Ok(MigrationState {
+                    id: row.get(0)?,
+                    started_at: row.get(1)?,
+                    completed_at: row.get(2)?,
+                    total_entries: row.get(3)?,
+                    migrated_count: row.get(4)?,
+                    verified_count: row.get(5)?,
+                    failed_count: row.get(6)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(state) => Ok(Some(state)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(crate::errors::DatabaseError::Sqlite(e).into()),
+        }
+    }
 }
 
 /// Record of a backup operation.
@@ -324,6 +560,48 @@ pub struct BackupRecord {
     pub checksum: String,
     /// Timestamp when backup was created
     pub created_at: String,
+}
+
+/// Record of an individual migration entry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MigrationRecord {
+    /// Unique identifier
+    pub id: i64,
+    /// Path to the v1.0 entry
+    pub v1_path: String,
+    /// Path to the v2.0 encrypted entry
+    pub v2_path: String,
+    /// Date of the entry (YYYY-MM-DD)
+    pub date: String,
+    /// Migration status: "pending", "migrated", "verified", or "failed"
+    pub status: String,
+    /// Whether checksums matched during verification
+    pub checksum_match: bool,
+    /// Error message if migration failed
+    pub error_message: Option<String>,
+    /// Timestamp when entry was migrated
+    pub migrated_at: Option<String>,
+    /// Timestamp when entry was verified
+    pub verified_at: Option<String>,
+}
+
+/// Overall migration state.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MigrationState {
+    /// Unique identifier (always 1)
+    pub id: i64,
+    /// Timestamp when migration started
+    pub started_at: String,
+    /// Timestamp when migration completed
+    pub completed_at: Option<String>,
+    /// Total number of entries to migrate
+    pub total_entries: i64,
+    /// Number of entries successfully migrated
+    pub migrated_count: i64,
+    /// Number of entries verified
+    pub verified_count: i64,
+    /// Number of entries that failed
+    pub failed_count: i64,
 }
 
 /// Connection customizer that sets the SQLCipher key pragma.
@@ -516,5 +794,144 @@ mod tests {
         assert_eq!(all_history[0].id, id3);
         assert_eq!(all_history[1].id, id2);
         assert_eq!(all_history[2].id, id1);
+    }
+
+    #[test]
+    fn test_record_migration() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Record a migration
+        let id = db
+            .record_migration("20240115.md", "2024/01/15.md.age", "2024-01-15", "pending")
+            .unwrap();
+
+        assert!(id > 0);
+
+        // Verify it was recorded
+        let conn = db.get_conn().unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM migration_log", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_update_migration_status() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Record a migration
+        db.record_migration("20240115.md", "2024/01/15.md.age", "2024-01-15", "pending")
+            .unwrap();
+
+        // Update status to migrated
+        db.update_migration_status("20240115.md", "migrated", false, None)
+            .unwrap();
+
+        // Verify status was updated
+        let record = db.get_migration_status("20240115.md").unwrap().unwrap();
+        assert_eq!(record.status, "migrated");
+        assert!(!record.checksum_match);
+        assert!(record.migrated_at.is_some());
+
+        // Update to verified with checksum match
+        db.update_migration_status("20240115.md", "verified", true, None)
+            .unwrap();
+
+        let record = db.get_migration_status("20240115.md").unwrap().unwrap();
+        assert_eq!(record.status, "verified");
+        assert!(record.checksum_match);
+        assert!(record.verified_at.is_some());
+
+        // Update to failed with error message
+        db.update_migration_status("20240115.md", "failed", false, Some("Encryption failed"))
+            .unwrap();
+
+        let record = db.get_migration_status("20240115.md").unwrap().unwrap();
+        assert_eq!(record.status, "failed");
+        assert_eq!(record.error_message, Some("Encryption failed".to_string()));
+    }
+
+    #[test]
+    fn test_get_migration_status() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Non-existent migration should return None
+        let result = db.get_migration_status("nonexistent.md").unwrap();
+        assert!(result.is_none());
+
+        // Record and retrieve migration
+        db.record_migration("20240115.md", "2024/01/15.md.age", "2024-01-15", "pending")
+            .unwrap();
+
+        let record = db.get_migration_status("20240115.md").unwrap().unwrap();
+        assert_eq!(record.v1_path, "20240115.md");
+        assert_eq!(record.v2_path, "2024/01/15.md.age");
+        assert_eq!(record.date, "2024-01-15");
+        assert_eq!(record.status, "pending");
+    }
+
+    #[test]
+    fn test_migration_state_lifecycle() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Initially no migration state
+        let state = db.get_migration_state().unwrap();
+        assert!(state.is_none());
+
+        // Initialize migration
+        db.init_migration_state(10).unwrap();
+
+        let state = db.get_migration_state().unwrap().unwrap();
+        assert_eq!(state.total_entries, 10);
+        assert_eq!(state.migrated_count, 0);
+        assert_eq!(state.verified_count, 0);
+        assert_eq!(state.failed_count, 0);
+        assert!(state.completed_at.is_none());
+
+        // Update progress
+        db.update_migration_progress(5, 3, 1).unwrap();
+
+        let state = db.get_migration_state().unwrap().unwrap();
+        assert_eq!(state.migrated_count, 5);
+        assert_eq!(state.verified_count, 3);
+        assert_eq!(state.failed_count, 1);
+
+        // Complete migration
+        db.complete_migration().unwrap();
+
+        let state = db.get_migration_state().unwrap().unwrap();
+        assert!(state.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_migration_state_singleton() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+
+        // Initialize migration state
+        db.init_migration_state(10).unwrap();
+
+        // Try to initialize again - should fail (singleton constraint)
+        let result = db.init_migration_state(20);
+        assert!(result.is_err());
     }
 }
