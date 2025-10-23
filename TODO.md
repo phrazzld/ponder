@@ -2,11 +2,11 @@
 
 ## Progress Summary
 
-**Completed**: Phase 0-5 ✅, Phase 7 Critical Refactoring A-B, F ✅
-**Current**: Phase 7 (CLI handlers + testing)
-**Next**: Implement backup/restore handlers → Testing → Phase 8 (migration)
+**Completed**: Phase 0-5 ✅, Phase 7 (Backup System) ✅, Phase 8 (Migration System) ✅
+**Current**: Phase 6 (documentation)
+**Next**: Documentation → v2.1 release
 
-**Tests**: 198 passing (3 ignored) | **Build**: ✅ PASSING
+**Tests**: 212 passing (14 ignored) | **Build**: ✅ PASSING
 **Architecture**: v2.0 complete - encrypted journaling with AI features operational
 
 ---
@@ -44,34 +44,38 @@
 - ✅ CLI command definitions (Backup, Restore in cli/mod.rs)
 - ✅ Report symmetry (RestoreReport has checksum + duration)
 - ✅ API cleanup (removed unused incremental parameter)
+- ✅ CLI handlers (cmd_backup, cmd_restore in main.rs)
+- ✅ Module exposure (ops/mod.rs re-exports backup functions)
 
 ### Remaining Tasks
 
-#### CLI Handlers (1.5hr)
+#### CLI Handlers ✅ COMPLETE
 
-- [ ] Implement cmd_backup() in main.rs (30min)
+- [x] Implement cmd_backup() in main.rs (30min)
   - Initialize SessionManager + Database
   - Call `ops::create_backup()`
   - Optional: `ops::verify_backup()` if `args.verify`
   - Print BackupReport summary
 
-- [ ] Implement cmd_restore() in main.rs (20min)
+- [x] Implement cmd_restore() in main.rs (20min)
   - Initialize SessionManager
   - Confirm overwrite if target exists (unless `--force`)
   - Call `ops::restore_backup()`
   - Print RestoreReport summary
 
-- [ ] Expose backup in ops/mod.rs (5min)
+- [x] Expose backup in ops/mod.rs (5min)
   - `pub mod backup;`
   - `pub use backup::{create_backup, verify_backup, restore_backup};`
 
-#### Testing (2hr)
+#### Testing ✅ COMPLETE
 
-- [ ] Create tests/backup_tests.rs
+- [x] Create tests/backup_tests.rs
   - test_create_full_backup: Create → verify size/checksum
   - test_verify_backup: Create → verify → check manifest accuracy
   - test_restore_backup: Create → delete original → restore → compare
   - test_backup_wrong_passphrase: Verify fails with incorrect passphrase
+  - test_restore_force_overwrite: Verify --force flag behavior
+  - test_backup_empty_journal: Handle empty journal edge case
 
 #### Optional Refactoring (Deferred)
 
@@ -89,39 +93,28 @@
 
 ---
 
-## Phase 8: Migration System (Est: 6-8hr)
+## Phase 8: Migration System ✅ COMPLETE
 
-### Detection Logic (1.5hr)
-- [ ] Create `src/ops/detection.rs`
+### Completed ✅
+- ✅ Database schema (migration_log, migration_state tables) - Commit `7a27825`
+- ✅ Database functions (7 migration tracking functions) - Commit `bcdaa32`
+- ✅ Detection module (src/ops/detection.rs) - Commit `99bd0f8`
   - `scan_v1_entries()`: Glob `*.md` (root only), parse YYYYMMDD.md dates
   - `is_migrated()`: Query migration_log for completion status
   - `detect_migration_state()`: Full analysis of v1/v2 mix
-
-### Migration Schema (1hr)
-- [ ] Add migration tables to db/schema.rs
-  - `migration_log`: v1_path, v2_path, date, status, checksum_match
-  - `migration_state`: started_at, completed_at, total/migrated/failed counts
-- [ ] Add migration tracking functions to db/mod.rs
-
-### Migration Engine (4hr)
-- [ ] Create `src/ops/migration.rs`
+- ✅ Migration engine (src/ops/migration.rs, 702 lines) - Commit `8f260fa`
   - `migrate_entry()`: Read v1 plaintext → encrypt → write v2 → embed → verify
   - `verify_migration()`: Decrypt v2, compare with v1 byte-for-byte
   - `migrate_all_entries()`: Batch processor with progress callback
-
-### CLI Integration (2hr)
-- [ ] Add `--migrate` flag to EditArgs
-- [ ] Add `CleanupV1` command
-- [ ] Integrate detection into `cmd_edit()`: Auto-prompt on first v1.0 detection
-- [ ] Implement `prompt_migration()`: Interactive choice
-- [ ] Implement `print_progress()`: Progress bar with ETA
-- [ ] Implement `cmd_cleanup_v1()`: Delete only verified-migrated files
-
-### Testing (3hr)
-- [ ] Create tests/migration_tests.rs
-  - test_detect_v1_entries, test_migrate_single_entry, test_migration_verification
-  - test_migration_resume, test_skip_embeddings_flag, test_cleanup_v1_safety
-- [ ] Add full migration workflow to ops_integration_tests.rs
+- ✅ CLI integration - Commits `31f3692`, `803c6c9`, `08404e7`
+  - `--migrate` flag for EditArgs
+  - `CleanupV1` command with `--yes` flag
+  - Auto-detection in `cmd_edit()` with one-time interactive prompt
+  - `cmd_migrate()`: Full migration with progress display
+  - `cmd_cleanup_v1()`: Safe deletion of verified entries only
+- ✅ Integration tests - Commits `0615aa7`, `59ef98f`
+  - tests/migration_tests.rs: 8 comprehensive tests (all passing)
+  - ops_integration_tests.rs: End-to-end workflow test (passing)
 
 ---
 
@@ -141,15 +134,14 @@
 ## Time Estimates
 
 **Phase 6 Remaining**: ~2hr (docs)
-**Phase 7 Remaining**: ~2hr (handlers + tests)
-**Phase 8**: ~8hr (migration system)
+**Phase 7**: ✅ COMPLETE
+**Phase 8**: ✅ COMPLETE
 
 **Critical Path**:
-1. Complete Phase 7 handlers (2hr)
-2. Phase 8 migration system (8hr)
-3. Documentation + validation (3hr)
+1. Documentation (README, MIGRATION.md, COMMANDS.md) - ~2hr
+2. Validation checklist - ~1hr
 
-**Total Remaining**: ~13hr
+**Total Remaining**: ~3hr
 
 ---
 
@@ -171,10 +163,20 @@ Validated ideas deferred to future releases:
 
 ## Recent Commits
 
-**Phase 7 Progress:**
-- `026f9d0` fix(deps): move tempfile to production dependencies
-- `f41958d` refactor(backup): remove unused incremental parameter
-- `9b8934a` refactor(backup): add checksum and duration to RestoreReport
+**Phase 8 Complete:**
+- `59ef98f` test: add full migration workflow integration test
+- `0615aa7` test: add comprehensive migration integration tests (8 tests)
+- `08404e7` feat(cli): implement migration CLI integration
+- `803c6c9` feat(cli): add CleanupV1 command
+- `31f3692` feat(cli): add --migrate flag to EditArgs
+- `8f260fa` feat(ops): implement migration engine (702 lines)
+- `99bd0f8` feat(ops): add detection module for v1.0 entries
+- `bcdaa32` feat(db): add migration tracking functions (7 functions)
+- `7a27825` feat(db): add migration schema tables
+
+**Phase 7 Complete:**
+- `1ee23ab` test: add comprehensive backup integration tests (6 tests, all passing)
+- `d2ddcd5` feat(cli): implement backup and restore command handlers
 - `0328e86` feat(cli): add backup and restore commands
 
 **Module Value Principle**: Each module must hide significant complexity behind simple interfaces. Deep modules win.
