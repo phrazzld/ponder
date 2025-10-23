@@ -273,7 +273,7 @@ fn test_full_migration_workflow() {
     }
 
     // Verify v2.0 files exist and are encrypted
-    let v2_paths = vec![
+    let v2_paths = [
         journal_dir.join("2024/01/15.md.age"),
         journal_dir.join("2024/01/16.md.age"),
         journal_dir.join("2024/02/10.md.age"),

@@ -113,7 +113,7 @@ pub fn create_backup(
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "age") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "age") {
             entry_paths.push(path.to_path_buf());
         }
     }
@@ -347,7 +347,7 @@ pub fn verify_backup(
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "age") {
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "age") {
             // Store relative path
             if let Ok(rel_path) = path.strip_prefix(temp_dir.path()) {
                 entry_paths.push(rel_path.to_path_buf());

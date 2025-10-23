@@ -8,15 +8,11 @@ use ponder::crypto::SessionManager;
 use ponder::db::Database;
 use ponder::ops;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Helper to create a test journal structure with encrypted entries.
-fn setup_test_journal(
-    journal_dir: &PathBuf,
-    db_path: &PathBuf,
-    passphrase: &SecretString,
-) -> Database {
+fn setup_test_journal(journal_dir: &Path, db_path: &Path, passphrase: &SecretString) -> Database {
     // Create journal directory structure
     fs::create_dir_all(journal_dir).expect("create journal dir");
 
