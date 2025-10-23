@@ -118,6 +118,7 @@ fn run_application(
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
+        Some(PonderCommand::CleanupV1(cleanup_args)) => cmd_cleanup_v1(&config, cleanup_args),
         None => {
             // Default: edit today's entry (v1.0 compatibility)
             cmd_edit(
@@ -126,6 +127,7 @@ fn run_application(
                     retro: false,
                     reminisce: false,
                     date: None,
+                    migrate: false,
                 },
                 current_date,
                 &current_datetime,
@@ -235,6 +237,27 @@ fn cmd_edit(
     // Ensure journal directory exists
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
+    // v2.0: Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Handle --migrate flag
+    if edit_args.migrate {
+        return cmd_migrate(config, &db, &mut session, Some(&ai_client));
+    }
+
+    // Detect v1.0 entries and auto-prompt for migration (one-time)
+    let detection_result = ops::detect_migration_state(&config.journal_dir, &db)?;
+    if detection_result.pending > 0 && !has_migration_been_prompted(&db)? {
+        if prompt_migration(&detection_result)? {
+            return cmd_migrate(config, &db, &mut session, Some(&ai_client));
+        } else {
+            // Mark that we've prompted (don't ask again)
+            mark_migration_prompted(&db)?;
+        }
+    }
+
     // Parse date specifier from edit args
     let date_spec = DateSpecifier::from_cli_args(
         edit_args.retro,
@@ -244,11 +267,6 @@ fn cmd_edit(
     .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
 
     let dates_to_open = date_spec.resolve_dates(current_date);
-
-    // v2.0: Initialize session, database, and AI client
-    let mut session = SessionManager::new(config.session_timeout_minutes);
-    let db = open_database_with_retry(config, &mut session)?;
-    let ai_client = OllamaClient::new(&config.ollama_url);
 
     // Ensure embedding model is available (for automatic embedding generation)
     ensure_embedding_available(&ai_client)?;
@@ -444,6 +462,177 @@ fn cmd_restore(config: &Config, restore_args: ponder::cli::RestoreArgs) -> AppRe
     println!("  Target: {:?}", config.journal_dir);
 
     Ok(())
+}
+
+/// Migration command: Migrate v1.0 plaintext entries to v2.0 encrypted format.
+fn cmd_migrate(
+    config: &Config,
+    db: &Database,
+    session: &mut SessionManager,
+    ai_client: Option<&OllamaClient>,
+) -> AppResult<()> {
+    info!("Command: migrate");
+
+    // Scan for v1.0 entries
+    let v1_entries = ops::scan_v1_entries(&config.journal_dir)?;
+
+    if v1_entries.is_empty() {
+        println!("No v1.0 entries found to migrate.");
+        return Ok(());
+    }
+
+    println!("Found {} v1.0 entries to migrate", v1_entries.len());
+    println!();
+
+    // Migrate all entries with progress
+    let results = ops::migrate_all_entries(
+        config,
+        db,
+        session,
+        ai_client,
+        v1_entries,
+        Some(Box::new(print_progress)),
+    )?;
+
+    // Summary
+    let successful = results.iter().filter(|r| r.success).count();
+    let failed = results.len() - successful;
+
+    println!();
+    println!("✓ Migration completed");
+    println!("  Successful: {}", successful);
+    if failed > 0 {
+        println!("  Failed: {}", failed);
+    }
+
+    Ok(())
+}
+
+/// Cleanup v1.0 command: Delete verified-migrated v1.0 entries.
+fn cmd_cleanup_v1(config: &Config, cleanup_args: ponder::cli::CleanupV1Args) -> AppResult<()> {
+    info!("Command: cleanup-v1");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Scan for v1.0 entries
+    let detection_result = ops::detect_migration_state(&config.journal_dir, &db)?;
+
+    if detection_result.migrated_entries.is_empty() {
+        println!("No migrated v1.0 entries found to clean up.");
+        return Ok(());
+    }
+
+    println!(
+        "Found {} verified-migrated v1.0 entries",
+        detection_result.migrated_entries.len()
+    );
+    println!();
+
+    // Confirm deletion unless --yes flag provided
+    if !cleanup_args.yes {
+        println!("This will permanently delete the following files:");
+        for path in &detection_result.migrated_entries {
+            println!("  {}", path.display());
+        }
+        println!();
+        print!("Continue? [y/N]: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    // Delete files
+    let mut deleted = 0;
+    let mut failed = 0;
+
+    for path in &detection_result.migrated_entries {
+        match std::fs::remove_file(path) {
+            Ok(()) => {
+                deleted += 1;
+                info!("Deleted: {:?}", path);
+            }
+            Err(e) => {
+                failed += 1;
+                warn!("Failed to delete {:?}: {}", path, e);
+            }
+        }
+    }
+
+    println!();
+    println!("✓ Cleanup completed");
+    println!("  Deleted: {}", deleted);
+    if failed > 0 {
+        println!("  Failed: {}", failed);
+    }
+
+    Ok(())
+}
+
+/// Prompt user for migration with yes/no choice.
+fn prompt_migration(detection_result: &ops::MigrationDetectionResult) -> AppResult<bool> {
+    println!();
+    println!("📦 v1.0 Journal Entries Detected");
+    println!();
+    println!(
+        "Found {} plaintext v1.0 entries that can be migrated to v2.0 encrypted format.",
+        detection_result.pending
+    );
+    println!();
+    println!("Migration will:");
+    println!("  • Encrypt entries using age encryption");
+    println!("  • Preserve all content (verified with checksums)");
+    println!("  • Generate embeddings for AI features");
+    println!("  • Keep original files (delete with 'ponder cleanup-v1' after verification)");
+    println!();
+    print!("Migrate now? [y/N]: ");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
+/// Print progress for migration.
+fn print_progress(current: usize, total: usize, result: &ops::MigrationResult) {
+    if result.success {
+        println!("[{}/{}] ✓ Migrated: {}", current, total, result.date);
+    } else {
+        println!(
+            "[{}/{}] ✗ Failed: {} - {}",
+            current,
+            total,
+            result.date,
+            result.error_message.as_deref().unwrap_or("Unknown error")
+        );
+    }
+}
+
+/// Check if migration prompt has been shown (to avoid repeated prompts).
+fn has_migration_been_prompted(db: &Database) -> AppResult<bool> {
+    // Check if migration_state exists (indicates we've prompted or started migration)
+    Ok(db.get_migration_state()?.is_some())
+}
+
+/// Mark that migration prompt has been shown.
+fn mark_migration_prompted(db: &Database) -> AppResult<()> {
+    // Initialize migration state with 0 entries to mark prompt as shown
+    // This prevents repeated prompts while user decides not to migrate yet
+    match db.init_migration_state(0) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            // Already exists, that's fine
+            Ok(())
+        }
+    }
 }
 
 /// Parse date range from optional string arguments.
