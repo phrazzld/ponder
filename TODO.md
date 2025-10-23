@@ -123,13 +123,13 @@
 
 ## Validation Checklist (Before v2.1 Release)
 
-- [ ] `cargo build --release` succeeds
-- [ ] `cargo test --verbose -- --test-threads=1` all pass
-- [ ] `cargo clippy --all-targets -- -D warnings` clean
-- [ ] `cargo audit` clean
+- [x] `cargo build --release` succeeds - Commit `ab6e4f3`
+- [x] `cargo test --verbose -- --test-threads=1` all pass - 172 passed, 11 ignored
+- [x] `cargo clippy --all-targets -- -D warnings` clean - Commit `ab6e4f3`
+- [x] `cargo audit` clean - 0 vulnerabilities, 1 unmaintained warning (transitive)
 - [ ] Manual QA: backup → restore → verify integrity
 - [ ] Manual QA: migration with 10+ v1.0 entries
-- [ ] Documentation: README backup section, MIGRATION.md updated, COMMANDS.md complete
+- [x] Documentation: README backup section, MIGRATION.md updated, COMMANDS.md complete
 - [ ] Performance benchmarks baseline established
 
 ---
