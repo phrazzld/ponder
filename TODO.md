@@ -26,8 +26,11 @@
   - Command reference: edit, ask, search, reflect, lock, backup, restore, cleanup-v1
 
 ### Quality Infrastructure
-- [ ] Add security.yml workflow (30min)
+- [x] Add security.yml workflow (30min) - Already exists (20 Oct 21:36)
   - Jobs: gitleaks history scan, cargo-audit vulnerabilities
+  - Runs on push, pull_request, and weekly schedule
+  - Full history scan with fetch-depth: 0
+  - cargo-audit with --deny unsound --deny yanked
 
 ---
 
