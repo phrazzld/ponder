@@ -14,15 +14,15 @@
 ## Phase 6: Testing & Documentation (Remaining)
 
 ### Documentation
-- [ ] Add Backup & Export section to README.md (30min)
+- [x] Add Backup & Export section to README.md (30min) - Commit `065025c`
   - Cover: `backup`, `restore` commands with examples
   - Security: Warn about backup storage security
 
-- [ ] Rewrite MIGRATION.md migration strategy (45min)
+- [x] Rewrite MIGRATION.md migration strategy (45min) - Commit `daa076c`
   - Flip: Automatic detection (primary) vs manual (fallback)
   - Add: Interactive flow examples, resume capability
 
-- [ ] Create docs/COMMANDS.md reference (30min)
+- [x] Create docs/COMMANDS.md reference (30min) - Commit `da50b06`
   - Command reference: edit, ask, search, reflect, lock, backup, restore, cleanup-v1
 
 ### Quality Infrastructure
