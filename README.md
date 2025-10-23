@@ -92,6 +92,8 @@ ponder <COMMAND> [OPTIONS]
 | `reflect` | Generate AI reflection on an entry |
 | `search` | Semantic search over journal entries |
 | `lock` | Lock the encrypted session |
+| `backup` | Create encrypted backup archive |
+| `restore` | Restore from encrypted backup |
 
 ### Global Options
 
@@ -186,6 +188,68 @@ Lock the encrypted session (clear passphrase from memory):
 ```bash
 ponder lock
 ```
+
+### Backup Command (v2.0)
+
+Create encrypted backup archive of your entire journal:
+
+```bash
+# Create backup (prompts for confirmation)
+ponder backup
+
+# Verify backup integrity (optional)
+ponder backup --verify
+```
+
+**Backup Details:**
+- Creates encrypted `.tar.age` archive containing:
+  - All encrypted journal entries (`*.md.age`)
+  - Encrypted database (`ponder.db`)
+  - Backup manifest with checksums
+- Default location: `$PONDER_DIR/backups/ponder-backup-YYYYMMDD-HHMMSS.tar.age`
+- Encrypted with your journal passphrase
+- Includes metadata: timestamp, file count, total size
+
+**Backup Options:**
+- `--verify`: Verify backup integrity after creation (recommended)
+
+### Restore Command (v2.0)
+
+Restore journal from encrypted backup archive:
+
+```bash
+# Restore from backup (prompts for confirmation)
+ponder restore /path/to/backup.tar.age
+
+# Force restore (skip confirmation)
+ponder restore /path/to/backup.tar.age --force
+```
+
+**Restore Details:**
+- Extracts and verifies all files from backup archive
+- Validates checksums against backup manifest
+- Restores to current `$PONDER_DIR` (overwrites existing files)
+- Reports: files restored, total size, checksum verification status
+
+**Restore Options:**
+- `-f, --force`: Skip confirmation prompt and overwrite existing files
+
+**⚠️ Backup Security Warning:**
+
+Backup archives are encrypted with your journal passphrase and provide strong security **at rest**. However:
+
+1. **Storage Security**: Store backups in a secure location (encrypted external drive, secure cloud storage with encryption at rest)
+2. **Passphrase Security**: Your backup is only as secure as your passphrase. Use a strong, unique passphrase.
+3. **Transport Security**: When transferring backups, use encrypted channels (HTTPS, SFTP, encrypted email)
+4. **Access Control**: Limit who can access your backup files (file permissions, access controls)
+5. **Retention**: Securely delete old backups you no longer need
+
+**Best Practices:**
+- Test restores periodically to verify backup integrity
+- Store backups in multiple secure locations (3-2-1 backup strategy)
+- Use `--verify` flag to check backup integrity immediately after creation
+- Keep backups separate from your primary journal location
+- Consider using encrypted cloud storage (e.g., encrypted S3 buckets, Tresorit, Sync.com)
 
 ## Configuration ⚙️
 
