@@ -5,7 +5,7 @@
 
 use crate::errors::{AppResult, DatabaseError};
 use chrono::NaiveDate;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 use tracing::debug;
 
@@ -265,6 +265,132 @@ pub fn mark_embedded(conn: &Connection, entry_id: i64) -> AppResult<()> {
     }
 
     Ok(())
+}
+
+/// Gets all entries missing embeddings (embedded_at IS NULL).
+///
+/// Returns entries ordered by date ascending.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+pub fn get_entries_without_embeddings(conn: &Connection) -> AppResult<Vec<Entry>> {
+    debug!("Querying entries without embeddings");
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, path, date, checksum, word_count, updated_at, embedded_at
+             FROM entries
+             WHERE embedded_at IS NULL
+             ORDER BY date ASC",
+        )
+        .map_err(DatabaseError::Sqlite)?;
+
+    let entries = stmt
+        .query_map([], |row| {
+            let path_str: String = row.get(1)?;
+            let date_str: String = row.get(2)?;
+
+            // Parse date from string (format: YYYY-MM-DD)
+            let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?;
+
+            Ok(Entry {
+                id: row.get(0)?,
+                path: path_str.into(),
+                date,
+                checksum: row.get(3)?,
+                word_count: row.get(4)?,
+                updated_at: row.get(5)?,
+                embedded_at: row.get(6)?,
+            })
+        })
+        .map_err(DatabaseError::Sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(DatabaseError::Sqlite)?;
+
+    debug!("Found {} entries without embeddings", entries.len());
+    Ok(entries)
+}
+
+/// Gets embedding statistics for the database.
+///
+/// Returns (entries_with_embeddings, total_entries).
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+pub fn get_embedding_stats(conn: &Connection) -> AppResult<(usize, usize)> {
+    debug!("Getting embedding statistics");
+
+    let total: usize = conn
+        .query_row("SELECT COUNT(*) FROM entries", [], |row| row.get(0))
+        .map_err(DatabaseError::Sqlite)?;
+
+    let embedded: usize = conn
+        .query_row(
+            "SELECT COUNT(*) FROM entries WHERE embedded_at IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(DatabaseError::Sqlite)?;
+
+    debug!("Embedding stats: {}/{} entries embedded", embedded, total);
+    Ok((embedded, total))
+}
+
+/// Gets the date range of all entries in the database.
+///
+/// Returns (oldest_date, newest_date) or (None, None) if no entries exist.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+pub fn get_entry_date_range(
+    conn: &Connection,
+) -> AppResult<(Option<NaiveDate>, Option<NaiveDate>)> {
+    debug!("Getting entry date range");
+
+    let oldest: Option<String> = conn
+        .query_row(
+            "SELECT date FROM entries ORDER BY date ASC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(DatabaseError::Sqlite)?;
+
+    let newest: Option<String> = conn
+        .query_row(
+            "SELECT date FROM entries ORDER BY date DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(DatabaseError::Sqlite)?;
+
+    let oldest_date = oldest.and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok());
+    let newest_date = newest.and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok());
+
+    debug!("Date range: {:?} to {:?}", oldest_date, newest_date);
+    Ok((oldest_date, newest_date))
 }
 
 #[cfg(test)]

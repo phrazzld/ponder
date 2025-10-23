@@ -118,7 +118,9 @@ fn run_application(
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
+        Some(PonderCommand::Reindex) => cmd_reindex(&config),
         Some(PonderCommand::CleanupV1(cleanup_args)) => cmd_cleanup_v1(&config, cleanup_args),
+        Some(PonderCommand::Status) => cmd_status(&config),
         None => {
             // Default: edit today's entry (v1.0 compatibility)
             cmd_edit(
@@ -571,6 +573,124 @@ fn cmd_cleanup_v1(config: &Config, cleanup_args: ponder::cli::CleanupV1Args) -> 
     println!("  Deleted: {}", deleted);
     if failed > 0 {
         println!("  Failed: {}", failed);
+    }
+
+    Ok(())
+}
+
+/// Regenerates embeddings for entries missing them.
+fn cmd_reindex(config: &Config) -> AppResult<()> {
+    info!("Command: reindex");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Initialize Ollama client
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    println!("🔍 Checking for entries missing embeddings...");
+    println!();
+
+    // Run reindex operation
+    let report = ops::reindex_entries(&db, &mut session, &ai_client)?;
+
+    if report.total == 0 {
+        println!("✅ All entries already have embeddings");
+        return Ok(());
+    }
+
+    println!();
+    println!("✅ Reindex Complete");
+    println!("  Total: {} entries", report.total);
+    println!("  Success: {} entries", report.success);
+    if report.failed > 0 {
+        println!("  Failed: {} entries", report.failed);
+    }
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+
+    Ok(())
+}
+
+/// Shows journal database health and statistics.
+fn cmd_status(config: &Config) -> AppResult<()> {
+    info!("Command: status");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Create temporary status operation (we'll implement this next)
+    // For now, just show basic stats
+    let conn = db.get_conn()?;
+
+    // Get stats
+    let (embedded, total_entries) = ponder::db::entries::get_embedding_stats(&conn)?;
+    let total_embeddings = ponder::db::embeddings::count_total_embeddings(&conn)?;
+    let (oldest, newest) = ponder::db::entries::get_entry_date_range(&conn)?;
+    let (migration_verified, migration_total) = db.get_migration_stats()?;
+
+    // Calculate DB size
+    let db_path = config.db_path.clone();
+    let db_size_mb = std::fs::metadata(&db_path)?.len() as f64 / 1_048_576.0;
+
+    // Display status
+    println!("📊 Journal Status");
+    println!();
+    println!("Entries:");
+    println!("  Total: {} entries", total_entries);
+    println!(
+        "  With embeddings: {} ({:.1}%)",
+        embedded,
+        if total_entries > 0 {
+            (embedded as f64 / total_entries as f64) * 100.0
+        } else {
+            0.0
+        }
+    );
+    if total_entries > embedded {
+        println!(
+            "  Without embeddings: {} ({:.1}%) ⚠️",
+            total_entries - embedded,
+            if total_entries > 0 {
+                ((total_entries - embedded) as f64 / total_entries as f64) * 100.0
+            } else {
+                0.0
+            }
+        );
+    }
+    if let (Some(oldest_date), Some(newest_date)) = (oldest, newest) {
+        println!("  Date range: {} to {}", oldest_date, newest_date);
+    }
+    println!();
+
+    println!("Embeddings:");
+    println!("  Total vectors: {} chunks", total_embeddings);
+    if total_entries > 0 {
+        println!(
+            "  Average: {:.1} chunks/entry",
+            total_embeddings as f64 / total_entries as f64
+        );
+    }
+    println!();
+
+    if migration_total > 0 {
+        println!("Migration:");
+        println!("  Completed: {} entries", migration_verified);
+        println!(
+            "  Pending: {} entries",
+            migration_total - migration_verified
+        );
+        println!();
+    }
+
+    println!("Database:");
+    println!("  Size: {:.1} MB", db_size_mb);
+    println!("  Location: {}", db_path.display());
+    println!();
+
+    if total_entries > embedded {
+        println!("⚠️  Run 'ponder reindex' to generate missing embeddings");
     }
 
     Ok(())

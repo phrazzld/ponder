@@ -78,8 +78,14 @@ pub enum PonderCommand {
     /// Restore from encrypted backup archive
     Restore(RestoreArgs),
 
+    /// Regenerate embeddings for journal entries
+    Reindex,
+
     /// Clean up v1.0 entries after successful migration (deletes only verified entries)
     CleanupV1(CleanupV1Args),
+
+    /// Show journal database health and statistics
+    Status,
 }
 
 /// Arguments for the `edit` subcommand.

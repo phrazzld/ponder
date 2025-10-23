@@ -505,7 +505,7 @@ fn generate_embeddings_for_entry(
     // Generate and store embeddings
     for (idx, chunk) in chunks.iter().enumerate() {
         // Generate embedding
-        let embedding_vec = ai_client.embed(chunk, DEFAULT_EMBED_MODEL)?;
+        let embedding_vec = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
 
         // Calculate chunk checksum
         let chunk_checksum = blake3::hash(chunk.as_bytes()).to_hex().to_string();

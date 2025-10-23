@@ -541,6 +541,33 @@ impl Database {
             Err(e) => Err(crate::errors::DatabaseError::Sqlite(e).into()),
         }
     }
+
+    /// Gets migration statistics.
+    ///
+    /// Returns (verified_count, total_entries).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_migration_stats(&self) -> AppResult<(usize, usize)> {
+        let conn = self.get_conn()?;
+
+        // Count total v1.0 entries recorded in migration_log
+        let total: usize = conn
+            .query_row("SELECT COUNT(*) FROM migration_log", [], |row| row.get(0))
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        // Count verified migrations
+        let verified: usize = conn
+            .query_row(
+                "SELECT COUNT(*) FROM migration_log WHERE status IN ('verified', 'migrated')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        Ok((verified, total))
+    }
 }
 
 /// Record of a backup operation.

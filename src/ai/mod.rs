@@ -25,5 +25,5 @@ pub mod ollama;
 pub mod prompts;
 
 // Re-export commonly used types
-pub use ollama::{Message, OllamaClient};
+pub use ollama::{EmbedModel, Message, OllamaClient, PromptText};
 pub use prompts::{ask_prompt, reflect_prompt, SYSTEM_PROMPT};

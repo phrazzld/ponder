@@ -10,6 +10,7 @@ pub mod detection;
 pub mod edit;
 pub mod migration;
 pub mod reflect;
+pub mod reindex;
 pub mod search;
 
 // Re-export commonly used functions
@@ -21,4 +22,5 @@ pub use detection::{
 pub use edit::edit_entry;
 pub use migration::{migrate_all_entries, migrate_entry, verify_migration, MigrationResult};
 pub use reflect::reflect_on_entry;
+pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;

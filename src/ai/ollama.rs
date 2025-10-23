@@ -70,6 +70,60 @@ struct ChatResponse {
     message: Message,
 }
 
+/// Type-safe wrapper for embedding model name.
+///
+/// Prevents accidental swapping of model name and prompt text in embed() calls.
+#[derive(Debug, Clone)]
+pub struct EmbedModel(String);
+
+impl EmbedModel {
+    /// Creates a new embedding model identifier.
+    pub fn new(model: impl Into<String>) -> Self {
+        Self(model.into())
+    }
+
+    /// Gets the model name as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for EmbedModel {
+    fn from(s: &str) -> Self {
+        EmbedModel(s.to_string())
+    }
+}
+
+/// Type-safe wrapper for prompt text.
+///
+/// Prevents accidental swapping of model name and prompt text in embed() calls.
+#[derive(Debug, Clone)]
+pub struct PromptText(String);
+
+impl PromptText {
+    /// Creates a new prompt text.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    /// Gets the prompt text as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for PromptText {
+    fn from(s: &str) -> Self {
+        PromptText(s.to_string())
+    }
+}
+
+impl From<String> for PromptText {
+    fn from(s: String) -> Self {
+        PromptText(s)
+    }
+}
+
 /// Client for interacting with Ollama API.
 pub struct OllamaClient {
     base_url: String,

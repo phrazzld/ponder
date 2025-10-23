@@ -209,6 +209,26 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     dot_product / (magnitude_a * magnitude_b)
 }
 
+/// Gets the total number of embeddings (chunks) in the database.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+pub fn count_total_embeddings(conn: &Connection) -> AppResult<usize> {
+    debug!("Counting total embeddings");
+
+    let count: usize = conn
+        .query_row("SELECT COUNT(*) FROM embeddings", [], |row| row.get(0))
+        .map_err(DatabaseError::Sqlite)?;
+
+    debug!("Total embeddings: {}", count);
+    Ok(count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
