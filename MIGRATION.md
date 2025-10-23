@@ -34,7 +34,84 @@ Ponder v2.0 introduces significant changes to data storage and security:
 
 ## Migration Strategy
 
-### Option 1: Start Fresh (Recommended for New Users)
+### Option 1: Automatic Migration (Recommended)
+
+**Ponder v2.0 automatically detects v1.0 entries and offers to migrate them.**
+
+When you run `ponder edit` for the first time with existing v1.0 entries (files matching `YYYYMMDD.md` in your journal directory), Ponder will:
+
+1. **Detect v1.0 entries:**
+   ```
+   📦 v1.0 Journal Entries Detected
+   Found 15 plaintext v1.0 entries that can be migrated to encrypted v2.0 format.
+
+   What happens during migration:
+   • Read each v1.0 plaintext entry (YYYYMMDD.md)
+   • Encrypt content with your passphrase (age encryption)
+   • Save as v2.0 encrypted entry (YYYY/MM/DD.md.age)
+   • Generate AI embeddings for semantic search (optional)
+   • Verify encryption succeeded (checksum validation)
+   • Original v1.0 files remain untouched
+
+   Migrate now? [y/N]:
+   ```
+
+2. **Interactive migration process:**
+   ```
+   [1/15] ✓ Migrated: 2024-01-15 (512 bytes)
+   [2/15] ✓ Migrated: 2024-01-16 (1.2 KB)
+   [3/15] ✗ Failed: 2024-01-17 - File not found
+   [4/15] ✓ Migrated: 2024-01-18 (2.4 KB)
+   ...
+   [15/15] ✓ Migrated: 2024-06-30 (890 bytes)
+
+   ✅ Migration Complete
+   Successfully migrated: 14 entries
+   Failed: 1 entry
+   Total size: 18.2 KB
+
+   Original v1.0 files remain in your journal directory.
+   Use 'ponder cleanup-v1 --yes' to delete them after verification.
+   ```
+
+3. **Resume capability:**
+   If migration is interrupted or partially completed, Ponder will:
+   - Skip already-migrated entries (tracked in database)
+   - Only migrate pending entries
+   - Show updated progress (e.g., "2 already migrated, 13 pending")
+
+4. **Verify migration:**
+   ```bash
+   # Check all entries are accessible
+   ponder search "test"
+
+   # Verify specific dates
+   ponder edit --date 2024-01-15
+   ```
+
+5. **Clean up v1.0 files (optional):**
+   ```bash
+   # After verifying migration, delete original v1.0 plaintext files
+   ponder cleanup-v1
+
+   # Or skip confirmation
+   ponder cleanup-v1 --yes
+   ```
+
+**Safety features:**
+- ✅ Original v1.0 files never deleted automatically
+- ✅ Each entry verified with BLAKE3 checksum after encryption
+- ✅ Migration state tracked in database (resume from interruption)
+- ✅ Non-fatal errors (one failure doesn't stop entire migration)
+- ✅ Detailed progress display with file counts and sizes
+
+**Manual migration trigger:**
+```bash
+# Explicitly trigger migration (bypass auto-prompt)
+ponder edit --migrate
+```
+
+### Option 2: Start Fresh (New Users)
 
 If you don't have existing v1.0 journals, simply start using v2.0:
 
@@ -52,30 +129,21 @@ Enter passphrase: ****
 Confirm passphrase: ****
 ```
 
-### Option 2: Manual Migration (For Existing v1.0 Users)
+### Option 3: Manual Migration (Fallback)
 
-If you have existing v1.0 plaintext journals and want to migrate them:
+If automatic migration doesn't work for your use case:
 
 1. **Backup your existing journals:**
    ```bash
-   cp -r ~/Documents/rubberducks ~/Documents/rubberducks.backup
+   cp -r ~/Documents/rubberducks ~/Documents/rubberducks-backup-$(date +%Y%m%d)
    ```
 
-2. **Set up v2.0 in a new directory:**
+2. **Set up v2.0 in same directory:**
    ```bash
-   export PONDER_DIR="$HOME/Documents/ponder-v2"
-   ponder edit  # Creates encrypted journal
+   ponder edit  # Creates encrypted journal, detects v1.0 entries
    ```
 
-3. **Manually encrypt old entries:**
-
-   For each old entry, you can:
-   - Open the v1.0 plaintext file
-   - Copy the content
-   - Use `ponder edit --date YYYY-MM-DD` to create the encrypted version
-   - Paste and save
-
-   Example:
+3. **Manually encrypt specific entries:**
    ```bash
    # For entry 20250115.md
    cat ~/Documents/rubberducks/20250115.md
@@ -90,16 +158,17 @@ If you have existing v1.0 plaintext journals and want to migrate them:
    ponder search "test query"  # Should find migrated entries
    ```
 
-### Option 3: Keep Both Versions
+### Option 4: Keep Both Versions
 
 v1.0 and v2.0 can coexist safely because they use different file naming:
-- v1.0: `YYYYMMDD.md` (20250115.md)
-- v2.0: `YYYY/MM/DD.md.age` (2025/01/15.md.age)
+- v1.0: `YYYYMMDD.md` (20250115.md) - plaintext
+- v2.0: `YYYY/MM/DD.md.age` (2025/01/15.md.age) - encrypted
 
 You can:
 1. Continue using v1.0 for old entries (read-only)
 2. Use v2.0 for new entries going forward
 3. Gradually migrate old entries when you review them
+4. Use `ponder edit --migrate` when ready to migrate remaining v1.0 entries
 
 ## First-Run Experience
 
@@ -350,7 +419,7 @@ cargo build --release
 A: Yes, they use different file formats and can coexist in the same directory.
 
 **Q: Is there automatic migration from v1.0 to v2.0?**
-A: No, migration is manual. This ensures you maintain control over sensitive data.
+A: Yes! Ponder v2.0 automatically detects v1.0 entries and offers to migrate them. When you run `ponder edit` with v1.0 entries in your journal directory, you'll be prompted to migrate. The process is interactive, safe (original files never deleted automatically), and can be resumed if interrupted.
 
 **Q: What happens if I forget my passphrase?**
 A: **All encrypted data is permanently lost**. There is no recovery mechanism. This is by design for security.
@@ -377,6 +446,16 @@ A: Approximately 10MB per 1000 entries (768-dimensional vectors + metadata).
 A: Not currently configurable. The defaults are:
 - `nomic-embed-text` for embeddings
 - `gemma3:4b` for chat/reflections
+
+**Q: How do I safely delete v1.0 files after migration?**
+A: Use the `ponder cleanup-v1` command. It will:
+1. Verify that each v1.0 file has been successfully migrated and encrypted
+2. Only delete files with "verified" or "migrated" status in the database
+3. Prompt for confirmation before deleting (unless you use `--yes`)
+4. Never delete files that failed migration or haven't been migrated yet
+
+**Q: What if migration is interrupted?**
+A: Migration can be safely resumed. Ponder tracks migration state in the database. When you run `ponder edit --migrate` again, it will skip already-migrated entries and only process pending ones. Your progress is never lost.
 
 ## Getting Help
 
@@ -407,7 +486,10 @@ A: Not currently configurable. The defaults are:
 - Enhanced error handling and retry logic
 
 **CLI:**
-- New commands: `ask`, `reflect`, `search`, `lock`
+- New commands: `ask`, `reflect`, `search`, `lock`, `backup`, `restore`, `cleanup-v1`
+- Automatic v1.0 migration detection with interactive prompt
+- Migration resume capability (tracks state in database)
+- `--migrate` flag to manually trigger migration
 - Interactive passphrase prompts with confirmation
 - Auto-installation of Ollama models
 - Better error messages and guidance
