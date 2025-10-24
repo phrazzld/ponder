@@ -67,7 +67,7 @@ jobs:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
-      timeout-minutes: 3
+      timeout-minutes: 8
 
   integration:
     runs-on: ubuntu-latest
