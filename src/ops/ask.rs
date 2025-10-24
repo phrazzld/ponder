@@ -57,7 +57,7 @@ pub fn ask_question(
 
     // Generate embedding for the question
     debug!("Generating embedding for question");
-    let query_embedding = ai_client.embed(DEFAULT_EMBED_MODEL, question)?;
+    let query_embedding = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, question, 3)?;
 
     // Search for similar chunks
     let conn = db.get_conn()?;

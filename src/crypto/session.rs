@@ -155,6 +155,37 @@ impl SessionManager {
         self.last_access = None;
     }
 
+    /// Refreshes the session activity timestamp to prevent timeout.
+    ///
+    /// Call this periodically during long-running operations to keep the session alive.
+    /// Only updates the timestamp if the session is currently unlocked.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ponder::crypto::SessionManager;
+    /// use age::secrecy::SecretString;
+    ///
+    /// let mut session = SessionManager::new(30);
+    /// let passphrase = SecretString::new("my-secret".to_string());
+    /// session.unlock(passphrase);
+    ///
+    /// // During long operation, refresh periodically
+    /// for i in 0..1000 {
+    ///     // Do work...
+    ///     if i % 100 == 0 {
+    ///         session.touch(); // Keep session alive
+    ///     }
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn touch(&mut self) {
+        if self.passphrase.is_some() {
+            self.last_access = Some(Instant::now());
+            debug!("Session activity refreshed");
+        }
+    }
+
     /// Prompts user for a new passphrase with confirmation.
     ///
     /// Used during first-run when creating an encrypted journal.

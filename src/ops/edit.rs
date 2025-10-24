@@ -277,7 +277,7 @@ fn generate_and_store_embeddings(
             chunks.len()
         );
 
-        let embedding = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
+        let embedding = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, chunk, 3)?;
         let chunk_hash = blake3::hash(chunk.as_bytes());
         let chunk_checksum = chunk_hash.to_hex().to_string();
 

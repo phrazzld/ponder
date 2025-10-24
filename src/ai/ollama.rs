@@ -143,6 +143,66 @@ impl OllamaClient {
         }
     }
 
+    /// Generates an embedding with retry logic for transient failures.
+    ///
+    /// Retries with exponential backoff on HTTP 500 errors (Ollama worker crashes).
+    /// Other errors (404, 400, network issues) fail immediately without retry.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - Name of the embedding model
+    /// * `text` - Text to generate embedding for
+    /// * `max_retries` - Maximum number of retry attempts (default: 3)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if all retries are exhausted or for non-retryable errors.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::OllamaClient;
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let embedding = client.embed_with_retry("nomic-embed-text", "sample text", 3)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn embed_with_retry(
+        &self,
+        model: &str,
+        text: &str,
+        max_retries: u32,
+    ) -> AppResult<Vec<f32>> {
+        let mut attempt = 0;
+
+        loop {
+            match self.embed(model, text) {
+                Ok(embedding) => return Ok(embedding),
+                Err(e) => {
+                    // Check if error is retryable (HTTP 500)
+                    let error_msg = format!("{}", e);
+                    let is_http_500 = error_msg.contains("HTTP 500");
+
+                    if !is_http_500 || attempt >= max_retries {
+                        // Non-retryable error or exhausted retries
+                        return Err(e);
+                    }
+
+                    attempt += 1;
+                    let backoff_ms = 100 * 2_u64.pow(attempt);
+
+                    debug!(
+                        "Ollama HTTP 500 error on attempt {}/{}, retrying after {}ms",
+                        attempt,
+                        max_retries + 1,
+                        backoff_ms
+                    );
+
+                    std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                }
+            }
+        }
+    }
+
     /// Generates an embedding for the given text.
     ///
     /// # Arguments

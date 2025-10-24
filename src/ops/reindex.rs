@@ -160,7 +160,7 @@ fn regenerate_embeddings_for_entry(
     // Generate and store embeddings for each chunk
     for (idx, chunk) in chunks.iter().enumerate() {
         // Generate embedding
-        let embedding_vec = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
+        let embedding_vec = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, chunk, 3)?;
 
         // Calculate chunk checksum
         let chunk_checksum = blake3::hash(chunk.as_bytes()).to_hex().to_string();

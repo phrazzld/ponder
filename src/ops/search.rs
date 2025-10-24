@@ -65,7 +65,7 @@ pub fn search_entries(
 
     // Generate embedding for the query
     debug!("Generating embedding for search query");
-    let query_embedding = ai_client.embed(DEFAULT_EMBED_MODEL, query)?;
+    let query_embedding = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, query, 3)?;
 
     // Search for similar chunks
     let conn = db.get_conn()?;

@@ -411,6 +411,11 @@ pub fn migrate_all_entries(
     for (idx, v1_entry) in v1_entries.into_iter().enumerate() {
         let current = idx + 1;
 
+        // Refresh session every 10 entries to prevent timeout during long migrations
+        if idx % 10 == 0 {
+            session.touch();
+        }
+
         // Migrate entry
         let result = migrate_entry(config, db, session, ai_client, &v1_entry);
 
@@ -504,8 +509,8 @@ fn generate_embeddings_for_entry(
 
     // Generate and store embeddings
     for (idx, chunk) in chunks.iter().enumerate() {
-        // Generate embedding
-        let embedding_vec = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
+        // Generate embedding with retry logic (3 retries with exponential backoff)
+        let embedding_vec = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, chunk, 3)?;
 
         // Calculate chunk checksum
         let chunk_checksum = blake3::hash(chunk.as_bytes()).to_hex().to_string();
