@@ -474,10 +474,10 @@ pub fn restore_backup(
     // Create target directory if it doesn't exist
     if !target_dir.exists() {
         fs::create_dir_all(target_dir).map_err(|e| {
-            AppError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to create target directory: {}", e),
-            ))
+            AppError::Io(std::io::Error::other(format!(
+                "Failed to create target directory: {}",
+                e
+            )))
         })?;
     }
 
@@ -489,19 +489,20 @@ pub fn restore_backup(
         // Create parent directories if needed
         if let Some(parent) = dst.parent() {
             fs::create_dir_all(parent).map_err(|e| {
-                AppError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to create directory {:?}: {}", parent, e),
-                ))
+                AppError::Io(std::io::Error::other(format!(
+                    "Failed to create directory {:?}: {}",
+                    parent, e
+                )))
             })?;
         }
 
         // Move/copy file
         fs::copy(&src, &dst).map_err(|e| {
-            AppError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to restore {}: {}", entry_path.display(), e),
-            ))
+            AppError::Io(std::io::Error::other(format!(
+                "Failed to restore {}: {}",
+                entry_path.display(),
+                e
+            )))
         })?;
     }
 
@@ -509,10 +510,10 @@ pub fn restore_backup(
     let src_db = temp_dir.path().join("ponder.db");
     let dst_db = target_dir.join("ponder.db");
     fs::copy(&src_db, &dst_db).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to restore database: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to restore database: {}",
+            e
+        )))
     })?;
 
     debug!("All files moved to target directory");
@@ -520,19 +521,19 @@ pub fn restore_backup(
     // Step 5: Verify database opens with provided passphrase
     debug!("Verifying restored database");
     let _db = Database::open(&dst_db, passphrase).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Restored database verification failed: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Restored database verification failed: {}",
+            e
+        )))
     })?;
 
     // Get database size
     let db_size = fs::metadata(&dst_db)
         .map_err(|e| {
-            AppError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to get database size: {}", e),
-            ))
+            AppError::Io(std::io::Error::other(format!(
+                "Failed to get database size: {}",
+                e
+            )))
         })?
         .len();
 
