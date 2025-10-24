@@ -406,20 +406,7 @@ pub fn migrate_all_entries(
     let mut failed_count = 0i64;
 
     if let Some(state) = db.get_migration_state()? {
-        if state.completed_at.is_some() {
-            return Err(crate::errors::AppError::Database(
-                crate::errors::DatabaseError::Custom(
-                    "Migration already completed. Delete migration_state to restart.".to_string(),
-                ),
-            ));
-        }
-
-        // Resume existing migration: filter out already-migrated entries
-        info!(
-            "Resuming migration: {} already migrated, {} verified, {} failed",
-            state.migrated_count, state.verified_count, state.failed_count
-        );
-
+        // Get already-migrated entries to check if there's work remaining
         let migrated_paths = db.get_migrated_v1_paths()?;
         let before_filter = v1_entries.len();
 
@@ -433,11 +420,33 @@ pub fn migrate_all_entries(
         });
 
         let after_filter = v1_entries.len();
+
+        // If no entries remain, migration is truly complete
+        if v1_entries.is_empty() {
+            info!(
+                "Migration already complete: {}/{} entries migrated",
+                state.migrated_count, original_total
+            );
+            // Mark as completed if not already (handles interrupted migrations)
+            if state.completed_at.is_none() {
+                db.complete_migration()?;
+            }
+            return Ok(Vec::new());
+        }
+
+        // Resume existing migration with remaining entries
         info!(
-            "Filtered {} already-migrated entries, {} remaining",
+            "Resuming migration: {} already migrated, {} remaining",
             before_filter - after_filter,
             after_filter
         );
+
+        if state.completed_at.is_some() {
+            warn!(
+                "Migration was marked complete but {} entries remain - resuming anyway",
+                after_filter
+            );
+        }
 
         // Start counters from current state
         migrated_count = state.migrated_count;
