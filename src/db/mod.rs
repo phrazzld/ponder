@@ -33,6 +33,7 @@ use age::secrecy::{ExposeSecret, SecretString};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
+use std::collections::HashSet;
 use std::path::Path;
 use tracing::{debug, info, warn};
 
@@ -567,6 +568,30 @@ impl Database {
             .map_err(crate::errors::DatabaseError::Sqlite)?;
 
         Ok((verified, total))
+    }
+
+    /// Gets the set of v1 paths that have already been migrated.
+    ///
+    /// Returns a HashSet of v1_path strings for entries with status='migrated' or 'verified'.
+    /// Used for resuming partial migrations - allows skipping already-migrated entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_migrated_v1_paths(&self) -> AppResult<HashSet<String>> {
+        let conn = self.get_conn()?;
+        let mut stmt = conn
+            .prepare("SELECT v1_path FROM migration_log WHERE status IN ('migrated', 'verified')")
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        let paths = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(crate::errors::DatabaseError::Sqlite)?
+            .collect::<Result<HashSet<_>, _>>()
+            .map_err(crate::errors::DatabaseError::Sqlite)?;
+
+        debug!("Retrieved {} already-migrated v1 paths", paths.len());
+        Ok(paths)
     }
 }
 

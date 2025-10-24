@@ -394,22 +394,67 @@ pub fn migrate_all_entries(
     db: &Database,
     session: &mut SessionManager,
     ai_client: Option<&OllamaClient>,
-    v1_entries: Vec<V1Entry>,
+    mut v1_entries: Vec<V1Entry>,
     progress_callback: Option<ProgressCallback>,
 ) -> AppResult<Vec<MigrationResult>> {
-    let total = v1_entries.len();
-    info!("Starting migration of {} entries", total);
+    let original_total = v1_entries.len();
+    info!("Starting migration of {} entries", original_total);
 
-    // Initialize migration state
-    db.init_migration_state(total as i64)?;
+    // Check if migration is already in progress (resume logic)
+    let mut migrated_count = 0i64;
+    let mut verified_count = 0i64;
+    let mut failed_count = 0i64;
 
+    if let Some(state) = db.get_migration_state()? {
+        if state.completed_at.is_some() {
+            return Err(crate::errors::AppError::Database(
+                crate::errors::DatabaseError::Custom(
+                    "Migration already completed. Delete migration_state to restart.".to_string(),
+                ),
+            ));
+        }
+
+        // Resume existing migration: filter out already-migrated entries
+        info!(
+            "Resuming migration: {} already migrated, {} verified, {} failed",
+            state.migrated_count, state.verified_count, state.failed_count
+        );
+
+        let migrated_paths = db.get_migrated_v1_paths()?;
+        let before_filter = v1_entries.len();
+
+        v1_entries.retain(|entry| {
+            let filename = entry
+                .path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            !migrated_paths.contains(filename)
+        });
+
+        let after_filter = v1_entries.len();
+        info!(
+            "Filtered {} already-migrated entries, {} remaining",
+            before_filter - after_filter,
+            after_filter
+        );
+
+        // Start counters from current state
+        migrated_count = state.migrated_count;
+        verified_count = state.verified_count;
+        failed_count = state.failed_count;
+    } else {
+        // No existing state: initialize new migration
+        db.init_migration_state(original_total as i64)?;
+    }
+
+    let total = original_total;
     let mut results = Vec::new();
-    let mut migrated_count = 0;
-    let mut verified_count = 0;
-    let mut failed_count = 0;
+    let already_processed = (migrated_count + failed_count) as usize;
 
     for (idx, v1_entry) in v1_entries.into_iter().enumerate() {
-        let current = idx + 1;
+        // Calculate overall progress (including already-processed entries)
+        let current = already_processed + idx + 1;
 
         // Refresh session every 10 entries to prevent timeout during long migrations
         if idx % 10 == 0 {
@@ -432,7 +477,7 @@ pub fn migrate_all_entries(
         // Update progress in database
         db.update_migration_progress(migrated_count, verified_count, failed_count)?;
 
-        // Call progress callback
+        // Call progress callback with overall progress
         if let Some(ref callback) = progress_callback {
             callback(current, total, &result);
         }
