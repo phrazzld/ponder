@@ -139,19 +139,16 @@ pub fn create_backup(
     for entry_path in &entry_paths {
         let relative_path = entry_path
             .strip_prefix(journal_dir)
-            .map_err(|e| AppError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| AppError::Io(std::io::Error::other(e)))?;
 
         debug!("Adding to archive: {:?}", relative_path);
         tar.append_path_with_name(entry_path, relative_path)
             .map_err(|e| {
-                AppError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed to add {} to archive: {}",
-                        relative_path.display(),
-                        e
-                    ),
-                ))
+                AppError::Io(std::io::Error::other(format!(
+                    "Failed to add {} to archive: {}",
+                    relative_path.display(),
+                    e
+                )))
             })?;
     }
 
@@ -159,25 +156,25 @@ pub fn create_backup(
     debug!("Adding database to archive");
     tar.append_path_with_name(&db_path, "ponder.db")
         .map_err(|e| {
-            AppError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to add database to archive: {}", e),
-            ))
+            AppError::Io(std::io::Error::other(format!(
+                "Failed to add database to archive: {}",
+                e
+            )))
         })?;
 
     // Step 5: Finish tar and get compressed bytes
     let encoder = tar.into_inner().map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to finalize tar archive: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to finalize tar archive: {}",
+            e
+        )))
     })?;
 
     let tar_gz_bytes = encoder.finish().map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to finish gzip compression: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to finish gzip compression: {}",
+            e
+        )))
     })?;
 
     debug!("Archive size (compressed): {} bytes", tar_gz_bytes.len());
@@ -192,18 +189,18 @@ pub fn create_backup(
     // Create parent directories if needed
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to create output directory: {}", e),
-            ))
+            AppError::Io(std::io::Error::other(format!(
+                "Failed to create output directory: {}",
+                e
+            )))
         })?;
     }
 
     fs::write(output_path, &encrypted_bytes).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to write backup file: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to write backup file: {}",
+            e
+        )))
     })?;
 
     // Step 8: Calculate BLAKE3 checksum
@@ -280,10 +277,10 @@ pub fn verify_backup(
     }
 
     let encrypted_bytes = fs::read(backup_path).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to read backup file: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to read backup file: {}",
+            e
+        )))
     })?;
 
     debug!("Read {} encrypted bytes", encrypted_bytes.len());
@@ -300,20 +297,20 @@ pub fn verify_backup(
     // Step 3: Extract tar.gz to temporary directory
     debug!("Extracting archive to temporary directory");
     let temp_dir = tempfile::TempDir::new().map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to create temp directory: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to create temp directory: {}",
+            e
+        )))
     })?;
 
     let decoder = GzDecoder::new(decrypted_bytes.as_slice());
     let mut archive = Archive::new(decoder);
 
     archive.unpack(temp_dir.path()).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to extract archive: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to extract archive: {}",
+            e
+        )))
     })?;
 
     debug!("Extracted to: {:?}", temp_dir.path());
@@ -330,10 +327,10 @@ pub fn verify_backup(
     // Try to open the database to verify it's valid
     debug!("Verifying database integrity");
     let _db = Database::open(&db_path, passphrase).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Database verification failed: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Database verification failed: {}",
+            e
+        )))
     })?;
 
     debug!("Database verified successfully");
@@ -438,18 +435,18 @@ pub fn restore_backup(
     // Step 3: Extract to temp location first (for atomic operation)
     debug!("Extracting backup to temporary location");
     let temp_dir = tempfile::TempDir::new().map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to create temp directory: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to create temp directory: {}",
+            e
+        )))
     })?;
 
     // Read and decrypt archive
     let encrypted_bytes = fs::read(backup_path).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to read backup file: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to read backup file: {}",
+            e
+        )))
     })?;
 
     // Calculate checksum of backup archive
@@ -463,10 +460,10 @@ pub fn restore_backup(
     let decoder = GzDecoder::new(decrypted_bytes.as_slice());
     let mut archive = Archive::new(decoder);
     archive.unpack(temp_dir.path()).map_err(|e| {
-        AppError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to extract archive: {}", e),
-        ))
+        AppError::Io(std::io::Error::other(format!(
+            "Failed to extract archive: {}",
+            e
+        )))
     })?;
 
     debug!("Extracted to temp location: {:?}", temp_dir.path());
