@@ -35,6 +35,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 /// Type alias for a pooled SQLite connection.
@@ -69,11 +70,15 @@ impl Database {
     pub fn open(db_path: &Path, passphrase: &SecretString) -> AppResult<Self> {
         debug!("Opening database at: {:?}", db_path);
 
+        // Clone SecretString into Arc for sharing across connection pool
+        // This preserves zeroization properties (Arc drops when pool drops)
+        let passphrase_arc = Arc::new(passphrase.clone());
+
         let manager = SqliteConnectionManager::file(db_path);
         let pool = Pool::builder()
             .max_size(5) // Allow up to 5 concurrent connections
             .connection_customizer(Box::new(SqlCipherConfig {
-                passphrase: passphrase.expose_secret().to_string(),
+                passphrase: passphrase_arc,
             }))
             .build(manager)
             .map_err(crate::errors::DatabaseError::Pool)?;
@@ -657,15 +662,18 @@ pub struct MigrationState {
 }
 
 /// Connection customizer that sets the SQLCipher key pragma.
-#[derive(Debug)]
+///
+/// Uses Arc<SecretString> to preserve zeroization properties while
+/// sharing the passphrase across connection pool instances.
+#[derive(Clone, Debug)]
 struct SqlCipherConfig {
-    passphrase: String,
+    passphrase: Arc<SecretString>,
 }
 
 impl r2d2::CustomizeConnection<Connection, rusqlite::Error> for SqlCipherConfig {
     fn on_acquire(&self, conn: &mut Connection) -> Result<(), rusqlite::Error> {
-        // Set the encryption key
-        conn.pragma_update(None, "key", &self.passphrase)?;
+        // Set the encryption key (expose secret only for this pragma call)
+        conn.pragma_update(None, "key", self.passphrase.expose_secret())?;
         // Use modern SQLCipher defaults (version 4)
         conn.pragma_update(None, "cipher_page_size", 4096)?;
         conn.pragma_update(None, "kdf_iter", 256000)?;

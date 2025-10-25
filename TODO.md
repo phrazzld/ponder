@@ -18,12 +18,12 @@
   - Security: World-readable window exposes journal content
   - Test: Verify permissions immediately after creation
 
-- [~] **Delete stale embeddings** (15min) - `src/ops/edit.rs:280-284`
+- [x] **Delete stale embeddings** (15min) - `src/ops/edit.rs:280-284`
   - Add `DELETE FROM embeddings WHERE entry_id = ?` before inserting new chunks
   - Bug: Shortened entries leave orphaned chunks in DB
   - Test: Edit long entry → short entry, verify chunk count
 
-- [ ] **Fix passphrase zeroization leak** (45min) - `src/db/mod.rs:75,199`
+- [~] **Fix passphrase zeroization leak** (45min) - `src/db/mod.rs:75,199`
   - Remove `SqlCipherConfig` struct, use closure with `SecretString`
   - Security: Plain `String` in pool defeats zeroization
   - Verify: Database still opens, `SqlCipherConfig` removed
