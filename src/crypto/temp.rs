@@ -95,17 +95,31 @@ pub fn decrypt_to_temp(encrypted_path: &Path, passphrase: &SecretString) -> AppR
         .unwrap_or("temp");
     let temp_path = temp_dir.join(format!("ponder-{}-{}", file_name, uuid::Uuid::new_v4()));
 
-    // Decrypt to temp file
-    decrypt_file_streaming(encrypted_path, &temp_path, passphrase)?;
-
-    // Set secure permissions (0o600 on Unix)
+    // Create temp file with secure permissions BEFORE writing any plaintext
+    // This prevents a race condition window where plaintext is world-readable
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = std::fs::Permissions::from_mode(0o600);
-        fs::set_permissions(&temp_path, perms)?;
-        debug!("Set 0o600 permissions on temp file: {:?}", temp_path);
+        use std::os::unix::fs::OpenOptionsExt;
+
+        // Create file with 0o600 mode from the start
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp_path)?;
+
+        debug!("Created temp file with 0o600 permissions: {:?}", temp_path);
     }
+
+    #[cfg(not(unix))]
+    {
+        // On non-Unix platforms, create the file normally
+        // Windows doesn't have Unix-style permissions
+        std::fs::File::create(&temp_path)?;
+    }
+
+    // Decrypt to temp file (now exists with secure permissions)
+    decrypt_file_streaming(encrypted_path, &temp_path, passphrase)?;
 
     Ok(temp_path)
 }
@@ -268,7 +282,7 @@ mod tests {
         let temp = temp_path.unwrap();
         assert!(temp.exists());
 
-        // Check permissions on Unix
+        // Check permissions on Unix - verify 0o600 from creation (no race window)
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -277,12 +291,44 @@ mod tests {
             assert_eq!(
                 perms.mode() & 0o777,
                 0o600,
-                "temp file should have 0o600 perms"
+                "temp file should have 0o600 perms immediately after creation"
             );
         }
 
         // Clean up
         let _ = fs::remove_file(&temp);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_temp_file_permissions_no_race_condition() {
+        // Verify that temp file is created with 0o600 from the start,
+        // not after plaintext is written (which would create a security window)
+        use std::os::unix::fs::PermissionsExt;
+
+        let passphrase = SecretString::new("race-condition-test".to_string());
+        let plaintext = b"Sensitive data that should never be world-readable";
+        let encrypted_file = NamedTempFile::new().expect("create encrypted file");
+
+        let encrypted =
+            crate::crypto::age::encrypt_with_passphrase(plaintext, &passphrase).unwrap();
+        std::fs::write(encrypted_file.path(), encrypted).expect("write encrypted data");
+
+        // Decrypt to temp - this should create file with 0o600 immediately
+        let temp_path = decrypt_to_temp(encrypted_file.path(), &passphrase).unwrap();
+
+        // Verify permissions are secure
+        let metadata = fs::metadata(&temp_path).expect("get metadata");
+        let mode = metadata.permissions().mode() & 0o777;
+
+        assert_eq!(
+            mode, 0o600,
+            "Temp file must be created with 0o600 from start to prevent race condition. Found: 0o{:o}",
+            mode
+        );
+
+        // Clean up
+        let _ = fs::remove_file(&temp_path);
     }
 
     #[test]

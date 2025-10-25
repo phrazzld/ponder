@@ -1,187 +1,70 @@
-# TODO: Ponder v2.0 - AI-Powered Encrypted Journaling
+# TODO: Merge PR #50
 
-## Progress Summary
-
-**Completed**: Phase 0-8 ✅ (All development and documentation complete)
-**Current**: Validation checklist
-**Next**: v2.1 release
-
+**Branch**: `feat/v2.0-encrypted-ai-journaling`
 **Tests**: 212 passing (14 ignored) | **Build**: ✅ PASSING
-**Architecture**: v2.0 complete - encrypted journaling with AI features operational
+**Status**: PR review feedback being addressed
 
 ---
 
-## Phase 6: Testing & Documentation (Remaining)
+## Critical Fixes (Merge-Blocking)
 
-### Documentation
-- [x] Add Backup & Export section to README.md (30min) - Commit `065025c`
-  - Cover: `backup`, `restore` commands with examples
-  - Security: Warn about backup storage security
+**Source**: PR #50 review feedback
+**Estimated Time**: ~3 hours
 
-- [x] Rewrite MIGRATION.md migration strategy (45min) - Commit `daa076c`
-  - Flip: Automatic detection (primary) vs manual (fallback)
-  - Add: Interactive flow examples, resume capability
+### P0: Security & Bugs (Must Fix)
 
-- [x] Create docs/COMMANDS.md reference (30min) - Commit `da50b06`
-  - Command reference: edit, ask, search, reflect, lock, backup, restore, cleanup-v1
+- [~] **Fix temp file permission race** (20min) - `src/crypto/temp.rs:88-106`
+  - Create temp files with 0o600 from start, not after writing plaintext
+  - Security: World-readable window exposes journal content
+  - Test: Verify permissions immediately after creation
 
-### Quality Infrastructure
-- [x] Add security.yml workflow (30min) - Already exists (20 Oct 21:36)
-  - Jobs: gitleaks history scan, cargo-audit vulnerabilities
-  - Runs on push, pull_request, and weekly schedule
-  - Full history scan with fetch-depth: 0
-  - cargo-audit with --deny unsound --deny yanked
+- [ ] **Delete stale embeddings** (15min) - `src/ops/edit.rs:280-284`
+  - Add `DELETE FROM embeddings WHERE entry_id = ?` before inserting new chunks
+  - Bug: Shortened entries leave orphaned chunks in DB
+  - Test: Edit long entry → short entry, verify chunk count
 
----
+- [ ] **Fix passphrase zeroization leak** (45min) - `src/db/mod.rs:75,199`
+  - Remove `SqlCipherConfig` struct, use closure with `SecretString`
+  - Security: Plain `String` in pool defeats zeroization
+  - Verify: Database still opens, `SqlCipherConfig` removed
 
-## Phase 7: Backup & Archive System
+- [ ] **Fix session timeout bug** (30min) - `src/crypto/session.rs:103-112`
+  - Change `get_passphrase()` to `&mut self`, update `last_access` on every call
+  - Bug: Active users locked out during normal use
+  - Update call sites in: edit.rs, ask.rs, reflect.rs, search.rs
+  - Test: Verify timeout extends on passphrase access
 
-### Completed ✅
-- ✅ Dependencies (tar, flate2, walkdir, tempfile)
-- ✅ Database schema (backup_log, backup_state tables)
-- ✅ Database functions (record_backup, get_last_backup, get_backup_history)
-- ✅ Module structure (BackupReport, BackupManifest, RestoreReport)
-- ✅ `create_backup()` - Full encrypted archive creation
-- ✅ `verify_backup()` - Integrity checking with manifest
-- ✅ `restore_backup()` - Atomic extraction with checksum verification
-- ✅ CLI command definitions (Backup, Restore in cli/mod.rs)
-- ✅ Report symmetry (RestoreReport has checksum + duration)
-- ✅ API cleanup (removed unused incremental parameter)
-- ✅ CLI handlers (cmd_backup, cmd_restore in main.rs)
-- ✅ Module exposure (ops/mod.rs re-exports backup functions)
+### P1: High-Priority Improvements
 
-### Remaining Tasks
+- [ ] **Add passphrase strength validation** (45min) - `src/crypto/session.rs:181-183`
+  - Add `WeakPassphrase` error variant, validate 8+ character minimum
+  - Update both passphrase prompts to use validation
+  - Test: Reject passphrases <8 chars, accept >=8 chars
 
-#### CLI Handlers ✅ COMPLETE
+- [ ] **Guard test passphrase env var** (5min) - `src/crypto/session.rs:236-238`
+  - Wrap `PONDER_TEST_PASSPHRASE` check in `#[cfg(test)]`
+  - Verify: Not accessible in release builds
 
-- [x] Implement cmd_backup() in main.rs (30min)
-  - Initialize SessionManager + Database
-  - Call `ops::create_backup()`
-  - Optional: `ops::verify_backup()` if `args.verify`
-  - Print BackupReport summary
+- [ ] **Add passphrase recovery warning** (15min) - `README.md`
+  - Add security notice section explaining permanent data loss if forgotten
+  - Update quickstart with passphrase choice guidance
 
-- [x] Implement cmd_restore() in main.rs (20min)
-  - Initialize SessionManager
-  - Confirm overwrite if target exists (unless `--force`)
-  - Call `ops::restore_backup()`
-  - Print RestoreReport summary
-
-- [x] Expose backup in ops/mod.rs (5min)
-  - `pub mod backup;`
-  - `pub use backup::{create_backup, verify_backup, restore_backup};`
-
-#### Testing ✅ COMPLETE
-
-- [x] Create tests/backup_tests.rs
-  - test_create_full_backup: Create → verify size/checksum
-  - test_verify_backup: Create → verify → check manifest accuracy
-  - test_restore_backup: Create → delete original → restore → compare
-  - test_backup_wrong_passphrase: Verify fails with incorrect passphrase
-  - test_restore_force_overwrite: Verify --force flag behavior
-  - test_backup_empty_journal: Handle empty journal edge case
-
-#### Optional Refactoring (Deferred)
-
-**C. Extract Temporal Decomposition (2hr)** - Can defer to post-v2.1
-- Extract helpers: `collect_backup_files()`, `create_tar_archive()`, `encrypt_and_write()`
-- Benefit: Isolated testing, clearer intent
-
-**D. Unified Archive System (3hr)** - Strategic, consider for v2.2
-- Strategy pattern with `ArchiveFormat` enum
-- Would eliminate duplication for future export formats
-- Currently not blocking v2.1 release
-
-**E. Schema Simplification (30min)** - Only if issues arise
-- Remove `backup_state` table (derivable from `backup_log`)
+- [ ] **Add passphrase retry logic** (30min) - `src/main.rs` command handlers
+  - Allow 3 attempts on wrong passphrase before failing
+  - Optional: May defer if refactoring too complex
 
 ---
 
-## Phase 8: Migration System ✅ COMPLETE
+## Validation Before Merge
 
-### Completed ✅
-- ✅ Database schema (migration_log, migration_state tables) - Commit `7a27825`
-- ✅ Database functions (7 migration tracking functions) - Commit `bcdaa32`
-- ✅ Detection module (src/ops/detection.rs) - Commit `99bd0f8`
-  - `scan_v1_entries()`: Glob `*.md` (root only), parse YYYYMMDD.md dates
-  - `is_migrated()`: Query migration_log for completion status
-  - `detect_migration_state()`: Full analysis of v1/v2 mix
-- ✅ Migration engine (src/ops/migration.rs, 702 lines) - Commit `8f260fa`
-  - `migrate_entry()`: Read v1 plaintext → encrypt → write v2 → embed → verify
-  - `verify_migration()`: Decrypt v2, compare with v1 byte-for-byte
-  - `migrate_all_entries()`: Batch processor with progress callback
-- ✅ CLI integration - Commits `31f3692`, `803c6c9`, `08404e7`
-  - `--migrate` flag for EditArgs
-  - `CleanupV1` command with `--yes` flag
-  - Auto-detection in `cmd_edit()` with one-time interactive prompt
-  - `cmd_migrate()`: Full migration with progress display
-  - `cmd_cleanup_v1()`: Safe deletion of verified entries only
-- ✅ Integration tests - Commits `0615aa7`, `59ef98f`
-  - tests/migration_tests.rs: 8 comprehensive tests (all passing)
-  - ops_integration_tests.rs: End-to-end workflow test (passing)
+- [ ] All P0 fixes complete and tested
+- [ ] All P1 fixes complete (or retry logic deferred with note)
+- [ ] Full test suite passing: `cargo test --verbose -- --test-threads=1`
+- [ ] Clippy clean: `cargo clippy --all-targets -- -D warnings`
+- [ ] Manual QA: Session timeout, passphrase prompts, temp file security
+- [ ] PR description updated with fixes applied
 
 ---
 
-## Validation Checklist (Before v2.1 Release)
-
-- [x] `cargo build --release` succeeds - Commit `ab6e4f3`
-- [x] `cargo test --verbose -- --test-threads=1` all pass - 172 passed, 11 ignored
-- [x] `cargo clippy --all-targets -- -D warnings` clean - Commit `ab6e4f3`
-- [x] `cargo audit` clean - 0 vulnerabilities, 1 unmaintained warning (transitive)
-- [ ] Manual QA: backup → restore → verify integrity
-- [ ] Manual QA: migration with 10+ v1.0 entries
-- [x] Documentation: README backup section, MIGRATION.md updated, COMMANDS.md complete
-- [ ] Performance benchmarks baseline established
-
----
-
-## Time Estimates
-
-**Phase 6 Remaining**: ~2hr (docs)
-**Phase 7**: ✅ COMPLETE
-**Phase 8**: ✅ COMPLETE
-
-**Critical Path**:
-1. Documentation (README, MIGRATION.md, COMMANDS.md) - ~2hr
-2. Validation checklist - ~1hr
-
-**Total Remaining**: ~3hr
-
----
-
-## BACKLOG (Post-v2.1)
-
-Validated ideas deferred to future releases:
-- Setup wizard (`ponder setup`)
-- Nightly indexing for embedding backfill
-- Weekly review aggregation (`ponder weekly`)
-- Keyring integration (macOS Keychain, GNOME Keyring)
-- Age identity support (SSH-key encryption)
-- Hybrid search (vector + FTS)
-- Export functionality (HTML, PDF)
-- Statistics (streaks, word counts, trends)
-- Git integration (auto-commit)
-- Cloud sync (encrypted remote backup)
-
----
-
-## Recent Commits
-
-**Phase 8 Complete:**
-- `59ef98f` test: add full migration workflow integration test
-- `0615aa7` test: add comprehensive migration integration tests (8 tests)
-- `08404e7` feat(cli): implement migration CLI integration
-- `803c6c9` feat(cli): add CleanupV1 command
-- `31f3692` feat(cli): add --migrate flag to EditArgs
-- `8f260fa` feat(ops): implement migration engine (702 lines)
-- `99bd0f8` feat(ops): add detection module for v1.0 entries
-- `bcdaa32` feat(db): add migration tracking functions (7 functions)
-- `7a27825` feat(db): add migration schema tables
-
-**Phase 7 Complete:**
-- `1ee23ab` test: add comprehensive backup integration tests (6 tests, all passing)
-- `d2ddcd5` feat(cli): implement backup and restore command handlers
-- `0328e86` feat(cli): add backup and restore commands
-
-**Module Value Principle**: Each module must hide significant complexity behind simple interfaces. Deep modules win.
-
-**Prerequisites**: Manual backup before Phase 7-8 work: `cp -r ~/Documents/rubberducks ~/Documents/rubberducks-backup-$(date +%Y%m%d-%H%M%S)`
+**Detailed implementation notes**: See `PR_REVIEW_RESPONSE.md`
+**Follow-up work**: See `BACKLOG.md` (PR Review Feedback section)

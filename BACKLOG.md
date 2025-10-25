@@ -1,7 +1,555 @@
 # BACKLOG
 
-Last groomed: 2025-10-13
-Analyzed by: 7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product)
+Last groomed: 2025-10-25 (added PR #50 review feedback follow-up items)
+Analyzed by: 7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product) + PR review feedback (10 reviewers across 7 comprehensive reviews + 3 Codex inline comments)
+
+---
+
+## PR Review Feedback - Follow-Up Work (v2.1+)
+
+**Source**: PR #50 review feedback - items deferred after implementing P0/P1 critical fixes
+**Total Items**: 10 follow-up tasks for post-v2.0 releases
+**Context**: [PR #50](https://github.com/phrazzld/ponder/pull/50#issuecomment-3417810907) comprehensive reviews
+
+### [Architecture] Make Embedding Generation Atomic (v2.1)
+**File**: src/ops/edit.rs:246-282
+**Source**: Review #1
+**Issue**: If Ollama crashes mid-embedding, database left in inconsistent state
+**Impact**: MEDIUM - Partial embeddings could cause search quality issues
+**Fix**: Use database transactions for atomicity
+```rust
+fn generate_and_store_embeddings(...) -> AppResult<()> {
+    let tx = conn.transaction()?;
+
+    tx.execute("DELETE FROM embeddings WHERE entry_id = ?", [entry_id])?;
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let embedding = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
+        insert_embedding(&tx, entry_id, idx, &embedding, &chunk_checksum)?;
+    }
+
+    tx.commit()?;
+    Ok(())
+}
+```
+**Effort**: 2h | **Value**: MEDIUM - Improves reliability, prevents corrupt search index
+**Dependencies**: None - can implement immediately after v2.0
+**Risk**: LOW - Standard DB transaction pattern
+
+---
+
+### [Performance] Eliminate Redundant Decryption in Edit Flow (v2.1)
+**File**: src/ops/edit.rs:247-259
+**Source**: Review #1
+**Issue**: Code decrypts file immediately after encrypting it for embedding generation
+**Impact**: LOW-MEDIUM - Wastes 50-100ms per edit operation
+**Fix**: Pass plaintext content directly to embedding generation
+```rust
+pub fn edit_entry(...) -> AppResult<()> {
+    // ... editing logic ...
+
+    // Read content BEFORE encrypting
+    let content = fs::read_to_string(&temp_path)?;
+    let word_count = content.split_whitespace().count();
+
+    // Re-encrypt (deletes temp file)
+    encrypt_from_temp(&temp_path, &encrypted_path, passphrase)?;
+
+    // Update database
+    let entry_id = upsert_entry(&conn, &encrypted_path, date, &new_checksum, word_count)?;
+
+    // Generate embeddings using already-read content
+    if content_changed {
+        generate_and_store_embeddings_from_content(
+            &conn,
+            ai_client,
+            entry_id,
+            &content, // Pass content directly
+        )?;
+    }
+
+    Ok(())
+}
+```
+**Effort**: 1h | **Value**: MEDIUM - Better UX (faster saves), cleaner architecture
+**Dependencies**: None
+**Risk**: LOW - Straightforward refactoring
+
+---
+
+### [Documentation] Document Secure Delete Limitations (v2.1)
+**File**: src/crypto/temp.rs:202-229 + docs/SECURITY.md
+**Source**: Review #1
+**Issue**: Zero-overwrite "secure delete" doesn't work on SSDs/copy-on-write filesystems, but not documented
+**Impact**: MEDIUM - Users have false sense of security
+**Fix**: Add clear documentation of limitations
+```markdown
+### Secure Deletion Limitations
+
+Ponder attempts to securely delete temporary files by overwriting with zeros before deletion.
+However, this approach has limitations:
+
+**Does NOT protect against**:
+- SSDs with wear-leveling (old data may remain in freed blocks)
+- Copy-on-write filesystems (Btrfs, ZFS, APFS)
+- Filesystem-level compression or deduplication
+- Full-disk snapshots (Time Machine, etc.)
+
+**Why tmpfs is recommended**:
+- `/dev/shm` on Linux uses RAM only (never hits disk)
+- Content is automatically cleared on reboot
+- No persistent storage = no recovery risk
+
+**Best practices**:
+1. Use tmpfs when available (Linux: /dev/shm, /run/shm)
+2. Enable full-disk encryption (FileVault, LUKS)
+3. Disable swap or use encrypted swap
+4. Assume decrypted content may briefly persist in filesystem cache
+```
+**Effort**: 15m | **Value**: HIGH - Critical user education, manages expectations
+**Dependencies**: None
+**Risk**: NONE - Documentation only
+
+---
+
+### [Reliability] Improve Wrong-Passphrase Detection Robustness (v2.1)
+**File**: src/db/mod.rs:84-94
+**Source**: Review #1
+**Issue**: Detection uses string matching on error messages (brittle across SQLCipher versions)
+**Impact**: MEDIUM - False positives/negatives possible with different SQLCipher versions
+**Current**:
+```rust
+if error_msg.contains("file is not a database") {
+    return Err(DatabaseError::WrongPassphrase { ... });
+}
+```
+**Fix**: Use more robust detection
+```rust
+fn is_wrong_passphrase_error(err: &AppError) -> bool {
+    // Check multiple indicators
+    match err {
+        AppError::Database(DatabaseError::Connection(e)) => {
+            let msg = e.to_string();
+            msg.contains("file is not a database")
+                || msg.contains("file is encrypted")
+                || msg.contains("unsupported file format")
+        }
+        _ => false,
+    }
+
+    // Or implement test query: SELECT count(*) FROM sqlite_master
+    // Success = correct passphrase, failure = wrong passphrase
+}
+```
+**Effort**: 2h | **Value**: MEDIUM - More reliable error detection
+**Dependencies**: None
+**Risk**: LOW - Improves existing logic
+
+---
+
+### [Feature] Implement v1.0 → v2.0 Migration Tool (v2.1)
+**File**: New command in src/ops/
+**Source**: Reviews #2, #7
+**Issue**: v1.0 → v2.0 migration is entirely manual (copy-paste each entry)
+**Impact**: HIGH - Friction for existing users, risk of data loss during manual migration
+**Value**: HIGH - Retains existing user base, professional upgrade path
+**Implementation**:
+```bash
+ponder migrate --from ~/Documents/rubberducks --to ~/Documents/ponder-v2 --passphrase
+
+# Features:
+# - Scan v1.0 directory for YYYYMMDD.md files
+# - Parse plaintext entries
+# - Encrypt to v2.0 format (YYYY/MM/DD.md.age)
+# - Generate embeddings for all entries
+# - Show progress bar with ETA
+# - Verify checksums after migration
+# - Create backup before starting
+# - Resume capability if interrupted
+```
+**Design**:
+1. Add `Migrate` subcommand to CLI
+2. Create `ops/migrate_v1_to_v2.rs` module
+3. Implement:
+   - `scan_v1_directory()` - Find all YYYYMMDD.md files
+   - `parse_v1_entry()` - Extract date from filename
+   - `encrypt_v1_entry()` - Encrypt to v2.0 structure
+   - `generate_initial_embeddings()` - Batch embedding generation
+   - Progress tracking with indicatif crate
+4. Add comprehensive tests
+
+**Effort**: 3-5 days | **Value**: HIGH - Critical for user retention, reduces support burden
+**Dependencies**: None - uses existing crypto/db/ai infrastructure
+**Risk**: MEDIUM - Data migration always risky, needs extensive testing
+**Note**: This is the OLD migration from v1.0 plaintext. The CURRENT codebase already has migration system in Phase 8 (TODO.md lines 99-121). Need to verify this isn't duplicating existing work.
+
+---
+
+### [Testing] Add Concurrent Access Tests (v2.1)
+**File**: tests/ (new test file)
+**Source**: Reviews #2, #4, #7
+**Issue**: No tests for multiple processes/threads accessing database simultaneously
+**Impact**: MEDIUM - Could have race conditions or deadlocks
+**Implementation**:
+```rust
+// tests/concurrent_access_tests.rs
+
+use std::thread;
+use std::sync::Arc;
+
+#[test]
+fn test_concurrent_database_reads() {
+    let db = Arc::new(setup_test_db());
+
+    let handles: Vec<_> = (0..5)
+        .map(|i| {
+            let db = db.clone();
+            thread::spawn(move || {
+                let conn = db.get_conn().unwrap();
+                let entries = get_all_entries(&conn).unwrap();
+                assert!(!entries.is_empty());
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+}
+
+#[test]
+fn test_concurrent_embedding_inserts() {
+    // Test multiple threads inserting embeddings for different entries
+    // Verify no deadlocks, data corruption, or panics
+}
+
+#[test]
+fn test_concurrent_entry_edits() {
+    // Test editing different entries from multiple processes
+    // Use tempfile + fork/spawn for true process isolation
+}
+```
+**Effort**: 3h | **Value**: MEDIUM - Confidence in multi-user scenarios
+**Dependencies**: May need `serial_test` crate for process-level tests
+**Risk**: LOW - Standard concurrency testing
+
+---
+
+### [UX] Add Ollama Timeout Config + Better Progress (v2.1)
+**File**: src/ai/ollama.rs, src/config/mod.rs
+**Source**: Reviews #4, #6, #7
+**Issue**: HTTP calls block indefinitely, no timeout config, minimal progress feedback
+**Impact**: MEDIUM - Poor UX when Ollama slow/unresponsive
+**Fix**:
+1. Add timeout configuration:
+```rust
+// In config/mod.rs
+pub const DEFAULT_OLLAMA_TIMEOUT_SECS: u64 = 60;
+
+pub struct Config {
+    // ... existing fields
+    pub ollama_timeout: Duration,
+}
+
+// Load from env var PONDER_OLLAMA_TIMEOUT
+```
+
+2. Apply timeout to client:
+```rust
+// In ai/ollama.rs
+pub struct OllamaClient {
+    client: reqwest::blocking::Client,
+}
+
+impl OllamaClient {
+    pub fn new(base_url: &str, timeout: Duration) -> Self {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self { client, base_url: base_url.to_string() }
+    }
+}
+```
+
+3. Better progress indicators:
+```rust
+// In ops/edit.rs
+if content_changed {
+    eprintln!("🔄 Generating embeddings for {} chunks...", chunks.len());
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        eprint!("   Chunk {}/{}... ", idx + 1, chunks.len());
+        let embedding = ai_client.embed(DEFAULT_EMBED_MODEL, chunk)?;
+        eprintln!("✓");
+    }
+
+    println!("✓ Entry saved with embeddings");
+}
+```
+
+**Effort**: 2h | **Value**: MEDIUM - Better UX, prevents hangs
+**Dependencies**: None
+**Risk**: LOW - Standard HTTP timeout pattern
+
+---
+
+### [Performance] Optimize Vector Search for Large Journals (v2.1)
+**File**: src/db/embeddings.rs
+**Source**: Review #7
+**Issue**: `search_similar_chunks()` loads ALL embeddings into memory (O(n)), slow with 1000+ entries
+**Impact**: LOW initially, HIGH for power users with large journals (10k+ entries)
+**Fix**: Implement approximate nearest neighbor (ANN) indexing
+**Options**:
+1. **sqlite-vss extension** (easiest):
+   - Vector Similarity Search extension for SQLite
+   - HNSW index built-in
+   - Native SQL integration
+
+2. **hnswlib-rs** (faster, more complex):
+   - Rust bindings for HNSW algorithm
+   - Requires separate index file
+   - Better performance for 10k+ vectors
+
+**Implementation (Option 1 - sqlite-vss)**:
+```rust
+// In db/schema.rs
+pub fn initialize_schema(conn: &Connection) -> AppResult<()> {
+    // Load vss extension
+    unsafe {
+        conn.load_extension_enable()?;
+        conn.load_extension("vector0", None)?;
+        conn.load_extension_disable()?;
+    }
+
+    // Create virtual table with HNSW index
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS embeddings_vss
+         USING vss0(embedding(768))",
+        [],
+    )?;
+
+    // ... rest of schema
+}
+
+// In db/embeddings.rs
+pub fn search_similar_chunks(
+    conn: &Connection,
+    query_embedding: &[f32],
+    limit: usize,
+) -> AppResult<Vec<SearchResult>> {
+    let mut stmt = conn.prepare(
+        "SELECT entry_id, chunk_index, distance
+         FROM embeddings_vss
+         WHERE vss_search(embedding, ?)
+         LIMIT ?",
+    )?;
+
+    // ... rest of query
+}
+```
+
+**Effort**: 1-2 days (Option 1), 3-4 days (Option 2)
+**Value**: MEDIUM - Only benefits users with 1000+ entries, but critical for those users
+**Dependencies**: sqlite-vss extension (compile-time dependency)
+**Risk**: MEDIUM - Requires native extension, may complicate builds
+**Priority**: LOW for v2.0/v2.1, MEDIUM for v2.2 once user base grows
+
+---
+
+### [Code Quality] Audit and Fix `unwrap()` Usage (v2.2)
+**File**: Multiple (11 files, 133 occurrences)
+**Source**: Review #7
+**Issue**: Extensive use of `unwrap()` in non-test code, some on user input/external state
+**Impact**: MEDIUM - Potential runtime panics
+**Fix**: Systematic audit and conversion to proper error handling
+```rust
+// Bad (current)
+let file_name = path.file_name().unwrap();
+let date_str = matches.value_of("date").unwrap();
+
+// Good (target)
+let file_name = path.file_name()
+    .ok_or_else(|| AppError::Config("Invalid file path".to_string()))?;
+
+let date_str = matches.value_of("date")
+    .ok_or_else(|| AppError::Cli("Missing required argument: date".to_string()))?;
+```
+
+**Audit Process**:
+1. Grep all `unwrap()` calls: `rg '\.unwrap\(\)' --no-tests`
+2. Categorize:
+   - **Safe**: Constants, known-good values (keep as-is with comment)
+   - **User input**: CLI args, file paths (MUST fix)
+   - **External state**: File operations, network (MUST fix)
+   - **Logic errors**: Should be unreachable (convert to `expect()` with explanation)
+
+3. Fix priority order:
+   - P0: User input unwraps (CLI, config)
+   - P1: File I/O unwraps
+   - P2: Logic unwraps (convert to expect)
+   - P3: Safe unwraps (document why safe)
+
+**Effort**: 1 day (audit + fixes) | **Value**: MEDIUM - Prevents panics, better error messages
+**Dependencies**: None
+**Risk**: LOW - Improves code quality, no behavior change if done correctly
+
+---
+
+### [Architecture] Add Schema Version Migration System (v2.1)
+**File**: src/db/schema.rs, src/db/migrations/
+**Source**: Reviews #6, #7
+**Issue**: No migration path for future schema changes (v2.0 → v2.1, etc.)
+**Impact**: HIGH - Future schema changes will require manual intervention
+**Implementation**:
+```rust
+// db/schema.rs
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+pub fn initialize_schema(conn: &Connection) -> AppResult<()> {
+    // Check schema version
+    let user_version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+
+    if user_version == 0 {
+        // New database, initialize from scratch
+        create_tables_v1(conn)?;
+        conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    } else if user_version < CURRENT_SCHEMA_VERSION {
+        // Old database, run migrations
+        run_migrations(conn, user_version, CURRENT_SCHEMA_VERSION)?;
+    } else if user_version > CURRENT_SCHEMA_VERSION {
+        // Future version, incompatible
+        return Err(DatabaseError::IncompatibleSchemaVersion {
+            expected: CURRENT_SCHEMA_VERSION,
+            found: user_version,
+        }.into());
+    }
+
+    Ok(())
+}
+
+// db/migrations/mod.rs
+pub fn run_migrations(
+    conn: &Connection,
+    from_version: u32,
+    to_version: u32,
+) -> AppResult<()> {
+    info!("Running database migrations: v{} → v{}", from_version, to_version);
+
+    let tx = conn.transaction()?;
+
+    for version in from_version..to_version {
+        match version {
+            1 => migrate_v1_to_v2(&tx)?,
+            2 => migrate_v2_to_v3(&tx)?,
+            _ => return Err(DatabaseError::UnknownMigration { version }.into()),
+        }
+
+        tx.pragma_update(None, "user_version", version + 1)?;
+        info!("Migrated to schema v{}", version + 1);
+    }
+
+    tx.commit()?;
+    Ok(())
+}
+
+// Example migration
+fn migrate_v1_to_v2(conn: &Connection) -> AppResult<()> {
+    conn.execute("ALTER TABLE entries ADD COLUMN tags TEXT", [])?;
+    conn.execute("CREATE INDEX idx_entries_tags ON entries(tags)", [])?;
+    Ok(())
+}
+```
+
+**Effort**: 4h (infrastructure), then 30min per future migration
+**Value**: HIGH - Critical for maintainability, enables safe schema evolution
+**Dependencies**: None
+**Risk**: LOW - Standard database migration pattern
+**Note**: Should be implemented BEFORE first schema change in v2.1
+
+---
+
+### [Documentation] Create SECURITY.md with Full Threat Model (v2.1)
+**File**: docs/SECURITY.md (new)
+**Source**: Review #4
+**Issue**: Security considerations scattered, no comprehensive threat model doc
+**Impact**: MEDIUM - Users unclear on security guarantees and limitations
+**Implementation**: Create comprehensive security documentation
+```markdown
+# Security
+
+## Threat Model
+
+### What Ponder v2.0 Protects Against
+
+✅ **Protects against:**
+- Unauthorized filesystem access (entries encrypted at rest)
+- Casual browsing of journal files
+- Memory dumps after session lock
+- Accidental exposure (file accidentally shared/backed up)
+- Swap file exposure (with secure temp directory)
+
+### What Ponder Does NOT Protect Against
+
+❌ **Does NOT protect against:**
+- Malicious code execution with root/admin privileges
+- Active RAM scraping while session unlocked
+- Keyloggers or screen capture malware
+- Physical RAM access with sophisticated forensic tools
+- Compromised Ollama instance (embeddings leak semantic info)
+- Coercion to reveal passphrase
+
+## Attack Scenarios
+
+### Scenario 1: Laptop Stolen While Locked
+**Attacker Access**: Full disk access
+**Protection**: ✅ STRONG - Encrypted entries, database, session locked
+**Recommendation**: Also use full-disk encryption (FileVault/LUKS)
+
+### Scenario 2: Malware Running as Same User
+**Attacker Access**: Read files, memory, keystrokes
+**Protection**: ❌ NONE - Malware can capture passphrase at prompt
+**Recommendation**: Ensure clean system, antivirus, principle of least privilege
+
+### Scenario 3: Forgotten Passphrase
+**Attacker Access**: None (user themselves)
+**Protection**: ⚠️  TOO STRONG - Data permanently inaccessible
+**Recommendation**: Write down passphrase in secure physical location
+
+## Embedding Privacy Implications
+
+Vector embeddings reveal **semantic information** even though plaintext is encrypted:
+- Topic clustering (entries about "work", "relationships", etc.)
+- Sentiment patterns
+- Writing style
+
+**If Ollama is compromised**, attacker can:
+- Infer topics from embeddings
+- Cluster related entries
+- Cannot read actual text (still encrypted)
+
+**Mitigation**:
+- Run Ollama locally (recommended)
+- Use encrypted database (already implemented)
+- Consider disabling AI features for ultra-sensitive journals
+
+## Security Checklist
+
+- [ ] Use strong passphrase (12+ characters, unique, memorized)
+- [ ] Enable full-disk encryption (FileVault, BitLocker, LUKS)
+- [ ] Run Ollama locally (not cloud API)
+- [ ] Regular encrypted backups (`ponder backup`)
+- [ ] Store backups in secure location (encrypted USB, password manager)
+- [ ] Disable swap or use encrypted swap
+- [ ] Use tmpfs (/dev/shm) when available
+- [ ] Lock screen when away from computer
+- [ ] Keep system and dependencies updated
+```
+
+**Effort**: 2h | **Value**: HIGH - Critical user education, manages expectations, reduces support
+**Dependencies**: None
+**Risk**: NONE - Documentation only
 
 ---
 
