@@ -13,12 +13,12 @@
 
 ### P0: Security & Bugs (Must Fix)
 
-- [~] **Fix temp file permission race** (20min) - `src/crypto/temp.rs:88-106`
+- [x] **Fix temp file permission race** (20min) - `src/crypto/temp.rs:88-106`
   - Create temp files with 0o600 from start, not after writing plaintext
   - Security: World-readable window exposes journal content
   - Test: Verify permissions immediately after creation
 
-- [ ] **Delete stale embeddings** (15min) - `src/ops/edit.rs:280-284`
+- [~] **Delete stale embeddings** (15min) - `src/ops/edit.rs:280-284`
   - Add `DELETE FROM embeddings WHERE entry_id = ?` before inserting new chunks
   - Bug: Shortened entries leave orphaned chunks in DB
   - Test: Edit long entry → short entry, verify chunk count

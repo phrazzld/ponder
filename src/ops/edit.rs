@@ -269,6 +269,12 @@ fn generate_and_store_embeddings(
     let chunks = chunk_text(&content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
     debug!("Generated {} chunks for embedding", chunks.len());
 
+    // Delete existing embeddings for this entry to prevent orphaned chunks
+    // (e.g., if entry was shortened from 10 chunks to 3 chunks)
+    conn.execute("DELETE FROM embeddings WHERE entry_id = ?", [entry_id])
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+    debug!("Deleted old embeddings for entry {}", entry_id);
+
     // Generate and store embeddings for each chunk
     for (idx, chunk) in chunks.iter().enumerate() {
         debug!(
