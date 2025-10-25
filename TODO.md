@@ -28,7 +28,7 @@
   - Security: Plain `String` in pool defeats zeroization
   - Verify: Database still opens, `SqlCipherConfig` removed
 
-- [~] **Fix session timeout bug** (30min) - `src/crypto/session.rs:103-112`
+- [x] **Fix session timeout bug** (30min) - `src/crypto/session.rs:103-112`
   - Change `get_passphrase()` to `&mut self`, update `last_access` on every call
   - Bug: Active users locked out during normal use
   - Update call sites in: edit.rs, ask.rs, reflect.rs, search.rs
