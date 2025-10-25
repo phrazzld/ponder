@@ -23,12 +23,12 @@
   - Bug: Shortened entries leave orphaned chunks in DB
   - Test: Edit long entry → short entry, verify chunk count
 
-- [~] **Fix passphrase zeroization leak** (45min) - `src/db/mod.rs:75,199`
+- [x] **Fix passphrase zeroization leak** (45min) - `src/db/mod.rs:75,199`
   - Remove `SqlCipherConfig` struct, use closure with `SecretString`
   - Security: Plain `String` in pool defeats zeroization
   - Verify: Database still opens, `SqlCipherConfig` removed
 
-- [ ] **Fix session timeout bug** (30min) - `src/crypto/session.rs:103-112`
+- [~] **Fix session timeout bug** (30min) - `src/crypto/session.rs:103-112`
   - Change `get_passphrase()` to `&mut self`, update `last_access` on every call
   - Bug: Active users locked out during normal use
   - Update call sites in: edit.rs, ask.rs, reflect.rs, search.rs

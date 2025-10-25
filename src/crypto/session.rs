@@ -81,6 +81,7 @@ impl SessionManager {
     /// Get the cached passphrase if available and not timed out.
     ///
     /// Returns a reference to the cached passphrase, or an error if the vault is locked.
+    /// Updates the last access time to extend the session timeout on each access.
     ///
     /// # Errors
     ///
@@ -96,16 +97,19 @@ impl SessionManager {
     /// let passphrase = SecretString::new("my-secret".to_string());
     /// session.unlock(passphrase);
     ///
-    /// // Get the passphrase within timeout
+    /// // Get the passphrase within timeout (extends timeout on access)
     /// let cached = session.get_passphrase()?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
-    pub fn get_passphrase(&self) -> AppResult<&SecretString> {
+    pub fn get_passphrase(&mut self) -> AppResult<&SecretString> {
         if self.is_locked() {
             return Err(crate::errors::CryptoError::VaultLocked.into());
         }
 
-        // Update check: if we have a passphrase and haven't timed out, return it
+        // Update last access time to extend session timeout
+        self.last_access = Some(Instant::now());
+
+        // Return passphrase reference
         self.passphrase
             .as_ref()
             .ok_or_else(|| crate::errors::CryptoError::VaultLocked.into())
@@ -299,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_session_initially_locked() {
-        let session = SessionManager::new(30);
+        let mut session = SessionManager::new(30);
         assert!(session.is_locked());
 
         // Trying to get passphrase should fail
@@ -390,6 +394,40 @@ mod tests {
             let result = session.get_passphrase();
             assert!(result.is_ok());
         }
+    }
+
+    #[test]
+    fn test_session_timeout_extends_on_access() {
+        // Verify that accessing passphrase extends the timeout (fixes PR #50 bug)
+        let mut session = SessionManager::new(1); // 1-minute timeout
+        let passphrase = SecretString::new("test-passphrase".to_string());
+
+        // Unlock
+        session.unlock(passphrase);
+        assert!(!session.is_locked());
+
+        // Sleep for half the timeout period
+        thread::sleep(Duration::from_secs(30));
+
+        // Access passphrase (should extend timeout)
+        let result = session.get_passphrase();
+        assert!(result.is_ok(), "Passphrase access should succeed");
+
+        // Sleep for another half timeout period (would timeout without extension)
+        thread::sleep(Duration::from_secs(30));
+
+        // Should still be unlocked because we accessed it 30s ago (extended the timeout)
+        assert!(
+            !session.is_locked(),
+            "Session should remain unlocked after passphrase access extends timeout"
+        );
+
+        // Accessing again should succeed
+        let result2 = session.get_passphrase();
+        assert!(
+            result2.is_ok(),
+            "Passphrase access should still succeed after timeout extension"
+        );
     }
 
     #[test]
