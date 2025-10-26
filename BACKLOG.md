@@ -1,7 +1,112 @@
 # BACKLOG
 
-Last groomed: 2025-10-25 (added PR #50 review feedback follow-up items)
+Last groomed: 2025-10-25 (migrated P1 tasks from TODO, P0 fixes complete)
 Analyzed by: 7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product) + PR review feedback (10 reviewers across 7 comprehensive reviews + 3 Codex inline comments)
+
+---
+
+## P1 - High-Priority Post-Merge (v2.0.1)
+
+**Source**: PR #50 review feedback - non-blocking improvements to implement after v2.0 merge
+**Total Items**: 4 high-priority tasks (should fix soon, but not merge-blocking)
+**Context**: These improve security/UX but aren't critical enough to delay v2.0 release
+
+### [Security] Add Passphrase Strength Validation (v2.0.1)
+**File**: src/crypto/session.rs:181-183
+**Source**: Reviews #1, #2, #7
+**Issue**: Accepts single-character passphrases with no warning
+**Impact**: HIGH - Users can create weak passphrases that undermine encryption
+**Fix**: Validate minimum 8 characters, provide clear error message
+```rust
+// Add to CryptoError enum
+#[error("Passphrase too weak: must be at least 8 characters")]
+WeakPassphrase,
+
+// Add validation function
+fn validate_passphrase_strength(passphrase: &str) -> AppResult<()> {
+    if passphrase.len() < 8 {
+        return Err(CryptoError::WeakPassphrase.into());
+    }
+    Ok(())
+}
+
+// Update both prompts: unlock() and get_passphrase_or_prompt()
+```
+**Effort**: 45min | **Value**: HIGH - Standard security practice
+**Dependencies**: None
+**Risk**: LOW - Simple validation, clear error messages
+**Test**: Reject <8 chars, accept >=8 chars
+
+---
+
+### [Security] Guard Test Passphrase Env Var (v2.0.1)
+**File**: src/crypto/session.rs:236-238
+**Source**: Reviews #4, #6
+**Issue**: `PONDER_TEST_PASSPHRASE` bypass exists in production code
+**Impact**: MEDIUM - Could be accidentally set by users, bypassing security
+**Fix**: Wrap in `#[cfg(test)]`
+```rust
+#[cfg(test)]
+if let Ok(test_pass) = std::env::var("PONDER_TEST_PASSPHRASE") {
+    return Ok(SecretString::new(test_pass));
+}
+```
+**Effort**: 5min | **Value**: MEDIUM - Defense in depth
+**Dependencies**: None
+**Risk**: NONE - Trivial change, test-only code
+**Test**: Verify not accessible in release builds
+
+---
+
+### [Documentation] Add Passphrase Recovery Warning (v2.0.1)
+**File**: README.md
+**Source**: Review #1
+**Issue**: No documentation that forgotten passphrase = permanent data loss
+**Impact**: CRITICAL UX - Users MUST understand zero-knowledge encryption consequences
+**Fix**: Add prominent security notice
+```markdown
+## ⚠️ Security Notice
+
+Ponder uses **zero-knowledge encryption** - your passphrase encrypts all journal data.
+
+**CRITICAL**: If you forget your passphrase, **your data is permanently lost**. There is no recovery mechanism.
+
+**Best practices**:
+- Choose a passphrase you can remember (e.g., 4-5 random words)
+- Write it down and store in a secure physical location
+- Consider using a password manager
+- Test backup/restore before relying on Ponder for important data
+```
+**Effort**: 15min | **Value**: CRITICAL - User education, prevents support burden
+**Dependencies**: None
+**Risk**: NONE - Documentation only
+**Test**: Manual review of README clarity
+
+---
+
+### [UX] Add Passphrase Retry Logic (v2.0.1)
+**File**: src/main.rs command handlers
+**Source**: Review #2
+**Issue**: Wrong passphrase fails immediately instead of allowing retries
+**Impact**: MEDIUM - Poor UX for typos, inconsistent with sudo/SSH patterns
+**Fix**: Allow 3 attempts before failing
+```rust
+// In Database::open() or command handlers
+for attempt in 1..=3 {
+    match Database::open(db_path, &passphrase) {
+        Ok(db) => return Ok(db),
+        Err(AppError::Database(DatabaseError::WrongPassphrase)) if attempt < 3 => {
+            eprintln!("Incorrect passphrase. Attempt {}/3", attempt);
+            passphrase = session.get_passphrase_or_prompt(false)?;
+        }
+        Err(e) => return Err(e),
+    }
+}
+```
+**Effort**: 30min (or defer if complex) | **Value**: MEDIUM - Standard UX pattern
+**Dependencies**: None
+**Risk**: LOW - Improves UX without security impact
+**Test**: Manual testing with wrong/correct passphrases
 
 ---
 
@@ -1273,32 +1378,39 @@ Beautiful reading UI with calendar view, search, tag filtering
 
 ## Summary Statistics
 
-**Total Items**: 46
+**Total Items**: 50 (updated after P1 migration from TODO)
+- **P1 Post-Merge**: 4 (security, UX, documentation - should fix in v2.0.1)
+- **v2.1+ Follow-Up**: 10 (PR review feedback - nice to have)
 - Immediate: 3 (2 CRITICAL, 1 HIGH)
 - High-Value: 10 (adoption blockers, retention drivers, PRD priorities)
 - Technical Debt: 13 (architecture, performance, maintainability)
 - Nice to Have: 20 (polish, advanced features, future opportunities)
 
 **By Category**:
-- Security: 5 items (1 CRITICAL, 1 MEDIUM, 3 LOW)
+- Security: 7 items (2 P1 HIGH, 1 CRITICAL, 1 MEDIUM, 3 LOW)
 - Features: 16 items (7 foundation, 9 advanced/future)
-- UX: 8 items (4 HIGH, 4 MEDIUM/LOW)
+- UX: 9 items (1 P1 MEDIUM, 4 HIGH, 4 MEDIUM/LOW)
+- Documentation: 1 item (1 P1 CRITICAL)
 - Maintainability: 9 items (1 CRITICAL, 8 improvements)
 - Architecture: 4 items
 - Complexity: 2 items
 - Performance: 2 items
 
 **Effort Estimates**:
-- Immediate Concerns: ~1 hour
-- High-Value Improvements: ~25 days
-- Technical Debt: ~10 days
-- Nice to Have: ~30 days
+- **P1 Post-Merge**: ~1.5 hours (4 tasks after v2.0 merge)
+- v2.1+ Follow-Up: ~10 hours (10 PR review items)
+- Immediate Concerns: ~1 hour (3 critical issues)
+- High-Value Improvements: ~25 days (foundation features)
+- Technical Debt: ~10 days (refactoring)
+- Nice to Have: ~30 days (polish, future features)
 
-**Recommended Next Steps**:
-1. Fix CRITICAL issues (build failure + dependency vulnerability) - 20 minutes
-2. Implement foundation features (search, templates, list, git sync) - 18 days
-3. Address high-priority UX issues (error messages, feedback) - 2 hours
-4. Tackle technical debt incrementally during feature work
+**Recommended Next Steps** (Post-v2.0 Merge):
+1. **Implement P1 improvements** (passphrase validation, env var guard, recovery warning, retry logic) - 1.5 hours
+2. Implement v2.1 follow-up items (atomic embeddings, redundant decryption, etc.) - 10 hours
+3. Fix CRITICAL issues (build failure + dependency vulnerability) - 20 minutes
+4. Implement foundation features (search, templates, list, git sync) - 18 days
+5. Address high-priority UX issues (error messages, feedback) - 2 hours
+6. Tackle technical debt incrementally during feature work
 
 **Cross-Perspective Insights**:
 - Pass-through wrapper flagged by 3 agents (complexity, architecture, maintainability)
