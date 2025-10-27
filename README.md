@@ -25,6 +25,18 @@ Ponder v2.0 is an AI-powered encrypted journaling tool for daily reflections. It
 - **Automatic Embeddings**: Content automatically vectorized for semantic search
 - **Local-First AI**: Uses local Ollama instance (your data stays on your machine)
 
+## ⚠️ Security Notice
+
+Ponder uses **zero-knowledge encryption** - your passphrase encrypts all journal data.
+
+**CRITICAL**: If you forget your passphrase, **your data is permanently lost**. There is no recovery mechanism.
+
+**Best practices**:
+- Choose a passphrase you can remember (e.g., 4-5 random words)
+- Write it down and store in a secure physical location
+- Consider using a password manager
+- Test backup/restore before relying on Ponder for important data
+
 ## Installation 🔧
 
 ### Prerequisites

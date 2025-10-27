@@ -57,7 +57,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
   - Update `insert_embedding()` signature: accept `&Transaction` or `&Connection` (use generic trait bound)
   - Success: Embedding generation is atomic - partial failures roll back, no orphaned deletes
 
-- [~] **Add user feedback to edit command** (15min) - `src/ops/edit.rs`
+- [x] **Add user feedback to edit command** (15min) - `src/ops/edit.rs`
   - Issue: Silent success pattern - users see no confirmation after saving entry or generating embeddings
   - Fix: Add `eprintln!` output confirming successful operations
   - Implementation: At end of `edit_entry()` function (before final `Ok(())`):
@@ -69,7 +69,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
     ```
   - Success: Users see clear confirmation message after edit completes
 
-- [ ] **Add security warning to README** (5min) - `README.md`
+- [x] **Add security warning to README** (5min) - `README.md`
   - Issue: Missing critical warning that forgotten passphrase = permanent data loss (zero-knowledge encryption)
   - Fix: Add prominent ⚠️ Security Notice section before Installation section
   - Content to add:
@@ -93,7 +93,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 ## Pre-Merge Validation Checklist
 
 - [x] All P0 fixes complete and tested
-- [ ] All Ultrathink critical fixes complete and tested
+- [x] All Ultrathink critical fixes complete and tested
 - [ ] Full test suite passing: `cargo test --lib -- --test-threads=1`
 - [ ] Clippy clean: `cargo clippy --all-targets -- -D warnings`
 - [ ] Manual QA: Verify session timeout, passphrase prompts, temp file perms, transaction rollback
