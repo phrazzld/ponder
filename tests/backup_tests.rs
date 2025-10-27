@@ -56,8 +56,8 @@ fn test_create_full_backup() {
 
     // Create backup
     let backup_path = temp_dir.path().join("backup.tar.gz.age");
-    let report =
-        ops::create_backup(&db, &mut session, &journal_dir, &backup_path).expect("create backup");
+    let report = ops::create_backup(&db, &mut session, &journal_dir, &db_path, &backup_path)
+        .expect("create backup");
 
     // Verify report
     assert_eq!(report.total_entries, 3, "Should backup 3 entries");
@@ -90,7 +90,8 @@ fn test_verify_backup() {
 
     // Create backup
     let backup_path = temp_dir.path().join("backup.tar.gz.age");
-    ops::create_backup(&db, &mut session, &journal_dir, &backup_path).expect("create backup");
+    ops::create_backup(&db, &mut session, &journal_dir, &db_path, &backup_path)
+        .expect("create backup");
 
     // Verify backup
     let manifest = ops::verify_backup(&mut session, &backup_path).expect("verify backup");
@@ -137,8 +138,8 @@ fn test_restore_backup() {
 
     // Create backup
     let backup_path = temp_dir.path().join("backup.tar.gz.age");
-    let backup_report =
-        ops::create_backup(&db, &mut session, &journal_dir, &backup_path).expect("create backup");
+    let backup_report = ops::create_backup(&db, &mut session, &journal_dir, &db_path, &backup_path)
+        .expect("create backup");
 
     // Delete original journal
     fs::remove_dir_all(&journal_dir).expect("delete journal");
@@ -146,8 +147,15 @@ fn test_restore_backup() {
 
     // Restore from backup
     let restore_dir = temp_dir.path().join("restored");
-    let restore_report = ops::restore_backup(&mut session, &backup_path, &restore_dir, false)
-        .expect("restore backup");
+    let restore_db_path = restore_dir.join("ponder.db");
+    let restore_report = ops::restore_backup(
+        &mut session,
+        &backup_path,
+        &restore_dir,
+        &restore_db_path,
+        false,
+    )
+    .expect("restore backup");
 
     // Verify restore report
     assert_eq!(
@@ -209,7 +217,8 @@ fn test_backup_wrong_passphrase() {
 
     // Create backup with correct passphrase
     let backup_path = temp_dir.path().join("backup.tar.gz.age");
-    ops::create_backup(&db, &mut session1, &journal_dir, &backup_path).expect("create backup");
+    ops::create_backup(&db, &mut session1, &journal_dir, &db_path, &backup_path)
+        .expect("create backup");
 
     // Try to verify with wrong passphrase
     let mut session2 = SessionManager::new(30);
@@ -242,7 +251,8 @@ fn test_restore_force_overwrite() {
 
     // Create backup
     let backup_path = temp_dir.path().join("backup.tar.gz.age");
-    ops::create_backup(&db, &mut session, &journal_dir, &backup_path).expect("create backup");
+    ops::create_backup(&db, &mut session, &journal_dir, &db_path, &backup_path)
+        .expect("create backup");
 
     // Create target directory with existing file
     let restore_dir = temp_dir.path().join("existing");
@@ -250,7 +260,14 @@ fn test_restore_force_overwrite() {
     fs::write(restore_dir.join("existing.txt"), "existing file").expect("write existing file");
 
     // Try restore without force (should fail)
-    let result = ops::restore_backup(&mut session, &backup_path, &restore_dir, false);
+    let restore_db_path = restore_dir.join("ponder.db");
+    let result = ops::restore_backup(
+        &mut session,
+        &backup_path,
+        &restore_dir,
+        &restore_db_path,
+        false,
+    );
     assert!(
         result.is_err(),
         "Restore should fail when target exists without force"
@@ -263,8 +280,14 @@ fn test_restore_force_overwrite() {
     );
 
     // Restore with force (should succeed)
-    let restore_report = ops::restore_backup(&mut session, &backup_path, &restore_dir, true)
-        .expect("restore with force");
+    let restore_report = ops::restore_backup(
+        &mut session,
+        &backup_path,
+        &restore_dir,
+        &restore_db_path,
+        true,
+    )
+    .expect("restore with force");
     assert_eq!(
         restore_report.entries_restored, 3,
         "Should restore 3 entries with force"
@@ -295,7 +318,7 @@ fn test_backup_empty_journal() {
 
     // Create backup of empty journal
     let backup_path = temp_dir.path().join("empty_backup.tar.gz.age");
-    let report = ops::create_backup(&db, &mut session, &journal_dir, &backup_path)
+    let report = ops::create_backup(&db, &mut session, &journal_dir, &db_path, &backup_path)
         .expect("create empty backup");
 
     // Verify report
