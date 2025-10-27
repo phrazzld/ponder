@@ -90,19 +90,25 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 
 ---
 
-## Critical P1 Security Fix (PR Code Review)
+## Critical P1 Fixes (PR Code Review)
 
-**Source**: @chatgpt-codex-connector code review comment on PR #50
-**Estimated Time**: 10 minutes
+**Source**: @chatgpt-codex-connector code review comments on PR #50
+**Estimated Time**: 25 minutes
 
-- [x] **Fix secure_delete truncation vulnerability** (`3e4aaef`) - 10min - `src/crypto/temp.rs:221-243`
-  - Issue: `File::create()` truncates file BEFORE overwriting, leaving plaintext journal content recoverable from disk sectors
-  - Impact: Every journal edit leaves decrypted content on disk (defeats core security model)
-  - Fix: Replace `File::create(path)` with `OpenOptions::new().write(true).open(path)` to preserve file size and actually overwrite sectors
-  - Added regression test: `test_secure_delete_overwrites_without_truncation()`
-  - Success: Plaintext sectors now actually overwritten with zeros before deletion (prevents trivial forensic recovery)
+1. [x] **Fix secure_delete truncation vulnerability** (`3e4aaef`) - 10min - `src/crypto/temp.rs:221-243`
+   - Issue: `File::create()` truncates file BEFORE overwriting, leaving plaintext journal content recoverable from disk sectors
+   - Impact: Every journal edit leaves decrypted content on disk (defeats core security model)
+   - Fix: Replace `File::create(path)` with `OpenOptions::new().write(true).open(path)` to preserve file size and actually overwrite sectors
+   - Added regression test: `test_secure_delete_overwrites_without_truncation()`
+   - Success: Plaintext sectors now actually overwritten with zeros before deletion (prevents trivial forensic recovery)
 
-**Total effort**: 10 minutes | **Result**: 7 crypto::temp tests passing (added 1 new test)
+2. [x] **Fix backup/restore to honor Config.db_path** (`55341b6`) - 15min - `src/ops/backup.rs:84,401` + `src/main.rs:423,458`
+   - Issue: `create_backup()` and `restore_backup()` hardcoded database path as `journal_dir/ponder.db`, ignoring `Config.db_path` (PONDER_DB env var)
+   - Impact: Backups fail for custom database locations OR worse, back up wrong database if old one exists at default path; restore always writes to wrong location (data loss risk)
+   - Fix: Add `db_path: &PathBuf` parameter to both functions, pass `config.db_path` from main.rs, update all 9 test cases
+   - Success: Backup/restore now respects PONDER_DB configuration for all database locations
+
+**Total effort**: 25 minutes | **Result**: All tests passing (176 lib tests), clippy clean
 
 ---
 
