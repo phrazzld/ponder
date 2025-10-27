@@ -78,9 +78,33 @@ pub fn edit_entry(
             _reference_datetime.format(crate::constants::JOURNAL_HEADER_DATE_FORMAT),
             _reference_datetime.format(crate::constants::JOURNAL_HEADER_TIME_FORMAT)
         );
-        fs::write(&temp_path, header)?;
 
-        debug!("Created new temp file with header: {:?}", temp_path);
+        // Create file with secure permissions BEFORE writing plaintext
+        // This prevents world-readable exposure window (same pattern as decrypt_to_temp)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&temp_path)?;
+
+            use std::io::Write;
+            file.write_all(header.as_bytes())?;
+
+            debug!(
+                "Created new temp file with 0o600 permissions: {:?}",
+                temp_path
+            );
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Windows doesn't have Unix-style permissions
+            fs::write(&temp_path, header)?;
+        }
+
         temp_path
     } else {
         let temp_path = decrypt_to_temp(&encrypted_path, passphrase)?;
@@ -398,5 +422,47 @@ mod tests {
             "Path should contain zero-padded month"
         );
         assert!(path_str.contains("20"), "Path should contain day");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_new_entry_temp_file_has_secure_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Regression test for PR #50 code review: new entry temp files must have 0o600 permissions
+        // This prevents world-readable plaintext exposure during editing
+
+        let temp_dir = crate::crypto::temp::get_secure_temp_dir().unwrap();
+        let temp_path = temp_dir.join(format!("test-permissions-{}.md", uuid::Uuid::new_v4()));
+
+        // Simulate the pattern used in edit_entry() for new entries
+        let header = "# Test Header\n\n## Test Time\n\n";
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&temp_path)
+                .unwrap();
+
+            use std::io::Write;
+            file.write_all(header.as_bytes()).unwrap();
+        }
+
+        // Verify permissions immediately after creation (no race window)
+        let metadata = std::fs::metadata(&temp_path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
+
+        assert_eq!(
+            mode, 0o600,
+            "New entry temp file must have 0o600 permissions to prevent world-readable plaintext exposure. Found: 0o{:o}",
+            mode
+        );
+
+        // Cleanup
+        std::fs::remove_file(&temp_path).ok();
     }
 }

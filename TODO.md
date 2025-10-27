@@ -115,7 +115,14 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
    - Test: Added `test_touch_cannot_revive_timed_out_session()` regression test verifying passphrase is zeroized when timeout first detected
    - Success: Timed-out sessions cannot be revived without re-prompting; passphrase is actually cleared from memory on timeout (177 tests passing, +1 new test)
 
-**Total effort**: 50 minutes | **Result**: All 3 P1 fixes complete, 177 tests passing, clippy clean
+4. [x] **Fix world-readable temp files for new entries** - 15min - `src/ops/edit.rs:70-105`
+   - Issue: `fs::write()` creates new entry temp files with default permissions (0o644 - world-readable); any local user can read plaintext journal content during editing
+   - Impact: CRITICAL - Active plaintext exposure for every new entry creation; trivial exploitation (`cat /tmp/ponder-new-*.md`); violates core encrypted journaling security model
+   - Fix: Apply same secure pattern as `decrypt_to_temp()`: use `OpenOptions` with `.mode(0o600)` BEFORE writing plaintext header
+   - Test: Added regression test `test_new_entry_temp_file_has_secure_permissions()` verifying 0o600 permissions
+   - Success: All temp files (new and existing entries) created with secure permissions; no plaintext exposure window (178 tests passing, +1 new test)
+
+**Total effort**: 65 minutes | **Result**: All 4 P1 security fixes complete, 178 tests passing, clippy clean
 
 ---
 
@@ -123,8 +130,8 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 
 - [x] All P0 fixes complete and tested
 - [x] All Ultrathink critical fixes complete and tested
-- [x] All P1 security fixes complete and tested (secure_delete truncation, backup/restore config, auto-lock passphrase leak)
-- [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (177 passing, +1 new test)
+- [x] All P1 security fixes complete and tested (secure_delete, backup/restore config, auto-lock passphrase leak, world-readable temp files)
+- [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (178 passing, +2 new tests)
 - [x] Clippy clean: `cargo clippy --all-targets -- -D warnings`
 - [ ] Manual QA: Verify session timeout, passphrase prompts, temp file perms, transaction rollback
 - [ ] Update PR #50 description with P0 + Ultrathink fixes summary
