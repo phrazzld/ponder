@@ -90,12 +90,29 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 
 ---
 
+## Critical P1 Security Fix (PR Code Review)
+
+**Source**: @chatgpt-codex-connector code review comment on PR #50
+**Estimated Time**: 10 minutes
+
+- [x] **Fix secure_delete truncation vulnerability** (`3e4aaef`) - 10min - `src/crypto/temp.rs:221-243`
+  - Issue: `File::create()` truncates file BEFORE overwriting, leaving plaintext journal content recoverable from disk sectors
+  - Impact: Every journal edit leaves decrypted content on disk (defeats core security model)
+  - Fix: Replace `File::create(path)` with `OpenOptions::new().write(true).open(path)` to preserve file size and actually overwrite sectors
+  - Added regression test: `test_secure_delete_overwrites_without_truncation()`
+  - Success: Plaintext sectors now actually overwritten with zeros before deletion (prevents trivial forensic recovery)
+
+**Total effort**: 10 minutes | **Result**: 7 crypto::temp tests passing (added 1 new test)
+
+---
+
 ## Pre-Merge Validation Checklist
 
 - [x] All P0 fixes complete and tested
 - [x] All Ultrathink critical fixes complete and tested
-- [ ] Full test suite passing: `cargo test --lib -- --test-threads=1`
-- [ ] Clippy clean: `cargo clippy --all-targets -- -D warnings`
+- [x] All P1 security fixes complete and tested (secure_delete truncation)
+- [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (176 passing)
+- [x] Clippy clean: `cargo clippy --all-targets -- -D warnings`
 - [ ] Manual QA: Verify session timeout, passphrase prompts, temp file perms, transaction rollback
 - [ ] Update PR #50 description with P0 + Ultrathink fixes summary
 - [ ] Ready to merge to `master`
