@@ -103,6 +103,8 @@ impl SessionManager {
     /// ```
     pub fn get_passphrase(&mut self) -> AppResult<&SecretString> {
         if self.is_locked() {
+            // Eagerly clear passphrase when timeout detected to prevent revival via touch()
+            self.lock();
             return Err(crate::errors::CryptoError::VaultLocked.into());
         }
 
@@ -184,7 +186,7 @@ impl SessionManager {
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn touch(&mut self) {
-        if self.passphrase.is_some() {
+        if !self.is_locked() {
             self.last_access = Some(Instant::now());
             debug!("Session activity refreshed");
         }
@@ -441,5 +443,43 @@ mod tests {
         assert_eq!(secret.expose_secret(), "unit-test-passphrase");
 
         std::env::remove_var("PONDER_TEST_PASSPHRASE");
+    }
+
+    #[test]
+    fn test_touch_cannot_revive_timed_out_session() {
+        // Regression test for PR #50 code review: touch() should not revive expired sessions
+        let mut session = SessionManager::new(1); // 1-minute timeout
+        let passphrase = SecretString::new("test-passphrase".to_string());
+
+        // Unlock session
+        session.unlock(passphrase);
+        assert!(!session.is_locked(), "Session should be unlocked");
+
+        // Manually expire the session by setting timeout to 0 and waiting
+        session.timeout = Duration::from_secs(0);
+        thread::sleep(Duration::from_millis(10));
+        assert!(session.is_locked(), "Session should be timed out");
+
+        // Attempt to revive with touch() - should fail silently
+        session.touch();
+
+        // Session should still be locked after touch()
+        assert!(
+            session.is_locked(),
+            "touch() should not revive timed-out session"
+        );
+
+        // Attempting to get passphrase should fail and clear memory
+        let result = session.get_passphrase();
+        assert!(
+            result.is_err(),
+            "Should not be able to get passphrase after timeout"
+        );
+
+        // Verify passphrase was actually cleared from memory
+        assert!(
+            session.passphrase.is_none(),
+            "Passphrase should be zeroized after timeout detection"
+        );
     }
 }

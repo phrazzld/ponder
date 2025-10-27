@@ -93,7 +93,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 ## Critical P1 Fixes (PR Code Review)
 
 **Source**: @chatgpt-codex-connector code review comments on PR #50
-**Estimated Time**: 25 minutes
+**Estimated Time**: 50 minutes (25min complete, 25min remaining)
 
 1. [x] **Fix secure_delete truncation vulnerability** (`3e4aaef`) - 10min - `src/crypto/temp.rs:221-243`
    - Issue: `File::create()` truncates file BEFORE overwriting, leaving plaintext journal content recoverable from disk sectors
@@ -108,7 +108,14 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
    - Fix: Add `db_path: &PathBuf` parameter to both functions, pass `config.db_path` from main.rs, update all 9 test cases
    - Success: Backup/restore now respects PONDER_DB configuration for all database locations
 
-**Total effort**: 25 minutes | **Result**: All tests passing (176 lib tests), clippy clean
+3. [x] **Fix auto-lock passphrase leak** - 25min - `src/crypto/session.rs:104-116,186-191`
+   - Issue: `is_locked()` detects timeout but leaves passphrase cached in memory; `touch()` can revive expired sessions without re-prompting user
+   - Impact: Auto-lock timeout is completely bypassable via `touch()` (called by migration code every 10 entries); passphrase remains in memory indefinitely during long operations, defeating stated security goal
+   - Fix: Make `get_passphrase()` eagerly call `self.lock()` when timeout detected; change `touch()` condition from `passphrase.is_some()` to `!is_locked()`
+   - Test: Added `test_touch_cannot_revive_timed_out_session()` regression test verifying passphrase is zeroized when timeout first detected
+   - Success: Timed-out sessions cannot be revived without re-prompting; passphrase is actually cleared from memory on timeout (177 tests passing, +1 new test)
+
+**Total effort**: 50 minutes | **Result**: All 3 P1 fixes complete, 177 tests passing, clippy clean
 
 ---
 
@@ -116,8 +123,8 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 
 - [x] All P0 fixes complete and tested
 - [x] All Ultrathink critical fixes complete and tested
-- [x] All P1 security fixes complete and tested (secure_delete truncation)
-- [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (176 passing)
+- [x] All P1 security fixes complete and tested (secure_delete truncation, backup/restore config, auto-lock passphrase leak)
+- [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (177 passing, +1 new test)
 - [x] Clippy clean: `cargo clippy --all-targets -- -D warnings`
 - [ ] Manual QA: Verify session timeout, passphrase prompts, temp file perms, transaction rollback
 - [ ] Update PR #50 description with P0 + Ultrathink fixes summary
