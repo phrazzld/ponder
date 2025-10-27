@@ -31,7 +31,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 **Source**: Ultrathink design review - critical issues requiring immediate attention
 **Estimated Time**: ~50 minutes
 
-- [~] **Add transaction atomicity to embedding generation** (30min) - `src/ops/edit.rs:253-297`
+- [x] **Add transaction atomicity to embedding generation** (30min) - `src/ops/edit.rs:253-297`
   - Issue: DELETE + INSERT loop has no transaction boundary - Ollama crash mid-loop leaves database with zero embeddings for entry
   - Fix: Wrap entire embedding generation in `conn.transaction()` for all-or-nothing semantics
   - Implementation details:
@@ -57,7 +57,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
   - Update `insert_embedding()` signature: accept `&Transaction` or `&Connection` (use generic trait bound)
   - Success: Embedding generation is atomic - partial failures roll back, no orphaned deletes
 
-- [ ] **Add user feedback to edit command** (15min) - `src/ops/edit.rs`
+- [~] **Add user feedback to edit command** (15min) - `src/ops/edit.rs`
   - Issue: Silent success pattern - users see no confirmation after saving entry or generating embeddings
   - Fix: Add `eprintln!` output confirming successful operations
   - Implementation: At end of `edit_entry()` function (before final `Ok(())`):

@@ -148,19 +148,22 @@ pub fn edit_entry(
         // User-facing feedback: generating embeddings
         eprintln!("🔄 Generating embeddings...");
         info!("Content changed, generating embeddings...");
-        generate_and_store_embeddings(&mut conn, ai_client, entry_id, &encrypted_path, passphrase)?;
+        let chunk_count = generate_and_store_embeddings(
+            &mut conn,
+            ai_client,
+            entry_id,
+            &encrypted_path,
+            passphrase,
+        )?;
 
-        // User-facing feedback: completion with word count
-        println!(
-            "✓ Entry saved ({} word{})",
-            word_count,
-            if word_count == 1 { "" } else { "s" }
-        );
+        // User-facing feedback: completion with word and chunk counts
+        eprintln!("✓ Journal entry saved: {}", date);
+        eprintln!("  Generated {} embedding chunks", chunk_count);
     } else {
         debug!("Content unchanged, skipping embedding generation");
 
         // User-facing feedback: completion, no changes
-        println!("✓ Entry saved (no changes)");
+        eprintln!("✓ Journal entry saved: {} (no changes)", date);
     }
 
     Ok(())
@@ -254,13 +257,15 @@ fn launch_editor(config: &Config, path: &std::path::Path) -> AppResult<()> {
 ///
 /// Uses a database transaction to ensure atomicity - either all embeddings
 /// are stored or none are (prevents partial state on Ollama crashes).
+///
+/// Returns the number of chunks generated.
 fn generate_and_store_embeddings(
     conn: &mut rusqlite::Connection,
     ai_client: &OllamaClient,
     entry_id: i64,
     encrypted_path: &std::path::Path,
     passphrase: &age::secrecy::SecretString,
-) -> AppResult<()> {
+) -> AppResult<usize> {
     // Decrypt to read content
     let temp_path = decrypt_to_temp(encrypted_path, passphrase)?;
     let content = fs::read_to_string(&temp_path)?;
@@ -303,8 +308,9 @@ fn generate_and_store_embeddings(
     // Commit transaction - atomic: all chunks inserted or none
     tx.commit().map_err(crate::errors::DatabaseError::Sqlite)?;
 
-    info!("Stored {} embeddings for entry {}", chunks.len(), entry_id);
-    Ok(())
+    let chunk_count = chunks.len();
+    info!("Stored {} embeddings for entry {}", chunk_count, entry_id);
+    Ok(chunk_count)
 }
 
 #[cfg(test)]
