@@ -31,7 +31,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 **Source**: Ultrathink design review - critical issues requiring immediate attention
 **Estimated Time**: ~50 minutes
 
-- [ ] **Add transaction atomicity to embedding generation** (30min) - `src/ops/edit.rs:253-297`
+- [~] **Add transaction atomicity to embedding generation** (30min) - `src/ops/edit.rs:253-297`
   - Issue: DELETE + INSERT loop has no transaction boundary - Ollama crash mid-loop leaves database with zero embeddings for entry
   - Fix: Wrap entire embedding generation in `conn.transaction()` for all-or-nothing semantics
   - Implementation details:

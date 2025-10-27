@@ -19,6 +19,8 @@ pub struct SimilarChunk {
 
 /// Inserts an embedding vector for a journal entry chunk.
 ///
+/// Accepts either a database connection or transaction (Transaction derefs to Connection).
+///
 /// # Arguments
 ///
 /// * `conn` - Database connection

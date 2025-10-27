@@ -124,7 +124,7 @@ pub fn edit_entry(
     let content_changed = original_checksum != new_checksum;
 
     // Conflict detection: Check if file was modified while user was editing
-    let conn = db.get_conn()?;
+    let mut conn = db.get_conn()?;
     if let Ok(Some(db_checksum)) = get_entry_checksum(&conn, date) {
         if db_checksum != original_checksum {
             eprintln!("⚠️  Warning: This entry was modified while you were editing.");
@@ -148,7 +148,7 @@ pub fn edit_entry(
         // User-facing feedback: generating embeddings
         eprintln!("🔄 Generating embeddings...");
         info!("Content changed, generating embeddings...");
-        generate_and_store_embeddings(&conn, ai_client, entry_id, &encrypted_path, passphrase)?;
+        generate_and_store_embeddings(&mut conn, ai_client, entry_id, &encrypted_path, passphrase)?;
 
         // User-facing feedback: completion with word count
         println!(
@@ -251,8 +251,11 @@ fn launch_editor(config: &Config, path: &std::path::Path) -> AppResult<()> {
 }
 
 /// Generate embeddings for an entry and store them in the database.
+///
+/// Uses a database transaction to ensure atomicity - either all embeddings
+/// are stored or none are (prevents partial state on Ollama crashes).
 fn generate_and_store_embeddings(
-    conn: &rusqlite::Connection,
+    conn: &mut rusqlite::Connection,
     ai_client: &OllamaClient,
     entry_id: i64,
     encrypted_path: &std::path::Path,
@@ -269,9 +272,15 @@ fn generate_and_store_embeddings(
     let chunks = chunk_text(&content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
     debug!("Generated {} chunks for embedding", chunks.len());
 
+    // Wrap embedding generation in transaction for atomicity
+    // If Ollama crashes mid-loop, all changes roll back (no partial state)
+    let tx = conn
+        .transaction()
+        .map_err(crate::errors::DatabaseError::Sqlite)?;
+
     // Delete existing embeddings for this entry to prevent orphaned chunks
     // (e.g., if entry was shortened from 10 chunks to 3 chunks)
-    conn.execute("DELETE FROM embeddings WHERE entry_id = ?", [entry_id])
+    tx.execute("DELETE FROM embeddings WHERE entry_id = ?", [entry_id])
         .map_err(crate::errors::DatabaseError::Sqlite)?;
     debug!("Deleted old embeddings for entry {}", entry_id);
 
@@ -287,8 +296,12 @@ fn generate_and_store_embeddings(
         let chunk_hash = blake3::hash(chunk.as_bytes());
         let chunk_checksum = chunk_hash.to_hex().to_string();
 
-        insert_embedding(conn, entry_id, idx, &embedding, &chunk_checksum)?;
+        // Transaction derefs to Connection, so insert_embedding works with &tx
+        insert_embedding(&tx, entry_id, idx, &embedding, &chunk_checksum)?;
     }
+
+    // Commit transaction - atomic: all chunks inserted or none
+    tx.commit().map_err(crate::errors::DatabaseError::Sqlite)?;
 
     info!("Stored {} embeddings for entry {}", chunks.len(), entry_id);
     Ok(())
