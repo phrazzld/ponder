@@ -419,8 +419,14 @@ fn cmd_backup(config: &Config, backup_args: ponder::cli::BackupArgs) -> AppResul
     let mut session = SessionManager::new(config.session_timeout_minutes);
     let db = open_database_with_retry(config, &mut session)?;
 
-    // Create backup
-    let report = ops::create_backup(&db, &mut session, &config.journal_dir, &backup_args.output)?;
+    // Create backup (respects PONDER_DB config via config.db_path)
+    let report = ops::create_backup(
+        &db,
+        &mut session,
+        &config.journal_dir,
+        &config.db_path,
+        &backup_args.output,
+    )?;
 
     println!("✓ Backup created successfully");
     println!("  Entries: {}", report.total_entries);
@@ -448,11 +454,12 @@ fn cmd_restore(config: &Config, restore_args: ponder::cli::RestoreArgs) -> AppRe
     // Initialize session
     let mut session = SessionManager::new(config.session_timeout_minutes);
 
-    // Restore backup
+    // Restore backup (respects PONDER_DB config via config.db_path)
     let report = ops::restore_backup(
         &mut session,
         &restore_args.backup,
         &config.journal_dir,
+        &config.db_path,
         restore_args.force,
     )?;
 
