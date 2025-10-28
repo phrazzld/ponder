@@ -12,6 +12,7 @@ pub mod migration;
 pub mod reflect;
 pub mod reindex;
 pub mod search;
+pub mod summarize;
 
 // Re-export commonly used functions
 pub use ask::ask_question;
@@ -24,3 +25,4 @@ pub use migration::{migrate_all_entries, migrate_entry, verify_migration, Migrat
 pub use reflect::reflect_on_entry;
 pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;
+pub use summarize::generate_daily_summary;

@@ -85,9 +85,9 @@
 
 ### AI Client Enhancements
 
-- [ ] Add model selection parameter to OllamaClient::chat
+- [x] Add model selection parameter to OllamaClient::chat
   ```
-  Files: src/ai/ollama.rs:285-321
+  Files: src/ai/ollama.rs:324-365
   Approach: Add optional model param, default to DEFAULT_CHAT_MODEL
   Success: Backwards compatible, new chat_with_model() method
   Test: Test with different models, test fallback behavior
@@ -95,9 +95,9 @@
   Time: 30min
   ```
 
-- [ ] Add sentiment analysis method to OllamaClient
+- [x] Add sentiment analysis method to OllamaClient
   ```
-  Files: src/ai/ollama.rs:322+
+  Files: src/ai/ollama.rs:363-421, src/ai/prompts.rs:66-158
   Approach: Use chat() internally with SENTIMENT_PROMPT
   Success: analyze_sentiment() returns f32 in [-1.0, 1.0]
   Test: Test with positive/negative/neutral text samples
@@ -105,9 +105,9 @@
   Time: 45min
   ```
 
-- [ ] Add topic extraction method to OllamaClient
+- [x] Add topic extraction method to OllamaClient
   ```
-  Files: src/ai/ollama.rs:322+
+  Files: src/ai/ollama.rs:423-469, src/ai/prompts.rs:81-202
   Approach: Use chat() with TOPIC_EXTRACTION_PROMPT, parse JSON
   Success: extract_topics() returns Vec<String>
   Test: Test JSON parsing errors, empty results, valid extraction
@@ -117,9 +117,9 @@
 
 ### Prompt Engineering
 
-- [ ] Add summary prompts to src/ai/prompts.rs
+- [x] Add summary prompts to src/ai/prompts.rs
   ```
-  Files: src/ai/prompts.rs:115+
+  Files: src/ai/prompts.rs:204-333
   Approach: Follow reflect_prompt pattern (lines 42-64)
   Success: SUMMARY_DAILY, SUMMARY_WEEKLY, SUMMARY_MONTHLY prompts
   Test: Test prompt structure includes entry content
@@ -127,21 +127,22 @@
   Time: 30min
   ```
 
-- [ ] Add analysis prompts to src/ai/prompts.rs
+- [x] Add analysis prompts to src/ai/prompts.rs
   ```
-  Files: src/ai/prompts.rs:115+
+  Files: src/ai/prompts.rs:69-202 (completed earlier with AI Client tasks)
   Approach: Follow ask_prompt pattern (lines 79-114)
-  Success: SENTIMENT_ANALYSIS, TOPIC_EXTRACTION prompts
+  Success: SENTIMENT_PROMPT, TOPIC_EXTRACTION_PROMPT with builder functions
   Test: Test prompts produce parseable output
   Module: Isolated prompt engineering from business logic
   Time: 30min
+  Note: Completed as part of AI Client Enhancements (sentiment_prompt, topic_extraction_prompt)
   ```
 
 ## Phase 2: Progressive Summaries
 
 ### Core Summarization Logic
 
-- [ ] Create src/ops/summarize.rs with daily summary function
+- [~] Create src/ops/summarize.rs with daily summary function
   ```
   Files: NEW src/ops/summarize.rs
   Approach: Follow src/ops/ask.rs RAG pipeline (lines 46-52)
