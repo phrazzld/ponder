@@ -63,7 +63,7 @@
   Time: 45min
   ```
 
-- [~] Create src/db/summaries.rs for summary DB operations
+- [x] Create src/db/summaries.rs for summary DB operations
   ```
   Files: NEW src/db/summaries.rs
   Approach: Follow src/db/entries.rs structure (CRUD operations)
@@ -73,7 +73,7 @@
   Time: 1hr
   ```
 
-- [ ] Create src/db/patterns.rs for pattern DB operations
+- [~] Create src/db/patterns.rs for pattern DB operations
   ```
   Files: NEW src/db/patterns.rs
   Approach: Follow src/db/summaries.rs pattern

@@ -10,6 +10,7 @@
 //! - `entries`: Entry CRUD operations
 //! - `embeddings`: Vector storage and similarity search
 //! - `summaries`: Summary CRUD operations (daily, weekly, monthly)
+//! - `patterns`: Pattern CRUD operations (temporal, topic, sentiment, correlation)
 //!
 //! # Example
 //!
@@ -27,6 +28,7 @@
 
 pub mod embeddings;
 pub mod entries;
+pub mod patterns;
 pub mod schema;
 pub mod summaries;
 
