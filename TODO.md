@@ -122,7 +122,14 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
    - Test: Added regression test `test_new_entry_temp_file_has_secure_permissions()` verifying 0o600 permissions
    - Success: All temp files (new and existing entries) created with secure permissions; no plaintext exposure window (178 tests passing, +1 new test)
 
-**Total effort**: 65 minutes | **Result**: All 4 P1 security fixes complete, 178 tests passing, clippy clean
+5. [x] **Fix insecure temp file deletion in AI operations** - 20min - Multiple files
+   - Issue: AI/RAG operations use `fs::remove_file()` which only unlinks; plaintext remains on disk sectors and persists indefinitely if operation fails before cleanup
+   - Impact: CRITICAL - Every AI operation (embed, ask, search, reflect, reindex) leaves plaintext recoverable via forensic tools; defeats encrypted storage
+   - Fix: Replace `fs::remove_file()` with `secure_delete()` in 5 locations + helper function; make secure_delete() pub(crate)
+   - Files: src/ops/edit.rs:298, ask.rs:116, search.rs:123, reflect.rs:62, reindex.rs:147, src/crypto/temp.rs:211,223
+   - Success: All temp file cleanup uses secure deletion pattern; no plaintext persistence or forensic recovery (178 tests passing, all existing tests still pass)
+
+**Total effort**: 85 minutes | **Result**: All 5 P1 security fixes complete, 178 tests passing, clippy clean
 
 ---
 
@@ -130,7 +137,7 @@ All 4 critical security and bug fixes from PR #50 review feedback implemented:
 
 - [x] All P0 fixes complete and tested
 - [x] All Ultrathink critical fixes complete and tested
-- [x] All P1 security fixes complete and tested (secure_delete, backup/restore config, auto-lock passphrase leak, world-readable temp files)
+- [x] All P1 security fixes complete and tested (secure_delete truncation, backup/restore config, auto-lock passphrase leak, world-readable temp files, insecure temp deletion)
 - [x] Full test suite passing: `cargo test --lib -- --test-threads=1` (178 passing, +2 new tests)
 - [x] Clippy clean: `cargo clippy --all-targets -- -D warnings`
 - [ ] Manual QA: Verify session timeout, passphrase prompts, temp file perms, transaction rollback

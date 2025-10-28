@@ -120,7 +120,7 @@ pub fn search_entries(
         // Decrypt the entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
-        let _ = fs::remove_file(&temp_path); // Clean up temp file
+        crate::crypto::temp::secure_delete(&temp_path)?; // Securely delete temp file
 
         // Chunk the content using same algorithm as embedding
         let chunks = chunk_text(&content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);

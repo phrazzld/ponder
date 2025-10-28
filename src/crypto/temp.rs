@@ -207,8 +207,8 @@ pub fn read_encrypted_string(
     // Read content
     let content = fs::read_to_string(&temp_path)?;
 
-    // Clean up temp file (guaranteed even on error above)
-    let _ = fs::remove_file(&temp_path);
+    // Securely delete temp file (overwrites before removal)
+    secure_delete(&temp_path)?;
 
     Ok(content)
 }
@@ -218,7 +218,9 @@ pub fn read_encrypted_string(
 /// Overwrites the file with zeros before removing it. This is not
 /// cryptographically secure (SSD wear leveling, filesystem journals),
 /// but better than direct deletion.
-fn secure_delete(path: &Path) -> AppResult<()> {
+///
+/// Made `pub(crate)` to allow secure cleanup in ops modules (embedding, RAG).
+pub(crate) fn secure_delete(path: &Path) -> AppResult<()> {
     // Get file size
     let metadata = fs::metadata(path)?;
     let file_size = metadata.len() as usize;

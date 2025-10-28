@@ -59,7 +59,7 @@ pub fn reflect_on_entry(
     // Decrypt the entry
     let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
     let content = fs::read_to_string(&temp_path)?;
-    let _ = fs::remove_file(&temp_path); // Clean up temp file
+    crate::crypto::temp::secure_delete(&temp_path)?; // Securely delete temp file
 
     debug!("Decrypted entry ({} words)", entry.word_count);
 

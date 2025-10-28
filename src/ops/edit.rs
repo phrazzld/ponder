@@ -294,8 +294,8 @@ fn generate_and_store_embeddings(
     let temp_path = decrypt_to_temp(encrypted_path, passphrase)?;
     let content = fs::read_to_string(&temp_path)?;
 
-    // Clean up temp file
-    let _ = fs::remove_file(&temp_path);
+    // Securely delete temp file (overwrites before removal)
+    crate::crypto::temp::secure_delete(&temp_path)?;
 
     // Chunk the text
     let chunks = chunk_text(&content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
