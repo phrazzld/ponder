@@ -679,6 +679,8 @@ impl r2d2::CustomizeConnection<Connection, rusqlite::Error> for SqlCipherConfig 
         conn.pragma_update(None, "kdf_iter", 256000)?;
         conn.pragma_update(None, "cipher_hmac_algorithm", "HMAC_SHA512")?;
         conn.pragma_update(None, "cipher_kdf_algorithm", "PBKDF2_HMAC_SHA512")?;
+        // Enable foreign key enforcement (SQLite default is OFF)
+        conn.pragma_update(None, "foreign_keys", true)?;
         Ok(())
     }
 
@@ -993,5 +995,91 @@ mod tests {
         // Try to initialize again - should fail (singleton constraint)
         let result = db.init_migration_state(20);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pooled_connections_enforce_foreign_keys() {
+        // Regression test for P1 bug: pooled connections must have FKs enabled
+        // SQLite defaults to foreign_keys=OFF, so each connection must enable it
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test_password".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+        db.initialize_schema().unwrap();
+
+        // Get a pooled connection and verify FKs are enabled
+        let conn = db.get_conn().unwrap();
+        let fk_enabled: i32 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            fk_enabled, 1,
+            "Foreign keys must be enabled on pooled connections"
+        );
+
+        // Insert an entry
+        conn.execute(
+            "INSERT INTO entries (path, date, checksum, word_count) VALUES (?, ?, ?, ?)",
+            ["test.md", "2024-01-01", "abc123", "100"],
+        )
+        .unwrap();
+
+        // Insert an embedding referencing the entry
+        let blob = vec![0u8; 100];
+        conn.execute(
+            "INSERT INTO embeddings (entry_id, chunk_idx, embedding, checksum) VALUES (?, ?, ?, ?)",
+            rusqlite::params![1, 0, &blob, "abc123"],
+        )
+        .unwrap();
+
+        // Verify embedding exists
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM embeddings WHERE entry_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Delete the entry - ON DELETE CASCADE should fire
+        conn.execute("DELETE FROM entries WHERE id = 1", [])
+            .unwrap();
+
+        // Verify embedding was cascaded (deleted automatically)
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM embeddings WHERE entry_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "Embedding should be deleted via ON DELETE CASCADE"
+        );
+
+        drop(conn);
+
+        // Test with a fresh pooled connection (verify FK pragma persists across pool)
+        let conn2 = db.get_conn().unwrap();
+        let fk_enabled: i32 = conn2
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            fk_enabled, 1,
+            "Foreign keys must be enabled on all pooled connections"
+        );
+
+        // Try to insert embedding with non-existent entry_id (should fail)
+        let result = conn2.execute(
+            "INSERT INTO embeddings (entry_id, chunk_idx, embedding, checksum) VALUES (?, ?, ?, ?)",
+            rusqlite::params![999, 0, &blob, "abc123"],
+        );
+        assert!(
+            result.is_err(),
+            "FK constraint should prevent orphaned embedding"
+        );
     }
 }
