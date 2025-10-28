@@ -30,6 +30,7 @@ pub const SCHEMA_VERSION: i32 = 1;
 /// - `migration_log`: v1.0 to v2.0 migration tracking per entry
 /// - `migration_state`: Overall migration progress state
 /// - `summaries`: AI-generated summaries (daily, weekly, monthly)
+/// - `patterns`: AI-detected patterns (temporal, topic, sentiment, correlation)
 ///
 /// # Errors
 ///
@@ -214,6 +215,27 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
         CREATE INDEX IF NOT EXISTS idx_summaries_date ON summaries(date DESC);
         CREATE INDEX IF NOT EXISTS idx_summaries_level ON summaries(level);
         CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at DESC);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Patterns table: AI-detected patterns in journal entries
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS patterns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pattern_type TEXT NOT NULL CHECK(pattern_type IN ('temporal', 'topic', 'sentiment', 'correlation')),
+            description TEXT NOT NULL,
+            metadata TEXT,
+            confidence REAL CHECK(confidence >= 0.0 AND confidence <= 1.0),
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
+        CREATE INDEX IF NOT EXISTS idx_patterns_last_seen ON patterns(last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON patterns(confidence DESC);
         "#,
     )
     .map_err(DatabaseError::Sqlite)?;
@@ -706,5 +728,146 @@ mod tests {
             )
             .unwrap();
         assert_eq!(index_count, 3); // date, level, created_at
+    }
+
+    #[test]
+    fn test_patterns_table_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify patterns table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='patterns'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_patterns_type_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid pattern types should succeed
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["temporal", "You write most on Sunday evenings", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["topic", "Top topic: work (12 entries)", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["sentiment", "Mood improved 15% this month", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["correlation", "Exercise correlates with positive mood", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        // Invalid pattern type should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["invalid", "Invalid pattern", "2024-01-01", "2024-01-31"],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_patterns_confidence_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid confidence values (0.0 to 1.0) should succeed
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 1", "2024-01-01", "2024-01-31", 0.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 2", "2024-01-01", "2024-01-31", 0.5],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 3", "2024-01-01", "2024-01-31", 1.0],
+        )
+        .unwrap();
+
+        // Invalid confidence (> 1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 4", "2024-01-01", "2024-01-31", 1.5],
+        );
+        assert!(result.is_err());
+
+        // Invalid confidence (< 0.0) should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 5", "2024-01-01", "2024-01-31", -0.1],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_patterns_with_metadata() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Insert pattern with JSON metadata
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, metadata, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                "temporal",
+                "Peak writing time: 9-11pm",
+                r#"{"hour_range": [21, 23], "day_of_week": "Sunday", "count": 15}"#,
+                "2024-01-01",
+                "2024-01-31",
+                0.85
+            ],
+        )
+        .unwrap();
+
+        // Retrieve and verify metadata
+        let metadata: String = conn
+            .query_row(
+                "SELECT metadata FROM patterns WHERE pattern_type = 'temporal'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert!(metadata.contains("hour_range"));
+        assert!(metadata.contains("day_of_week"));
+    }
+
+    #[test]
+    fn test_patterns_indexes_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify indexes exist
+        let index_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_patterns_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 3); // type, last_seen, confidence
     }
 }

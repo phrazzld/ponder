@@ -43,7 +43,7 @@
 
 ### Database Schema
 
-- [~] Create summaries table migration in src/db/schema.rs
+- [x] Create summaries table migration in src/db/schema.rs
   ```
   Files: src/db/schema.rs:36-224
   Approach: Follow backup_log table pattern (lines 132-147)
@@ -53,7 +53,7 @@
   Time: 45min
   ```
 
-- [ ] Create patterns table migration in src/db/schema.rs
+- [~] Create patterns table migration in src/db/schema.rs
   ```
   Files: src/db/schema.rs:36-224
   Approach: Follow insights table pattern (lines 96-112)
