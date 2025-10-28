@@ -359,6 +359,66 @@ impl OllamaClient {
         let model_name = model.unwrap_or(DEFAULT_CHAT_MODEL);
         self.chat(model_name, messages)
     }
+
+    /// Analyzes the sentiment of text using an LLM.
+    ///
+    /// Returns a sentiment score between -1.0 (very negative) and 1.0 (very positive).
+    /// Uses the chat model to analyze emotional tone and parse the numeric response.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text to analyze for sentiment
+    ///
+    /// # Returns
+    ///
+    /// A sentiment score between -1.0 and 1.0, where:
+    /// - -1.0 = Very negative
+    /// - -0.5 = Moderately negative
+    /// - 0.0 = Neutral
+    /// - 0.5 = Moderately positive
+    /// - 1.0 = Very positive
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Ollama API is not reachable
+    /// - Model returns invalid response format
+    /// - Response cannot be parsed as a number
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::OllamaClient;
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let score = client.analyze_sentiment("I had a wonderful day!").unwrap();
+    /// assert!(score > 0.0); // Positive sentiment
+    /// ```
+    pub fn analyze_sentiment(&self, text: &str) -> AppResult<f32> {
+        use crate::ai::prompts::sentiment_prompt;
+
+        let messages = sentiment_prompt(text);
+        let response = self.chat(DEFAULT_CHAT_MODEL, &messages)?;
+
+        // Parse the response, which should be a single number
+        let trimmed = response.trim();
+        let score: f32 = trimmed.parse().map_err(|e| {
+            AIError::InvalidResponse(format!(
+                "Failed to parse sentiment score '{}': {}",
+                trimmed, e
+            ))
+        })?;
+
+        // Clamp to valid range
+        let clamped = score.clamp(-1.0, 1.0);
+        if (score - clamped).abs() > 0.01 {
+            debug!(
+                "Sentiment score {} out of range, clamped to {}",
+                score, clamped
+            );
+        }
+
+        Ok(clamped)
+    }
 }
 
 #[cfg(test)]
@@ -398,5 +458,13 @@ mod tests {
         // the method exists and has the right signature
         let _result: Result<String, _> = client.chat_with_model(None, &messages);
         let _result: Result<String, _> = client.chat_with_model(Some("custom-model"), &messages);
+    }
+
+    #[test]
+    fn test_analyze_sentiment_method_exists() {
+        // Unit test verifying method signature
+        // Integration tests with actual Ollama in tests/ops_integration_tests.rs
+        let client = OllamaClient::new("http://localhost:11434");
+        let _result: Result<f32, _> = client.analyze_sentiment("test text");
     }
 }

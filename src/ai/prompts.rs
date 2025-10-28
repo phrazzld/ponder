@@ -63,6 +63,21 @@ Keep your reflection concise (2-3 paragraphs) and actionable."#,
     ]
 }
 
+/// System prompt for sentiment analysis.
+///
+/// This prompt instructs the AI to analyze emotional tone and return a numeric score.
+pub const SENTIMENT_PROMPT: &str = r#"You are a sentiment analysis assistant. Your role is to analyze text and determine its emotional tone.
+
+Respond with ONLY a single number between -1.0 and 1.0:
+- -1.0 = Very negative (despair, anger, severe distress)
+- -0.5 = Moderately negative (frustration, sadness, worry)
+- 0.0 = Neutral (factual, balanced, neither positive nor negative)
+- 0.5 = Moderately positive (contentment, hope, mild joy)
+- 1.0 = Very positive (elation, gratitude, strong happiness)
+
+Be nuanced in your assessment. Most real entries fall between -0.7 and 0.7.
+Respond with just the number, nothing else."#;
+
 /// Builds messages for answering a question using journal context.
 ///
 /// Creates a conversation that asks the AI to answer a question based on
@@ -109,6 +124,35 @@ Instructions:
 
 Provide a clear, helpful answer."#,
             question, context
+        )),
+    ]
+}
+
+/// Builds messages for sentiment analysis of text.
+///
+/// Creates a conversation that asks the AI to analyze the emotional tone
+/// of the provided text and return a sentiment score.
+///
+/// # Arguments
+///
+/// * `text` - The text to analyze for sentiment
+///
+/// # Returns
+///
+/// A vector of messages suitable for chat completion that will return
+/// a sentiment score between -1.0 and 1.0.
+pub fn sentiment_prompt(text: &str) -> Vec<Message> {
+    vec![
+        Message::system(SENTIMENT_PROMPT),
+        Message::user(format!(
+            r#"Analyze the sentiment of this text:
+
+---
+{}
+---
+
+Respond with only a number between -1.0 and 1.0."#,
+            text
         )),
     ]
 }
@@ -179,5 +223,26 @@ mod tests {
         let messages = ask_prompt("test question", &["context".to_string()]);
         assert!(messages[1].content.contains("based") || messages[1].content.contains("Based"));
         assert!(messages[1].content.contains("cite") || messages[1].content.contains("Cite"));
+    }
+
+    #[test]
+    fn test_sentiment_prompt_structure() {
+        let text = "I'm feeling great today!";
+        let messages = sentiment_prompt(text);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].content, SENTIMENT_PROMPT);
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains(text));
+        assert!(messages[1].content.contains("-1.0"));
+        assert!(messages[1].content.contains("1.0"));
+    }
+
+    #[test]
+    fn test_sentiment_prompt_contains_text() {
+        let text = "This is a test entry with specific content.";
+        let messages = sentiment_prompt(text);
+        assert!(messages[1].content.contains(text));
     }
 }
