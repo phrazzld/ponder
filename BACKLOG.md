@@ -1,7 +1,7 @@
 # BACKLOG
 
-Last groomed: 2025-10-25 (migrated P1 tasks from TODO, P0 fixes complete)
-Analyzed by: 7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product) + PR review feedback (10 reviewers across 7 comprehensive reviews + 3 Codex inline comments)
+Last groomed: 2025-10-27 (added comprehensive code review findings, all 4 P1 security fixes complete)
+Analyzed by: 7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product) + PR review feedback (10 reviewers across 7 comprehensive reviews + 3 Codex inline comments) + Comprehensive v2.0 code review (10 issues assessed)
 
 ---
 
@@ -107,6 +107,289 @@ for attempt in 1..=3 {
 **Dependencies**: None
 **Risk**: LOW - Improves UX without security impact
 **Test**: Manual testing with wrong/correct passphrases
+
+---
+
+## Comprehensive Code Review Follow-Up (Post-v2.0)
+
+**Source**: Comprehensive code review of v2.0 - assessed all issues as non-blocking
+**Total Items**: 10 issues identified (3 Critical, 3 High Priority, 4 Medium)
+**Assessment**: NONE are merge blockers - all are quality improvements for post-merge work
+**Estimated Effort**: High Priority (4-6h), Medium Priority (6-8h), Low Priority (8-12h)
+
+### Reviewer Errors Noted (For Learning)
+- **Issue #1 (SQL Injection)**: Overly cautious - `col` variable comes from controlled match, not user input
+- **Issue #2 (Missing Indexes)**: Missed that UNIQUE constraints automatically create indexes in SQLite
+- **Issue #5 (Connection During Edit)**: Misread code flow - connection obtained AFTER editor returns, not before
+
+---
+
+### [Code Quality] Replace String Formatting with Prepared Statements (v2.0.1)
+**File**: src/db/mod.rs:382-388
+**Severity**: Medium (Reviewer labeled Critical, but not exploitable)
+**Issue**: update_migration_status() uses string formatting to construct SQL with `col` variable
+```rust
+&format!(
+    "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ?, {} = CURRENT_TIMESTAMP WHERE v1_path = ?",
+    col  // ← String formatting
+),
+```
+**Reality**: `col` comes from controlled match with only 3 values ("migrated_at", "verified_at", or None) - NOT exploitable
+**Fix**: Use separate prepared statements for clarity
+```rust
+match status {
+    "migrated" => {
+        conn.execute(
+            "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ?, migrated_at = CURRENT_TIMESTAMP WHERE v1_path = ?",
+            params![status, checksum_match, error_message, v1_path],
+        )?;
+    }
+    "verified" => {
+        conn.execute(
+            "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ?, verified_at = CURRENT_TIMESTAMP WHERE v1_path = ?",
+            params![status, checksum_match, error_message, v1_path],
+        )?;
+    }
+    _ => {
+        conn.execute(
+            "UPDATE migration_log SET status = ?, checksum_match = ?, error_message = ? WHERE v1_path = ?",
+            params![status, checksum_match, error_message, v1_path],
+        )?;
+    }
+}
+```
+**Effort**: 30min | **Value**: LOW - Code clarity, no security benefit
+**Priority**: Low - Works correctly, just cleaner code
+
+---
+
+### [Performance] Add Missing Database Index on entries(checksum) (v2.0.1)
+**File**: src/db/schema.rs
+**Severity**: Medium (Reviewer labeled Critical, but partially incorrect)
+**Issue**: Reviewer claimed missing indexes on migration_log.v1_path and entries.checksum
+**Reality**:
+- migration_log.v1_path has UNIQUE constraint → automatically creates index (reviewer missed this)
+- migration_log.v2_path has UNIQUE constraint → automatically creates index
+- entries.checksum truly missing (used in conflict detection)
+**Fix**: Add index on entries(checksum) for faster conflict detection
+```rust
+// In create_tables(), after entries table creation:
+conn.execute_batch(
+    "CREATE INDEX IF NOT EXISTS idx_entries_checksum ON entries(checksum);"
+)?;
+```
+**Effort**: 5min | **Value**: LOW-MEDIUM - Only matters for large datasets
+**Priority**: Medium - Conflict detection works, just slower at scale
+
+---
+
+### [Performance] Add Composite Index on migration_log(status, date) (v2.0.1)
+**File**: src/db/schema.rs
+**Severity**: Low
+**Issue**: Queries filtering by both status and date lack composite index
+**Fix**: Add composite index
+```rust
+conn.execute_batch(
+    "CREATE INDEX IF NOT EXISTS idx_migration_log_status_date ON migration_log(status, date);"
+)?;
+```
+**Effort**: 5min | **Value**: LOW - Only matters for large migration batches
+**Priority**: Low - Works correctly, just faster for filtered queries
+
+---
+
+### [Reliability] Add Connection Timeout to Database Pool (v2.0.1)
+**File**: src/db/mod.rs:78-84
+**Severity**: Medium (Reviewer labeled Critical, but not critical for CLI)
+**Issue**: Pool lacks connection timeout - can hang indefinitely if connections exhausted
+```rust
+let pool = Pool::builder()
+    .max_size(5)
+    .connection_customizer(...)
+    .build(manager)?;  // ← No timeout
+```
+**Reality**: Max pool size 5 sufficient for single-user CLI - won't exhaust in normal usage
+**Fix**: Add timeout for production hardening
+```rust
+let pool = Pool::builder()
+    .max_size(5)
+    .connection_timeout(Duration::from_secs(30))
+    .connection_customizer(...)
+    .build(manager)?;
+```
+**Effort**: 5min | **Value**: MEDIUM - Production hardening, not critical for CLI
+**Priority**: High - Good practice for any connection pool
+
+---
+
+### [Reliability] Implement Panic-Safe Temp File Cleanup (v2.0.1)
+**File**: src/ops/ask.rs:116, src/ops/search.rs:123, src/ops/edit.rs:298, src/ops/reflect.rs:62, src/ops/reindex.rs:147
+**Severity**: Medium (Reviewer labeled High, but low risk for CLI)
+**Issue**: Cleanup uses `let _ = fs::remove_file()` which doesn't guarantee cleanup on panic
+```rust
+let temp_path = decrypt_to_temp(encrypted_path, passphrase)?;
+let content = fs::read_to_string(&temp_path)?;
+let _ = fs::remove_file(&temp_path);  // ← Lost if panic between creation and cleanup
+```
+**Reality**:
+- Main edit path uses encrypt_from_temp() which calls secure_delete()
+- Other paths (ask, search, reflect, reindex) use manual cleanup
+- Risk is LOW: panics rare, /tmp cleared on reboot, single-user CLI
+**Fix**: Use RAII pattern with Drop guard or tempfile::NamedTempFile
+```rust
+// Option 1: Drop guard
+struct TempFileGuard(PathBuf);
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+// Option 2: Use tempfile crate
+use tempfile::NamedTempFile;
+let temp_file = NamedTempFile::new()?;
+// Automatically deleted on drop
+```
+**Effort**: 2h | **Value**: MEDIUM - Prevents temp file leaks on panic
+**Priority**: High - Good reliability practice
+
+---
+
+### [Architecture] Implement Schema Migration Framework (v2.0.1)
+**File**: src/db/mod.rs:174-196
+**Severity**: High (Reviewer labeled High, but can defer to v2.0.1)
+**Issue**: Code tracks schema version but has no upgrade/downgrade mechanism
+```rust
+let version = schema::get_schema_version(&conn)?;
+match version {
+    Some(v) if v < schema::SCHEMA_VERSION => {
+        warn!("Schema version {} is older. Migration may be needed.", v);
+        // ← No actual migration
+    }
+    ...
+}
+```
+**Reality**: This is v2.0.0 first encrypted schema - no existing users with v2.0 data to migrate
+**Fix**: Implement migration framework BEFORE first schema change in v2.0.1
+```rust
+// src/db/migrations/mod.rs
+pub fn run_migrations(conn: &Connection, from_version: i32, to_version: i32) -> AppResult<()> {
+    let tx = conn.transaction()?;
+
+    for version in from_version..to_version {
+        match version {
+            1 => migrate_v1_to_v2(&tx)?,
+            2 => migrate_v2_to_v3(&tx)?,
+            _ => return Err(DatabaseError::UnknownMigration { version }),
+        }
+
+        tx.execute("UPDATE schema_info SET version = ?", [version + 1])?;
+    }
+
+    tx.commit()?;
+    Ok(())
+}
+```
+**Effort**: 4h | **Value**: HIGH - Critical for maintainability
+**Priority**: High - Must implement before v2.0.1 schema changes
+
+---
+
+### [Reliability] Improve Concurrent Edit Conflict Handling (v2.1)
+**File**: src/ops/edit.rs:150-157
+**Severity**: Medium
+**Issue**: Conflict detection warns but still overwrites
+```rust
+if db_checksum != original_checksum {
+    eprintln!("⚠️  Warning: This entry was modified while you were editing.");
+    eprintln!("   Your changes will overwrite those modifications.");
+}
+// ← Still saves and overwrites
+```
+**Fix**: Options:
+1. File locking to prevent concurrent edits
+2. Refuse to save on conflict (require user to re-edit)
+3. Three-way merge (complex)
+**Effort**: 3h (locking) to 8h (merge) | **Value**: MEDIUM - Better data safety
+**Priority**: Medium - Current behavior is documented
+
+---
+
+### [Maintainability] Log Temp File Cleanup Failures (v2.0.1)
+**File**: Multiple locations using `let _ = fs::remove_file()`
+**Severity**: Low
+**Issue**: Silent error swallowing - cleanup failures invisible
+```rust
+let _ = fs::remove_file(&temp_path);  // ← Errors discarded
+```
+**Fix**: Log cleanup failures for debugging
+```rust
+if let Err(e) = fs::remove_file(&temp_path) {
+    warn!("Failed to cleanup temp file {:?}: {}", temp_path, e);
+}
+```
+**Effort**: 30min | **Value**: LOW - Debugging aid
+**Priority**: Low - Not user-facing
+
+---
+
+### [Reliability] Add Input Validation to Database Operations (v2.1)
+**File**: src/db/entries.rs
+**Severity**: Medium
+**Issue**: upsert_entry() lacks validation for inputs
+- Path format (should be encrypted .age files)
+- Date range (reasonable bounds)
+- Checksum format (BLAKE3 hex string length)
+- Word count bounds (reasonable limits)
+**Fix**: Add validation function
+```rust
+fn validate_entry(path: &Path, date: NaiveDate, checksum: &str, word_count: usize) -> AppResult<()> {
+    // Path must end with .md.age
+    if !path.extension().is_some_and(|e| e == "age") {
+        return Err(DatabaseError::InvalidPath { path: path.to_path_buf() });
+    }
+
+    // Date must be reasonable (1900-2100)
+    if date.year() < 1900 || date.year() > 2100 {
+        return Err(DatabaseError::InvalidDate { date });
+    }
+
+    // Checksum must be 64-char hex (BLAKE3)
+    if checksum.len() != 64 || !checksum.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(DatabaseError::InvalidChecksum { checksum: checksum.to_string() });
+    }
+
+    // Word count must be reasonable (< 1M words)
+    if word_count > 1_000_000 {
+        return Err(DatabaseError::InvalidWordCount { count: word_count });
+    }
+
+    Ok(())
+}
+```
+**Effort**: 2h | **Value**: MEDIUM - Prevents corrupted data
+**Priority**: Medium - Database constraints already prevent some issues
+
+---
+
+### [Performance] Document Vector Search O(n) Performance (v2.1)
+**File**: src/db/embeddings.rs:136-190
+**Severity**: Low
+**Issue**: search_similar_chunks() calculates similarity for ALL embeddings - O(n)
+- 1000 entries × 10 chunks = 10,000 calculations per query
+- No approximate nearest neighbor (ANN) indexing
+**Fix Options**:
+1. **Document performance characteristics** (5min)
+   - Add doc comment noting O(n) performance
+   - Mention scales to ~10K chunks before slowdown
+2. **Implement ANN indexing** (8-12h)
+   - Use sqlite-vss extension with HNSW
+   - Or use hnswlib-rs for faster search
+**Effort**: 5min (document) to 12h (implement ANN)
+**Value**: LOW now, HIGH at scale (1000+ entries)
+**Priority**: Low for v2.0, Medium for v2.2+ as user base grows
+
+**Recommended**: Document for now, implement ANN in v2.2 when needed
 
 ---
 
@@ -1378,8 +1661,12 @@ Beautiful reading UI with calendar view, search, tag filtering
 
 ## Summary Statistics
 
-**Total Items**: 50 (updated after P1 migration from TODO)
+**Total Items**: 60 (updated after comprehensive code review - added 10 quality improvement items)
 - **P1 Post-Merge**: 4 (security, UX, documentation - should fix in v2.0.1)
+- **Comprehensive Review Follow-Up**: 10 (all assessed as non-blocking quality improvements)
+  - High Priority: 3 items (connection timeout, panic-safe cleanup, schema migrations)
+  - Medium Priority: 5 items (code quality, performance, reliability)
+  - Low Priority: 2 items (logging, documentation)
 - **v2.1+ Follow-Up**: 10 (PR review feedback - nice to have)
 - Immediate: 3 (2 CRITICAL, 1 HIGH)
 - High-Value: 10 (adoption blockers, retention drivers, PRD priorities)
@@ -1398,6 +1685,10 @@ Beautiful reading UI with calendar view, search, tag filtering
 
 **Effort Estimates**:
 - **P1 Post-Merge**: ~1.5 hours (4 tasks after v2.0 merge)
+- **Comprehensive Review Follow-Up**: ~18-26 hours total
+  - High Priority: 4-6 hours (connection timeout, panic-safe cleanup, schema migrations)
+  - Medium Priority: 6-8 hours (code quality, performance, reliability)
+  - Low Priority: 8-12 hours (ANN indexing if implemented, else 35min for docs/logging)
 - v2.1+ Follow-Up: ~10 hours (10 PR review items)
 - Immediate Concerns: ~1 hour (3 critical issues)
 - High-Value Improvements: ~25 days (foundation features)
@@ -1406,11 +1697,13 @@ Beautiful reading UI with calendar view, search, tag filtering
 
 **Recommended Next Steps** (Post-v2.0 Merge):
 1. **Implement P1 improvements** (passphrase validation, env var guard, recovery warning, retry logic) - 1.5 hours
-2. Implement v2.1 follow-up items (atomic embeddings, redundant decryption, etc.) - 10 hours
-3. Fix CRITICAL issues (build failure + dependency vulnerability) - 20 minutes
-4. Implement foundation features (search, templates, list, git sync) - 18 days
-5. Address high-priority UX issues (error messages, feedback) - 2 hours
-6. Tackle technical debt incrementally during feature work
+2. **Address comprehensive review high-priority items** (connection timeout, panic-safe cleanup, schema migrations) - 4-6 hours
+3. Implement comprehensive review medium-priority items (indexes, prepared statements, validation) - 6-8 hours
+4. Implement v2.1 follow-up items (atomic embeddings, redundant decryption, etc.) - 10 hours
+5. Fix CRITICAL issues (build failure + dependency vulnerability) - 20 minutes
+6. Implement foundation features (search, templates, list, git sync) - 18 days
+7. Address high-priority UX issues (error messages, feedback) - 2 hours
+8. Tackle technical debt incrementally during feature work
 
 **Cross-Perspective Insights**:
 - Pass-through wrapper flagged by 3 agents (complexity, architecture, maintainability)
@@ -1420,4 +1713,10 @@ Beautiful reading UI with calendar view, search, tag filtering
 
 ---
 
-*This backlog represents a comprehensive 7-perspective analysis of the Ponder codebase. Priorities reflect both technical quality and product-market fit considerations.*
+*This backlog represents a comprehensive analysis of the Ponder codebase from multiple sources:*
+- *7 specialized perspectives (complexity, architecture, security, performance, maintainability, UX, product)*
+- *PR #50 review feedback (10 reviewers across 7 comprehensive reviews + 3 Codex inline comments)*
+- *Comprehensive v2.0 code review (10 issues - all assessed as non-blocking quality improvements)*
+- *Priorities reflect both technical quality and product-market fit considerations*
+
+**Key Finding**: All 4 P1 security fixes complete. Comprehensive review found quality improvements but NO merge blockers. PR #50 ready to merge.
