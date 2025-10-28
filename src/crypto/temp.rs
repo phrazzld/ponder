@@ -89,11 +89,22 @@ pub fn decrypt_to_temp(encrypted_path: &Path, passphrase: &SecretString) -> AppR
     let temp_dir = get_secure_temp_dir()?;
 
     // Generate unique temp file name based on original file
+    // Strip .age extension to preserve underlying extension (e.g., .md)
+    // Format: ponder-{uuid}-{filename} to ensure correct extension detection
     let file_name = encrypted_path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("temp");
-    let temp_path = temp_dir.join(format!("ponder-{}-{}", file_name, uuid::Uuid::new_v4()));
+
+    // Remove .age extension if present: "05.md.age" -> "05.md"
+    let file_name_without_age = file_name.strip_suffix(".age").unwrap_or(file_name);
+
+    // Put UUID before filename to preserve extension: "ponder-{uuid}-05.md" has .md extension
+    let temp_path = temp_dir.join(format!(
+        "ponder-{}-{}",
+        uuid::Uuid::new_v4(),
+        file_name_without_age
+    ));
 
     // Create temp file with secure permissions BEFORE writing any plaintext
     // This prevents a race condition window where plaintext is world-readable
