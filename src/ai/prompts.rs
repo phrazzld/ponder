@@ -201,6 +201,137 @@ Respond with only a JSON array of 3-5 topic strings."#,
     ]
 }
 
+/// System prompt for daily summaries.
+///
+/// This prompt instructs the AI to create a concise daily summary.
+pub const SUMMARY_DAILY_PROMPT: &str = r#"You are a journal summarization assistant. Your role is to create concise, meaningful summaries of journal entries.
+
+For daily summaries:
+- Capture the main events, thoughts, and emotions
+- Highlight key moments or decisions
+- Note any patterns or themes
+- Keep it brief but meaningful (2-3 sentences)
+- Maintain the author's voice and perspective
+
+Be objective yet empathetic. Focus on what matters most to the author."#;
+
+/// System prompt for weekly summaries.
+///
+/// This prompt instructs the AI to create a weekly summary from daily summaries.
+pub const SUMMARY_WEEKLY_PROMPT: &str = r#"You are a journal summarization assistant. Your role is to create weekly summaries from daily summaries.
+
+For weekly summaries:
+- Synthesize patterns and themes across the week
+- Highlight major events, accomplishments, or challenges
+- Note emotional trajectory or significant shifts
+- Identify growth areas or recurring topics
+- Keep it focused (1 paragraph)
+
+Connect the dots between days. Show the bigger picture."#;
+
+/// System prompt for monthly summaries.
+///
+/// This prompt instructs the AI to create a monthly summary from weekly summaries.
+pub const SUMMARY_MONTHLY_PROMPT: &str = r#"You are a journal summarization assistant. Your role is to create monthly summaries from weekly summaries.
+
+For monthly summaries:
+- Synthesize the month's major themes and patterns
+- Highlight significant accomplishments, challenges, or changes
+- Note overall emotional tone and trajectory
+- Identify key insights or personal growth
+- Keep it comprehensive yet concise (2 paragraphs)
+
+Provide perspective on the month as a whole. What defined this period?"#;
+
+/// Builds messages for daily summary generation.
+///
+/// # Arguments
+///
+/// * `entry_content` - The full content of the daily journal entry
+///
+/// # Returns
+///
+/// A vector of messages suitable for chat completion.
+pub fn daily_summary_prompt(entry_content: &str) -> Vec<Message> {
+    vec![
+        Message::system(SUMMARY_DAILY_PROMPT),
+        Message::user(format!(
+            r#"Please create a concise daily summary of this journal entry:
+
+---
+{}
+---
+
+Provide a 2-3 sentence summary capturing the main themes, events, and emotions."#,
+            entry_content
+        )),
+    ]
+}
+
+/// Builds messages for weekly summary generation.
+///
+/// # Arguments
+///
+/// * `daily_summaries` - A slice of daily summary texts for the week
+///
+/// # Returns
+///
+/// A vector of messages suitable for chat completion.
+pub fn weekly_summary_prompt(daily_summaries: &[String]) -> Vec<Message> {
+    let combined = daily_summaries
+        .iter()
+        .enumerate()
+        .map(|(i, summary)| format!("Day {}: {}", i + 1, summary))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    vec![
+        Message::system(SUMMARY_WEEKLY_PROMPT),
+        Message::user(format!(
+            r#"Please create a weekly summary from these daily summaries:
+
+---
+{}
+---
+
+Provide a focused paragraph synthesizing the week's themes, patterns, and key moments."#,
+            combined
+        )),
+    ]
+}
+
+/// Builds messages for monthly summary generation.
+///
+/// # Arguments
+///
+/// * `weekly_summaries` - A slice of weekly summary texts for the month
+///
+/// # Returns
+///
+/// A vector of messages suitable for chat completion.
+pub fn monthly_summary_prompt(weekly_summaries: &[String]) -> Vec<Message> {
+    let combined = weekly_summaries
+        .iter()
+        .enumerate()
+        .map(|(i, summary)| format!("Week {}: {}", i + 1, summary))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    vec![
+        Message::system(SUMMARY_MONTHLY_PROMPT),
+        Message::user(format!(
+            r#"Please create a monthly summary from these weekly summaries:
+
+---
+{}
+---
+
+Provide 2 paragraphs synthesizing the month's major themes, accomplishments, and insights."#,
+            combined
+        )),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,5 +439,70 @@ mod tests {
         let text = "Specific test content about multiple topics.";
         let messages = topic_extraction_prompt(text);
         assert!(messages[1].content.contains(text));
+    }
+
+    #[test]
+    fn test_daily_summary_prompt_structure() {
+        let entry = "Today was productive. I finished the project and felt accomplished.";
+        let messages = daily_summary_prompt(entry);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].content, SUMMARY_DAILY_PROMPT);
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains(entry));
+        assert!(messages[1].content.contains("summary"));
+    }
+
+    #[test]
+    fn test_weekly_summary_prompt_structure() {
+        let dailies = vec![
+            "Monday summary".to_string(),
+            "Tuesday summary".to_string(),
+            "Wednesday summary".to_string(),
+        ];
+        let messages = weekly_summary_prompt(&dailies);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].content, SUMMARY_WEEKLY_PROMPT);
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains("Monday summary"));
+        assert!(messages[1].content.contains("Day 1:"));
+        assert!(messages[1].content.contains("Day 3:"));
+    }
+
+    #[test]
+    fn test_monthly_summary_prompt_structure() {
+        let weeklies = vec![
+            "Week 1 summary".to_string(),
+            "Week 2 summary".to_string(),
+            "Week 3 summary".to_string(),
+            "Week 4 summary".to_string(),
+        ];
+        let messages = monthly_summary_prompt(&weeklies);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].content, SUMMARY_MONTHLY_PROMPT);
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains("Week 1 summary"));
+        assert!(messages[1].content.contains("Week 1:"));
+        assert!(messages[1].content.contains("Week 4:"));
+    }
+
+    #[test]
+    fn test_summary_prompts_include_content() {
+        let daily_entry = "Test entry content";
+        let daily_messages = daily_summary_prompt(daily_entry);
+        assert!(daily_messages[1].content.contains(daily_entry));
+
+        let weekly_summaries = vec!["Test summary".to_string()];
+        let weekly_messages = weekly_summary_prompt(&weekly_summaries);
+        assert!(weekly_messages[1].content.contains("Test summary"));
+
+        let monthly_summaries = vec!["Test weekly".to_string()];
+        let monthly_messages = monthly_summary_prompt(&monthly_summaries);
+        assert!(monthly_messages[1].content.contains("Test weekly"));
     }
 }
