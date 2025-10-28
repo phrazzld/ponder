@@ -142,7 +142,7 @@
 
 ### Core Summarization Logic
 
-- [~] Create src/ops/summarize.rs with daily summary function
+- [x] Create src/ops/summarize.rs with daily summary function
   ```
   Files: NEW src/ops/summarize.rs
   Approach: Follow src/ops/ask.rs RAG pipeline (lines 46-52)
@@ -152,7 +152,7 @@
   Time: 1.5hr
   ```
 
-- [ ] Implement weekly summary aggregation in summarize.rs
+- [~] Implement weekly summary aggregation in summarize.rs
   ```
   Files: src/ops/summarize.rs
   Approach: Fetch 7 daily summaries, aggregate with AI
