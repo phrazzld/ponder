@@ -419,6 +419,51 @@ impl OllamaClient {
 
         Ok(clamped)
     }
+
+    /// Extracts key topics from text using an LLM.
+    ///
+    /// Returns a list of 3-5 main topics or themes identified in the text.
+    /// Uses the chat model to analyze content and parse the JSON response.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text to analyze for topics
+    ///
+    /// # Returns
+    ///
+    /// A vector of topic strings (typically 3-5 topics). Returns empty vector
+    /// if no topics could be extracted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Ollama API is not reachable
+    /// - Model returns invalid JSON format
+    /// - Response cannot be parsed as string array
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::OllamaClient;
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let topics = client.extract_topics("Today I worked on my career plans.").unwrap();
+    /// assert!(!topics.is_empty());
+    /// ```
+    pub fn extract_topics(&self, text: &str) -> AppResult<Vec<String>> {
+        use crate::ai::prompts::topic_extraction_prompt;
+
+        let messages = topic_extraction_prompt(text);
+        let response = self.chat(DEFAULT_CHAT_MODEL, &messages)?;
+
+        // Parse the response, which should be a JSON array of strings
+        let trimmed = response.trim();
+        let topics: Vec<String> = serde_json::from_str(trimmed).map_err(|e| {
+            AIError::InvalidResponse(format!("Failed to parse topics JSON '{}': {}", trimmed, e))
+        })?;
+
+        debug!("Extracted {} topics", topics.len());
+        Ok(topics)
+    }
 }
 
 #[cfg(test)]
@@ -466,5 +511,13 @@ mod tests {
         // Integration tests with actual Ollama in tests/ops_integration_tests.rs
         let client = OllamaClient::new("http://localhost:11434");
         let _result: Result<f32, _> = client.analyze_sentiment("test text");
+    }
+
+    #[test]
+    fn test_extract_topics_method_exists() {
+        // Unit test verifying method signature
+        // Integration tests with actual Ollama in tests/ops_integration_tests.rs
+        let client = OllamaClient::new("http://localhost:11434");
+        let _result: Result<Vec<String>, _> = client.extract_topics("test text");
     }
 }

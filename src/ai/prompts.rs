@@ -78,6 +78,21 @@ Respond with ONLY a single number between -1.0 and 1.0:
 Be nuanced in your assessment. Most real entries fall between -0.7 and 0.7.
 Respond with just the number, nothing else."#;
 
+/// System prompt for topic extraction.
+///
+/// This prompt instructs the AI to extract key topics/themes and return them as JSON.
+pub const TOPIC_EXTRACTION_PROMPT: &str = r#"You are a topic extraction assistant. Your role is to analyze text and identify the main topics or themes.
+
+Extract 3-5 key topics from the text. Topics should be:
+- Concrete and specific (e.g., "career planning", "family dinner", "anxiety about deadlines")
+- Single phrases or short descriptions (2-5 words)
+- Representative of the main themes in the text
+
+Respond with ONLY a JSON array of strings. Example format:
+["topic one", "topic two", "topic three"]
+
+Do not include any other text, explanation, or formatting - just the JSON array."#;
+
 /// Builds messages for answering a question using journal context.
 ///
 /// Creates a conversation that asks the AI to answer a question based on
@@ -152,6 +167,35 @@ pub fn sentiment_prompt(text: &str) -> Vec<Message> {
 ---
 
 Respond with only a number between -1.0 and 1.0."#,
+            text
+        )),
+    ]
+}
+
+/// Builds messages for topic extraction from text.
+///
+/// Creates a conversation that asks the AI to identify and extract the main
+/// topics or themes from the provided text as a JSON array.
+///
+/// # Arguments
+///
+/// * `text` - The text to analyze for topics
+///
+/// # Returns
+///
+/// A vector of messages suitable for chat completion that will return
+/// a JSON array of topic strings.
+pub fn topic_extraction_prompt(text: &str) -> Vec<Message> {
+    vec![
+        Message::system(TOPIC_EXTRACTION_PROMPT),
+        Message::user(format!(
+            r#"Extract the main topics from this text:
+
+---
+{}
+---
+
+Respond with only a JSON array of 3-5 topic strings."#,
             text
         )),
     ]
@@ -243,6 +287,26 @@ mod tests {
     fn test_sentiment_prompt_contains_text() {
         let text = "This is a test entry with specific content.";
         let messages = sentiment_prompt(text);
+        assert!(messages[1].content.contains(text));
+    }
+
+    #[test]
+    fn test_topic_extraction_prompt_structure() {
+        let text = "Today I worked on my career plans and had dinner with family.";
+        let messages = topic_extraction_prompt(text);
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[0].content, TOPIC_EXTRACTION_PROMPT);
+        assert_eq!(messages[1].role, "user");
+        assert!(messages[1].content.contains(text));
+        assert!(messages[1].content.contains("JSON"));
+    }
+
+    #[test]
+    fn test_topic_extraction_prompt_contains_text() {
+        let text = "Specific test content about multiple topics.";
+        let messages = topic_extraction_prompt(text);
         assert!(messages[1].content.contains(text));
     }
 }
