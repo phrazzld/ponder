@@ -10,7 +10,7 @@
 
 ### Configuration System
 
-- [~] Add AIModels struct to src/config/mod.rs with model fields
+- [x] Add AIModels struct to src/config/mod.rs with model fields
   ```
   Files: src/config/mod.rs:23-87
   Approach: Extend Config struct, follow session_timeout pattern
@@ -20,7 +20,7 @@
   Time: 30min
   ```
 
-- [ ] Implement env var loading for AI model configuration
+- [~] Implement env var loading for AI model configuration
   ```
   Files: src/config/mod.rs:217-273, src/constants.rs:129-147
   Approach: Follow OLLAMA_URL pattern (line 261-262), add to Config::load()

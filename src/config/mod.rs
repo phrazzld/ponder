@@ -1,8 +1,8 @@
 //! Configuration management for the ponder application.
 //!
 //! This module handles loading and validating configuration settings from environment
-//! variables, with sensible defaults. It supports configuring the journal directory
-//! and the editor command used to open journal files.
+//! variables, with sensible defaults. It supports configuring the journal directory,
+//! editor command, AI models, and database settings.
 //!
 //! # Environment Variables
 //!
@@ -12,6 +12,10 @@
 //! - `PONDER_DB`: Path to the encrypted database file (defaults to PONDER_DIR/ponder.db)
 //! - `PONDER_SESSION_TIMEOUT`: Session timeout in minutes (defaults to 30)
 //! - `OLLAMA_URL`: URL for Ollama API (defaults to http://127.0.0.1:11434)
+//! - `PONDER_EMBED_MODEL`: Embedding model (defaults to "nomic-embed-text")
+//! - `PONDER_CHAT_MODEL`: Chat model (defaults to "gemma3:4b")
+//! - `PONDER_REASONING_MODEL`: Reasoning model (defaults to "deepseek-r1:8b")
+//! - `PONDER_SUMMARY_MODEL`: Summary model (defaults to "phi4:3.8b")
 //! - `HOME`: Used for expanding the default journal directory path
 
 use crate::constants;
@@ -136,8 +140,8 @@ impl Default for AIModels {
         Self {
             embed_model: constants::DEFAULT_EMBED_MODEL.to_string(),
             chat_model: constants::DEFAULT_CHAT_MODEL.to_string(),
-            reasoning_model: "deepseek-r1:8b".to_string(),
-            summary_model: "phi4:3.8b".to_string(),
+            reasoning_model: constants::DEFAULT_REASONING_MODEL.to_string(),
+            summary_model: constants::DEFAULT_SUMMARY_MODEL.to_string(),
         }
     }
 }
@@ -249,6 +253,10 @@ impl Config {
     /// - `PONDER_DB`: Database path (defaults to PONDER_DIR/ponder.db)
     /// - `PONDER_SESSION_TIMEOUT`: Session timeout in minutes (defaults to 30)
     /// - `OLLAMA_URL`: Ollama API URL (defaults to http://127.0.0.1:11434)
+    /// - `PONDER_EMBED_MODEL`: Embedding model (defaults to "nomic-embed-text")
+    /// - `PONDER_CHAT_MODEL`: Chat model (defaults to "gemma3:4b")
+    /// - `PONDER_REASONING_MODEL`: Reasoning model (defaults to "deepseek-r1:8b")
+    /// - `PONDER_SUMMARY_MODEL`: Summary model (defaults to "phi4:3.8b")
     ///
     /// # Returns
     ///
@@ -318,8 +326,17 @@ impl Config {
         let ollama_url = env::var(constants::ENV_VAR_OLLAMA_URL)
             .unwrap_or_else(|_| constants::DEFAULT_OLLAMA_URL.to_string());
 
-        // Initialize AI models with defaults (will be loaded from env vars in next task)
-        let ai_models = AIModels::default();
+        // Load AI model configuration from environment variables
+        let ai_models = AIModels {
+            embed_model: env::var(constants::ENV_VAR_PONDER_EMBED_MODEL)
+                .unwrap_or_else(|_| constants::DEFAULT_EMBED_MODEL.to_string()),
+            chat_model: env::var(constants::ENV_VAR_PONDER_CHAT_MODEL)
+                .unwrap_or_else(|_| constants::DEFAULT_CHAT_MODEL.to_string()),
+            reasoning_model: env::var(constants::ENV_VAR_PONDER_REASONING_MODEL)
+                .unwrap_or_else(|_| constants::DEFAULT_REASONING_MODEL.to_string()),
+            summary_model: env::var(constants::ENV_VAR_PONDER_SUMMARY_MODEL)
+                .unwrap_or_else(|_| constants::DEFAULT_SUMMARY_MODEL.to_string()),
+        };
 
         let config = Config {
             editor: editor.to_string(),
@@ -801,14 +818,117 @@ mod tests {
         // Verify AI models are initialized with defaults
         assert_eq!(config.ai_models.embed_model, constants::DEFAULT_EMBED_MODEL);
         assert_eq!(config.ai_models.chat_model, constants::DEFAULT_CHAT_MODEL);
-        assert_eq!(config.ai_models.reasoning_model, "deepseek-r1:8b");
-        assert_eq!(config.ai_models.summary_model, "phi4:3.8b");
+        assert_eq!(
+            config.ai_models.reasoning_model,
+            constants::DEFAULT_REASONING_MODEL
+        );
+        assert_eq!(
+            config.ai_models.summary_model,
+            constants::DEFAULT_SUMMARY_MODEL
+        );
 
         // Restore environment
         if let Some(val) = orig_ponder_dir {
             env::set_var("PONDER_DIR", val);
         } else {
             env::remove_var("PONDER_DIR");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ai_models_from_env_vars() {
+        // Store original values
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
+        let orig_embed = env::var(constants::ENV_VAR_PONDER_EMBED_MODEL).ok();
+        let orig_chat = env::var(constants::ENV_VAR_PONDER_CHAT_MODEL).ok();
+        let orig_reasoning = env::var(constants::ENV_VAR_PONDER_REASONING_MODEL).ok();
+        let orig_summary = env::var(constants::ENV_VAR_PONDER_SUMMARY_MODEL).ok();
+
+        // Set up test environment
+        let temp_dir = tempdir().unwrap();
+        env::set_var("PONDER_DIR", temp_dir.path());
+        env::set_var(constants::ENV_VAR_PONDER_EMBED_MODEL, "custom-embed");
+        env::set_var(constants::ENV_VAR_PONDER_CHAT_MODEL, "custom-chat");
+        env::set_var(
+            constants::ENV_VAR_PONDER_REASONING_MODEL,
+            "custom-reasoning",
+        );
+        env::set_var(constants::ENV_VAR_PONDER_SUMMARY_MODEL, "custom-summary");
+
+        let config = Config::load().unwrap();
+
+        // Verify custom models are loaded
+        assert_eq!(config.ai_models.embed_model, "custom-embed");
+        assert_eq!(config.ai_models.chat_model, "custom-chat");
+        assert_eq!(config.ai_models.reasoning_model, "custom-reasoning");
+        assert_eq!(config.ai_models.summary_model, "custom-summary");
+
+        // Restore environment
+        env::remove_var(constants::ENV_VAR_PONDER_EMBED_MODEL);
+        env::remove_var(constants::ENV_VAR_PONDER_CHAT_MODEL);
+        env::remove_var(constants::ENV_VAR_PONDER_REASONING_MODEL);
+        env::remove_var(constants::ENV_VAR_PONDER_SUMMARY_MODEL);
+
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        } else {
+            env::remove_var("PONDER_DIR");
+        }
+        if let Some(val) = orig_embed {
+            env::set_var(constants::ENV_VAR_PONDER_EMBED_MODEL, val);
+        }
+        if let Some(val) = orig_chat {
+            env::set_var(constants::ENV_VAR_PONDER_CHAT_MODEL, val);
+        }
+        if let Some(val) = orig_reasoning {
+            env::set_var(constants::ENV_VAR_PONDER_REASONING_MODEL, val);
+        }
+        if let Some(val) = orig_summary {
+            env::set_var(constants::ENV_VAR_PONDER_SUMMARY_MODEL, val);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ai_models_env_var_precedence() {
+        // Store original values
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
+        let orig_embed = env::var(constants::ENV_VAR_PONDER_EMBED_MODEL).ok();
+
+        // Set up test: only set embed model env var, others should use defaults
+        let temp_dir = tempdir().unwrap();
+        env::set_var("PONDER_DIR", temp_dir.path());
+        env::set_var(constants::ENV_VAR_PONDER_EMBED_MODEL, "override-embed");
+        env::remove_var(constants::ENV_VAR_PONDER_CHAT_MODEL);
+        env::remove_var(constants::ENV_VAR_PONDER_REASONING_MODEL);
+        env::remove_var(constants::ENV_VAR_PONDER_SUMMARY_MODEL);
+
+        let config = Config::load().unwrap();
+
+        // Verify env var takes precedence for embed model
+        assert_eq!(config.ai_models.embed_model, "override-embed");
+
+        // Verify defaults are used for others
+        assert_eq!(config.ai_models.chat_model, constants::DEFAULT_CHAT_MODEL);
+        assert_eq!(
+            config.ai_models.reasoning_model,
+            constants::DEFAULT_REASONING_MODEL
+        );
+        assert_eq!(
+            config.ai_models.summary_model,
+            constants::DEFAULT_SUMMARY_MODEL
+        );
+
+        // Restore environment
+        env::remove_var(constants::ENV_VAR_PONDER_EMBED_MODEL);
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        } else {
+            env::remove_var("PONDER_DIR");
+        }
+        if let Some(val) = orig_embed {
+            env::set_var(constants::ENV_VAR_PONDER_EMBED_MODEL, val);
         }
     }
 }
