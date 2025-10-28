@@ -20,7 +20,7 @@
   Time: 30min
   ```
 
-- [~] Implement env var loading for AI model configuration
+- [x] Implement env var loading for AI model configuration
   ```
   Files: src/config/mod.rs:217-273, src/constants.rs:129-147
   Approach: Follow OLLAMA_URL pattern (line 261-262), add to Config::load()
@@ -30,7 +30,7 @@
   Time: 30min
   ```
 
-- [ ] Add model name constants to src/constants.rs
+- [x] Add model name constants to src/constants.rs
   ```
   Files: src/constants.rs:147+
   Approach: Follow DEFAULT_CHAT_MODEL pattern (line 142-146)
@@ -38,11 +38,12 @@
   Test: Constants referenced in tests, documentation clear
   Module: Centralized constants, single source of truth
   Time: 15min
+  Note: Completed as part of Task 2 (env var loading)
   ```
 
 ### Database Schema
 
-- [ ] Create summaries table migration in src/db/schema.rs
+- [~] Create summaries table migration in src/db/schema.rs
   ```
   Files: src/db/schema.rs:36-224
   Approach: Follow backup_log table pattern (lines 132-147)

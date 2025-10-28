@@ -29,6 +29,7 @@ pub const SCHEMA_VERSION: i32 = 1;
 /// - `backup_state`: Singleton tracking latest backup state
 /// - `migration_log`: v1.0 to v2.0 migration tracking per entry
 /// - `migration_state`: Overall migration progress state
+/// - `summaries`: AI-generated summaries (daily, weekly, monthly)
 ///
 /// # Errors
 ///
@@ -191,6 +192,28 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
             verified_count INTEGER NOT NULL DEFAULT 0,
             failed_count INTEGER NOT NULL DEFAULT 0
         );
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Summaries table: AI-generated summaries at different granularities
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            level TEXT NOT NULL CHECK(level IN ('daily', 'weekly', 'monthly')),
+            summary_encrypted BLOB NOT NULL,
+            topics TEXT,
+            sentiment REAL CHECK(sentiment >= -1.0 AND sentiment <= 1.0),
+            word_count INTEGER,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, level)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_summaries_date ON summaries(date DESC);
+        CREATE INDEX IF NOT EXISTS idx_summaries_level ON summaries(level);
+        CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at DESC);
         "#,
     )
     .map_err(DatabaseError::Sqlite)?;
@@ -548,5 +571,140 @@ mod tests {
             ["20240102.md", "2024/01/01.md.age", "2024-01-02", "pending"],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_table_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify summaries table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='summaries'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_summaries_level_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid levels should succeed
+        let blob = vec![0u8; 100];
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "weekly", &blob],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "monthly", &blob],
+        )
+        .unwrap();
+
+        // Invalid level should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-02", "invalid", &blob],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_sentiment_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        let blob = vec![0u8; 100];
+
+        // Valid sentiments should succeed (-1.0 to 1.0)
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob, -1.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-02", "daily", &blob, 0.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-03", "daily", &blob, 1.0],
+        )
+        .unwrap();
+
+        // Invalid sentiment (> 1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-04", "daily", &blob, 1.5],
+        );
+        assert!(result.is_err());
+
+        // Invalid sentiment (< -1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-05", "daily", &blob, -1.5],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_unique_date_level() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        let blob = vec![0u8; 100];
+
+        // First insert should succeed
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        )
+        .unwrap();
+
+        // Duplicate date+level should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        );
+        assert!(result.is_err());
+
+        // Same date but different level should succeed
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "weekly", &blob],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_summaries_indexes_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify indexes exist
+        let index_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_summaries_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 3); // date, level, created_at
     }
 }
