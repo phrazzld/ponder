@@ -382,6 +382,7 @@ impl Config {
     ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
     ///     session_timeout_minutes: 30,
     ///     ollama_url: "http://127.0.0.1:11434".to_string(),
+    ///     ai_models: Default::default(),
     /// };
     /// assert!(valid_config.validate().is_ok());
     ///
@@ -392,6 +393,7 @@ impl Config {
     ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
     ///     session_timeout_minutes: 30,
     ///     ollama_url: "http://127.0.0.1:11434".to_string(),
+    ///     ai_models: Default::default(),
     /// };
     /// assert!(invalid_config.validate().is_err());
     /// ```

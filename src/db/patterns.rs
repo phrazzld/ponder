@@ -5,6 +5,7 @@
 
 use crate::errors::{AppResult, DatabaseError};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::str::FromStr;
 use tracing::debug;
 
 /// Pattern type classification.
@@ -26,15 +27,18 @@ impl PatternType {
             PatternType::Correlation => "correlation",
         }
     }
+}
 
-    /// Parse from database string representation.
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for PatternType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "temporal" => Some(PatternType::Temporal),
-            "topic" => Some(PatternType::Topic),
-            "sentiment" => Some(PatternType::Sentiment),
-            "correlation" => Some(PatternType::Correlation),
-            _ => None,
+            "temporal" => Ok(PatternType::Temporal),
+            "topic" => Ok(PatternType::Topic),
+            "sentiment" => Ok(PatternType::Sentiment),
+            "correlation" => Ok(PatternType::Correlation),
+            _ => Err(format!("Invalid pattern type: {}", s)),
         }
     }
 }
@@ -131,7 +135,7 @@ pub fn get_pattern(conn: &Connection, id: i64) -> AppResult<Option<Pattern>> {
                 let pattern_type_str: String = row.get(1)?;
                 Ok(Pattern {
                     id: row.get(0)?,
-                    pattern_type: PatternType::from_str(&pattern_type_str).unwrap(),
+                    pattern_type: pattern_type_str.parse().unwrap(),
                     description: row.get(2)?,
                     metadata: row.get(3)?,
                     confidence: row.get(4)?,
@@ -186,7 +190,7 @@ pub fn list_patterns(
                 let pattern_type_str: String = row.get(1)?;
                 Ok(Pattern {
                     id: row.get(0)?,
-                    pattern_type: PatternType::from_str(&pattern_type_str).unwrap(),
+                    pattern_type: pattern_type_str.parse().unwrap(),
                     description: row.get(2)?,
                     metadata: row.get(3)?,
                     confidence: row.get(4)?,
@@ -216,7 +220,7 @@ pub fn list_patterns(
                 let pattern_type_str: String = row.get(1)?;
                 Ok(Pattern {
                     id: row.get(0)?,
-                    pattern_type: PatternType::from_str(&pattern_type_str).unwrap(),
+                    pattern_type: pattern_type_str.parse().unwrap(),
                     description: row.get(2)?,
                     metadata: row.get(3)?,
                     confidence: row.get(4)?,
@@ -567,19 +571,16 @@ mod tests {
         assert_eq!(PatternType::Sentiment.as_str(), "sentiment");
         assert_eq!(PatternType::Correlation.as_str(), "correlation");
 
+        assert_eq!("temporal".parse::<PatternType>(), Ok(PatternType::Temporal));
+        assert_eq!("topic".parse::<PatternType>(), Ok(PatternType::Topic));
         assert_eq!(
-            PatternType::from_str("temporal"),
-            Some(PatternType::Temporal)
-        );
-        assert_eq!(PatternType::from_str("topic"), Some(PatternType::Topic));
-        assert_eq!(
-            PatternType::from_str("sentiment"),
-            Some(PatternType::Sentiment)
+            "sentiment".parse::<PatternType>(),
+            Ok(PatternType::Sentiment)
         );
         assert_eq!(
-            PatternType::from_str("correlation"),
-            Some(PatternType::Correlation)
+            "correlation".parse::<PatternType>(),
+            Ok(PatternType::Correlation)
         );
-        assert_eq!(PatternType::from_str("invalid"), None);
+        assert!("invalid".parse::<PatternType>().is_err());
     }
 }

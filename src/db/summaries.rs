@@ -5,6 +5,7 @@
 
 use crate::errors::{AppResult, DatabaseError};
 use rusqlite::{params, Connection, OptionalExtension};
+use std::str::FromStr;
 use tracing::debug;
 
 /// Summary granularity level.
@@ -24,14 +25,17 @@ impl SummaryLevel {
             SummaryLevel::Monthly => "monthly",
         }
     }
+}
 
-    /// Parse from database string representation.
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for SummaryLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "daily" => Some(SummaryLevel::Daily),
-            "weekly" => Some(SummaryLevel::Weekly),
-            "monthly" => Some(SummaryLevel::Monthly),
-            _ => None,
+            "daily" => Ok(SummaryLevel::Daily),
+            "weekly" => Ok(SummaryLevel::Weekly),
+            "monthly" => Ok(SummaryLevel::Monthly),
+            _ => Err(format!("Invalid summary level: {}", s)),
         }
     }
 }
@@ -145,7 +149,7 @@ pub fn get_summary(
                 Ok(Summary {
                     id: row.get(0)?,
                     date: row.get(1)?,
-                    level: SummaryLevel::from_str(&level_str).unwrap(),
+                    level: level_str.parse().unwrap(),
                     summary_encrypted: row.get(3)?,
                     topics: row.get(4)?,
                     sentiment: row.get(5)?,
@@ -196,7 +200,7 @@ pub fn list_summaries(
             Ok(Summary {
                 id: row.get(0)?,
                 date: row.get(1)?,
-                level: SummaryLevel::from_str(&level_str).unwrap(),
+                level: level_str.parse().unwrap(),
                 summary_encrypted: row.get(3)?,
                 topics: row.get(4)?,
                 sentiment: row.get(5)?,
@@ -242,7 +246,7 @@ pub fn list_all_summaries(conn: &Connection, limit: usize) -> AppResult<Vec<Summ
             Ok(Summary {
                 id: row.get(0)?,
                 date: row.get(1)?,
-                level: SummaryLevel::from_str(&level_str).unwrap(),
+                level: level_str.parse().unwrap(),
                 summary_encrypted: row.get(3)?,
                 topics: row.get(4)?,
                 sentiment: row.get(5)?,
@@ -472,12 +476,9 @@ mod tests {
         assert_eq!(SummaryLevel::Weekly.as_str(), "weekly");
         assert_eq!(SummaryLevel::Monthly.as_str(), "monthly");
 
-        assert_eq!(SummaryLevel::from_str("daily"), Some(SummaryLevel::Daily));
-        assert_eq!(SummaryLevel::from_str("weekly"), Some(SummaryLevel::Weekly));
-        assert_eq!(
-            SummaryLevel::from_str("monthly"),
-            Some(SummaryLevel::Monthly)
-        );
-        assert_eq!(SummaryLevel::from_str("invalid"), None);
+        assert_eq!("daily".parse::<SummaryLevel>(), Ok(SummaryLevel::Daily));
+        assert_eq!("weekly".parse::<SummaryLevel>(), Ok(SummaryLevel::Weekly));
+        assert_eq!("monthly".parse::<SummaryLevel>(), Ok(SummaryLevel::Monthly));
+        assert!("invalid".parse::<SummaryLevel>().is_err());
     }
 }
