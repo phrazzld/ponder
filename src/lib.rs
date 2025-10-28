@@ -54,21 +54,35 @@ fn main() -> AppResult<()> {
 ```
 */
 
+/// AI operations for journal insights and semantic search
+pub mod ai;
 /// Command-line interface for parsing and handling user arguments
 pub mod cli;
 /// Configuration loading and management
 pub mod config;
 /// Centralized constants used throughout the application
 pub mod constants;
+/// Cryptographic operations for journal encryption and security
+pub mod crypto;
+/// Database operations for journal metadata and embeddings
+pub mod db;
 /// Error types and utilities for error handling
 pub mod errors;
 /// Core journal functionality
 pub mod journal_core;
 /// Journal I/O operations
 pub mod journal_io;
+/// High-level operations combining encryption, AI, and database functionality
+pub mod ops;
+/// Setup and dependency management utilities
+pub mod setup;
 
 // Re-export important types for convenience
-pub use cli::CliArgs;
+pub use ai::OllamaClient;
+pub use cli::{AskArgs, CliArgs, EditArgs, PonderCommand, ReflectArgs, SearchArgs};
 pub use config::Config;
-pub use errors::{AppError, AppResult, LockError};
+pub use crypto::SessionManager;
+pub use db::Database;
+pub use errors::{AIError, AppError, AppResult, DatabaseError, LockError};
 pub use journal_core::DateSpecifier;
+pub use ops::search::SearchResult;

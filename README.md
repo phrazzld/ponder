@@ -1,89 +1,292 @@
 # Ponder 🤔
 
-Ponder is a simple journaling tool for daily reflections, designed to help users maintain a journal with minimal friction. It provides functionality for creating and viewing daily journal entries, as well as reviewing past entries.
+Ponder v2.0 is an AI-powered encrypted journaling tool for daily reflections. It combines strong encryption (age + SQLCipher) with local AI capabilities (Ollama) to provide semantic search, RAG queries, and AI-generated reflections—all while keeping your data private and secure.
 
 ## Features 🌟
 
+### Core Features (v1.0)
 - **Today's Entry**: Quickly create or edit today's journal entry
 - **Retro Mode**: Review entries from the past week (excluding today)
 - **Reminisce Mode**: Review entries from significant past intervals (1 month ago, 3 months ago, 6 months ago, etc.)
 - **Specific Date Access**: Open an entry for any specific date
-- **Customizable**: Configure your preferred editor and journal directory
-- **Simple Interface**: Minimal CLI interface with intuitive commands
-- **Markdown Support**: Journal entries are stored as plain markdown files
-- **Concurrent Access Protection**: File locking prevents data corruption when multiple processes access the same journal file
+- **Markdown Support**: Journal entries stored as encrypted markdown files
+
+### Security Features (v2.0)
+- **End-to-End Encryption**: All journal entries encrypted with [age](https://github.com/FiloSottile/age) passphrase-based encryption
+- **Encrypted Database**: Metadata and embeddings stored in SQLCipher (256-bit AES)
+- **Secure Session Management**: Auto-lock timeout with passphrase zeroization
+- **Secure Temp Files**: 0o600 permissions with automatic cleanup
+- **No Plaintext Leakage**: All sensitive data encrypted at rest
+
+### AI Features (v2.0)
+- **Semantic Search**: Find journal entries by meaning, not just keywords
+- **RAG Queries**: Ask questions about your journal using AI (Retrieval-Augmented Generation)
+- **AI Reflections**: Get thoughtful AI-generated insights on your entries
+- **Automatic Embeddings**: Content automatically vectorized for semantic search
+- **Local-First AI**: Uses local Ollama instance (your data stays on your machine)
+
+## ⚠️ Security Notice
+
+Ponder uses **zero-knowledge encryption** - your passphrase encrypts all journal data.
+
+**CRITICAL**: If you forget your passphrase, **your data is permanently lost**. There is no recovery mechanism.
+
+**Best practices**:
+- Choose a passphrase you can remember (e.g., 4-5 random words)
+- Write it down and store in a secure physical location
+- Consider using a password manager
+- Test backup/restore before relying on Ponder for important data
 
 ## Installation 🔧
 
+### Prerequisites
+
+**Required:**
+1. Rust and Cargo ([rustup.rs](https://rustup.rs))
+2. SQLCipher support (for encrypted database)
+   ```bash
+   # macOS
+   brew install sqlcipher
+
+   # Ubuntu/Debian
+   sudo apt-get install libsqlcipher-dev
+
+   # Fedora
+   sudo dnf install sqlcipher-devel
+   ```
+
+**Optional (for AI features):**
+3. [Ollama](https://ollama.ai) (for semantic search and AI features)
+   ```bash
+   # Install Ollama
+   curl -fsSL https://ollama.ai/install.sh | sh
+
+   # Pull required models
+   ollama pull nomic-embed-text    # For embeddings
+   ollama pull gemma3:4b           # For chat/reflections
+   ```
+
 ### From Source
 
-1. Ensure you have Rust and Cargo installed ([rustup.rs](https://rustup.rs))
-2. Clone the repository:
-   ```
+1. Clone the repository:
+   ```bash
    git clone https://github.com/phrazzld/ponder.git
    cd ponder
    ```
-3. Build and install:
-   ```
+
+2. Build and install:
+   ```bash
    cargo build --release
    cargo install --path .
+   ```
+
+3. (Optional) Start Ollama for AI features:
+   ```bash
+   ollama serve
    ```
 
 ## Usage 📝
 
 ### Basic Usage
 
-To open today's journal entry:
+Ponder v2.0 uses a subcommand architecture:
 
 ```bash
-ponder
+ponder <COMMAND> [OPTIONS]
 ```
 
-### Command Line Options
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `edit` | Edit journal entries (with encryption) |
+| `ask` | Query your journal using AI (RAG) |
+| `reflect` | Generate AI reflection on an entry |
+| `search` | Semantic search over journal entries |
+| `lock` | Lock the encrypted session |
+| `backup` | Create encrypted backup archive |
+| `restore` | Restore from encrypted backup |
+
+### Global Options
 
 | Option | Description |
 |--------|-------------|
-| `-r, --retro` | Opens entries from the past week (excluding today) |
-| `-m, --reminisce` | Opens entries from significant past time intervals |
-| `-d, --date DATE` | Opens an entry for a specific date (YYYY-MM-DD or YYYYMMDD format) |
 | `-v, --verbose` | Enables verbose output for debugging |
 | `--log-format FORMAT` | Sets the log output format ("text" or "json") |
 | `-h, --help` | Displays help information |
 | `-V, --version` | Displays version information |
 
-### Examples
+### Edit Command
 
-Open today's journal entry:
+Edit encrypted journal entries (v1.0 compatibility mode):
+
 ```bash
+# Edit today's entry (default)
+ponder edit
+
+# Or just:
 ponder
+
+# Edit past week entries (retro mode)
+ponder edit --retro
+
+# Edit significant past intervals (reminisce mode)
+ponder edit --reminisce
+
+# Edit specific date
+ponder edit --date 2024-01-15
 ```
 
-Open entries from the past week (retro mode):
+**Edit Options:**
+- `-r, --retro`: Opens entries from the past week (excluding today)
+- `-m, --reminisce`: Opens entries from significant past intervals
+- `-d, --date DATE`: Opens entry for specific date (YYYY-MM-DD or YYYYMMDD)
+
+### Ask Command (v2.0)
+
+Query your journal using AI with RAG (Retrieval-Augmented Generation):
+
 ```bash
-ponder --retro
+# Ask a question
+ponder ask "What were my main goals last month?"
+
+# Ask with date range filter
+ponder ask "What did I learn about Rust?" --from 2024-01-01 --to 2024-06-30
 ```
 
-Open entries from significant past intervals (reminisce mode):
+**Ask Options:**
+- `--from DATE`: Filter results from this date
+- `--to DATE`: Filter results until this date
+
+### Reflect Command (v2.0)
+
+Generate AI reflection on a journal entry:
+
 ```bash
-ponder --reminisce
+# Reflect on today's entry
+ponder reflect
+
+# Reflect on specific date
+ponder reflect --date 2024-01-15
 ```
 
-Open an entry for a specific date:
+**Reflect Options:**
+- `-d, --date DATE`: Date of entry to reflect on (defaults to today)
+
+### Search Command (v2.0)
+
+Semantic search over journal entries:
+
 ```bash
-ponder --date 2023-05-15
-# or
-ponder --date 20230515
+# Search for entries about a topic
+ponder search "anxiety and coping strategies"
+
+# Search with custom result limit
+ponder search "project ideas" --limit 10
+
+# Search within date range
+ponder search "productivity" --from 2024-01-01 --to 2024-06-30 --limit 5
 ```
+
+**Search Options:**
+- `-l, --limit N`: Maximum number of results (default: 5)
+- `--from DATE`: Filter results from this date
+- `--to DATE`: Filter results until this date
+
+### Lock Command (v2.0)
+
+Lock the encrypted session (clear passphrase from memory):
+
+```bash
+ponder lock
+```
+
+### Backup Command (v2.0)
+
+Create encrypted backup archive of your entire journal:
+
+```bash
+# Create backup (prompts for confirmation)
+ponder backup
+
+# Verify backup integrity (optional)
+ponder backup --verify
+```
+
+**Backup Details:**
+- Creates encrypted `.tar.age` archive containing:
+  - All encrypted journal entries (`*.md.age`)
+  - Encrypted database (`ponder.db`)
+  - Backup manifest with checksums
+- Default location: `$PONDER_DIR/backups/ponder-backup-YYYYMMDD-HHMMSS.tar.age`
+- Encrypted with your journal passphrase
+- Includes metadata: timestamp, file count, total size
+
+**Backup Options:**
+- `--verify`: Verify backup integrity after creation (recommended)
+
+### Restore Command (v2.0)
+
+Restore journal from encrypted backup archive:
+
+```bash
+# Restore from backup (prompts for confirmation)
+ponder restore /path/to/backup.tar.age
+
+# Force restore (skip confirmation)
+ponder restore /path/to/backup.tar.age --force
+```
+
+**Restore Details:**
+- Extracts and verifies all files from backup archive
+- Validates checksums against backup manifest
+- Restores to current `$PONDER_DIR` (overwrites existing files)
+- Reports: files restored, total size, checksum verification status
+
+**Restore Options:**
+- `-f, --force`: Skip confirmation prompt and overwrite existing files
+
+**⚠️ Backup Security Warning:**
+
+Backup archives are encrypted with your journal passphrase and provide strong security **at rest**. However:
+
+1. **Storage Security**: Store backups in a secure location (encrypted external drive, secure cloud storage with encryption at rest)
+2. **Passphrase Security**: Your backup is only as secure as your passphrase. Use a strong, unique passphrase.
+3. **Transport Security**: When transferring backups, use encrypted channels (HTTPS, SFTP, encrypted email)
+4. **Access Control**: Limit who can access your backup files (file permissions, access controls)
+5. **Retention**: Securely delete old backups you no longer need
+
+**Best Practices:**
+- Test restores periodically to verify backup integrity
+- Store backups in multiple secure locations (3-2-1 backup strategy)
+- Use `--verify` flag to check backup integrity immediately after creation
+- Keep backups separate from your primary journal location
+- Consider using encrypted cloud storage (e.g., encrypted S3 buckets, Tresorit, Sync.com)
 
 ## Configuration ⚙️
 
 Ponder can be configured using environment variables:
 
+### Core Configuration
+
 | Environment Variable | Description | Default |
 |----------------------|-------------|---------|
-| `PONDER_DIR` | The directory where journal entries are stored | `~/Documents/rubberducks` |
-| `PONDER_EDITOR` | The editor to use for journal entries | Uses `EDITOR` if set |
+| `PONDER_DIR` | Directory where encrypted journal entries are stored | `~/Documents/rubberducks` |
+| `PONDER_EDITOR` | Editor to use for journal entries | Uses `EDITOR` if set |
 | `EDITOR` | Fallback editor if `PONDER_EDITOR` is not set | `vim` |
+
+### v2.0 Configuration
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
+| `PONDER_DB` | Path to encrypted SQLite database | `$PONDER_DIR/ponder.db` |
+| `PONDER_SESSION_TIMEOUT` | Session timeout in minutes | `30` |
+| `OLLAMA_URL` | Ollama API URL | `http://127.0.0.1:11434` |
+
+### Logging Configuration
+
+| Environment Variable | Description | Default |
+|----------------------|-------------|---------|
 | `RUST_LOG` | Controls log filtering and verbosity | `info` |
 | `CI` | When set to any value, forces JSON log format | Not set |
 
@@ -200,35 +403,87 @@ JSON log entries include:
 
 ## File Structure 📁
 
-Journal entries are stored as markdown files in the configured journal directory, with filenames in the format `YYYYMMDD.md` (e.g., `20240508.md`).
+### v2.0 Encrypted Structure
 
-When you open a journal entry, the current timestamp is automatically added to the file if it doesn't already exist, providing a convenient way to track when you wrote each entry.
-
-### File Locking
-
-Ponder uses advisory file locking to prevent data corruption when multiple processes attempt to access the same journal file simultaneously. This ensures that concurrent invocations of Ponder won't corrupt your journal entries.
-
-If you try to open a journal file that is already being edited in another instance of Ponder, you'll see an error message like:
+Journal entries are encrypted and organized in a hierarchical structure:
 
 ```
-File locking error: Journal file is currently being edited by another process: /path/to/journal/20240521.md
+~/Documents/rubberducks/
+├── ponder.db              # Encrypted SQLite database (SQLCipher)
+├── 2024/
+│   ├── 01/
+│   │   ├── 01.md.age      # January 1st, 2024 (encrypted)
+│   │   ├── 15.md.age      # January 15th, 2024 (encrypted)
+│   │   └── ...
+│   ├── 02/
+│   │   └── ...
+│   └── ...
+└── ...
 ```
 
-Once the first Ponder process completes (the editor is closed), the locks are automatically released, allowing subsequent access to the file.
+**File Format:**
+- Entries: `YYYY/MM/DD.md.age` (age-encrypted markdown)
+- Database: `ponder.db` (SQLCipher with 256-bit AES)
+
+**Database Contents (all encrypted):**
+- Entry metadata: paths, dates, checksums, word counts
+- Vector embeddings: semantic representations for AI search
+- No plaintext content stored in database
+
+### Security Properties
+
+1. **Encryption at Rest**: All journal content encrypted with age
+2. **Encrypted Database**: Metadata and embeddings protected with SQLCipher
+3. **Secure Temp Files**: 0o600 permissions, automatic cleanup
+4. **Passphrase Protection**: Session-based with auto-lock timeout
+5. **Change Detection**: BLAKE3 checksums prevent unnecessary re-embedding
 
 ## Architecture 🏗️
 
-Ponder follows a modular architecture with clear separation of concerns:
+Ponder v2.0 follows a modular architecture with clear separation of concerns:
 
-- `cli`: Command-line interface handling using clap
-- `config`: Configuration loading and validation
-- `errors`: Error handling infrastructure
-- `journal_core`: Core journal logic without I/O operations
-- `journal_io`: Journal I/O operations and file management
+### Core Modules
 
-The codebase is designed with simplicity and maintainability in mind, using direct function calls and standard library features rather than abstractions. This approach improves readability and makes the code easier to reason about.
+- **`cli`**: Subcommand-based CLI (Edit|Ask|Reflect|Search|Lock)
+- **`config`**: Configuration with v2.0 settings (db_path, session_timeout, ollama_url)
+- **`errors`**: Comprehensive error handling with actionable messages
+- **`crypto`**: Age encryption + session management + secure temp files
+- **`db`**: SQLCipher database + entries + embeddings with vector search
+- **`ai`**: Ollama client + text chunking + AI prompts
+- **`ops`**: High-level operations combining crypto, DB, and AI
+- **`journal_core`**: Pure date logic (v1.0 compatibility)
+- **`journal_io`**: Legacy I/O operations (v1.0 compatibility)
 
-The architecture separates pure logic (in `journal_core`) from I/O operations (in `journal_io`), which improves testability and maintainability. Each module has a clearly defined responsibility, with minimal dependencies between modules.
+### Design Principles
+
+- **Deep Modules**: Simple interfaces hiding complex implementations
+- **No Information Leakage**: Return domain objects, not raw DB rows
+- **Explicitness**: Dependencies visible in function signatures
+- **Security First**: Encryption, zeroization, secure temp files
+- **Local-First AI**: Ollama runs locally, your data stays private
+
+### Concurrent Edits
+
+Ponder is designed as a single-user journaling tool with per-file encryption. The v2.0 architecture naturally minimizes conflicts:
+
+- Each date has a separate encrypted file (`YYYY/MM/DD.md.age`)
+- Only concurrent edits to the **same date** can conflict (rare scenario)
+- If a conflict occurs, you'll receive a warning before saving
+- **Last-write-wins**: Your save proceeds and overwrites any concurrent changes
+
+**Conflict Detection Example**:
+```
+⚠️  Warning: This entry was modified while you were editing.
+   Your changes will overwrite those modifications.
+```
+
+This design is intentionally simple:
+- No complex file locking mechanisms
+- No platform-specific behavior
+- Clear user feedback for rare edge cases
+- Reliability over paranoia for single-user workflows
+
+For detailed architecture documentation, see [CLAUDE.md](./CLAUDE.md).
 
 ## Contributing 🤝
 

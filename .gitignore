@@ -170,6 +170,7 @@ artifacts/
 !/docs/DEVELOPMENT_PHILOSOPHY.md
 !/docs/DEVELOPMENT_PHILOSOPHY_APPENDIX_RUST.md
 !/docs/glance.md
+!/docs/COMMANDS.md
 
 # API documentation
 /target/doc/

@@ -20,7 +20,7 @@ repos:
         language: system # Assumes 'cargo' is in the system PATH
         types: [rust]    # Only run on Rust files
         pass_filenames: false # 'cargo clippy' typically operates on the whole project/crate
-        stages: [pre-commit]
+        stages: [pre-push]  # Run on push, not commit (faster commits)
 
       - id: glance-update
         name: glance documentation update
@@ -29,4 +29,14 @@ repos:
         language: system # Uses our custom script
         files: '^(src/.*\.(rs|toml)|Cargo\.(toml|lock)|README\.md|CONTRIBUTING\.md|PRD\.md|CLAUDE\.md|\.pre-commit-config\.yaml)$'
         pass_filenames: false # glance operates on the entire project
+        stages: [pre-commit]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks secrets scanner
+        description: "Scans staged changes for secrets and credentials."
+        entry: gitleaks protect --staged --verbose --redact
+        language: system
         stages: [pre-commit]

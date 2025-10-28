@@ -168,6 +168,11 @@ fn test_with_env_vars() {
 
 **Rationale:** When tests run in parallel, one test's modifications to global state can interfere with another test's expectations. For example, if Test A sets an environment variable while Test B is reading it, Test B may see an unexpected value and fail intermittently. The `#[serial]` attribute ensures these tests run one at a time, preventing such interference.
 
+### Non-interactive Passphrase Configuration
+
+- The CLI now requires a passphrase to unlock the encrypted journal. In CI and automated tests, export `PONDER_TEST_PASSPHRASE` (any non-empty value) before invoking `cargo test` so the binary runs non-interactively.
+- Local workflows (pre-commit hooks, scripts, IDE test runners) should set `PONDER_TEST_PASSPHRASE=test-passphrase` to mirror CI behaviour and avoid unexpected passphrase prompts.
+
 ## Submitting Changes
 
 1. Fork the repository

@@ -25,6 +25,12 @@ pub const DEFAULT_LOG_LEVEL: &str = "info";
 pub const ENV_VAR_PONDER_DIR: &str = "PONDER_DIR";
 /// Environment variable for specifying the preferred Ponder editor.
 pub const ENV_VAR_PONDER_EDITOR: &str = "PONDER_EDITOR";
+/// Environment variable for specifying the database path.
+pub const ENV_VAR_PONDER_DB: &str = "PONDER_DB";
+/// Environment variable for specifying session timeout in minutes.
+pub const ENV_VAR_PONDER_SESSION_TIMEOUT: &str = "PONDER_SESSION_TIMEOUT";
+/// Environment variable for specifying Ollama API URL.
+pub const ENV_VAR_OLLAMA_URL: &str = "OLLAMA_URL";
 /// Standard environment variable for specifying the default editor.
 pub const ENV_VAR_EDITOR: &str = "EDITOR";
 /// Standard environment variable for the user's home directory.
@@ -82,3 +88,71 @@ pub const RETRO_DAYS: i64 = 7;
 pub const TRACING_SERVICE_NAME: &str = "ponder";
 /// Name for the root tracing span covering an application invocation.
 pub const TRACING_ROOT_SPAN_NAME: &str = "app_invocation";
+
+// Cryptography Configuration
+/// Default session timeout in minutes for passphrase caching.
+///
+/// After this period of inactivity, the user will need to re-enter their passphrase.
+/// This balances security (shorter timeout = less exposure) with usability
+/// (longer timeout = fewer prompts).
+pub const DEFAULT_SESSION_TIMEOUT_MINUTES: u64 = 30;
+
+/// File extension for encrypted files using age encryption.
+///
+/// Encrypted journal entries will have this extension appended (e.g., "20240615.md.age").
+pub const ENCRYPTED_FILE_EXTENSION: &str = ".age";
+
+/// RAM-based temporary filesystem paths to check for secure temp file storage.
+///
+/// These tmpfs filesystems store files in RAM, minimizing disk persistence of
+/// decrypted content. Checked in order; falls back to system temp if none found.
+pub const TMPFS_PATHS: &[&str] = &["/dev/shm", "/run/shm"];
+
+// Database Configuration
+/// Default database filename within the journal directory.
+///
+/// The encrypted database is stored alongside journal entries.
+pub const DEFAULT_DB_FILENAME: &str = "ponder.db";
+
+/// Embedding vector dimensions for the nomic-embed-text model.
+///
+/// nomic-embed-text produces 768-dimensional embeddings. This constant
+/// ensures consistency across embedding storage and retrieval operations.
+pub const EMBEDDING_DIMENSIONS: usize = 768;
+
+/// Default limit for vector similarity search results.
+///
+/// Controls how many similar chunks to return when performing semantic search.
+/// This balances result relevance with processing time and context window constraints.
+pub const VECTOR_SEARCH_LIMIT: usize = 12;
+
+// AI Configuration
+/// Default URL for Ollama API.
+///
+/// The local Ollama server typically runs on this address.
+pub const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
+
+/// Default embedding model for semantic search.
+///
+/// nomic-embed-text is a battle-tested 137M parameter embedding model optimized for retrieval tasks.
+/// It produces 768-dimensional embeddings and is widely supported across all Ollama versions.
+/// This model is chosen for maximum compatibility and proven stability.
+pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
+
+/// Default chat model for insights and reflections.
+///
+/// gemma3:4b is a high-quality model from Google suitable for local inference.
+/// It provides excellent performance for chat and reflection tasks.
+pub const DEFAULT_CHAT_MODEL: &str = "gemma3:4b";
+
+/// Default chunk size in words for text chunking.
+///
+/// Approximately 700 words provides good balance between context and granularity
+/// for embedding generation. This is roughly equivalent to 2-3 paragraphs.
+pub const DEFAULT_CHUNK_SIZE: usize = 700;
+
+/// Default overlap in words between consecutive chunks.
+///
+/// 100 words of overlap helps maintain context continuity at chunk boundaries
+/// and improves retrieval quality for queries that span chunk edges.
+pub const DEFAULT_CHUNK_OVERLAP: usize = 100;

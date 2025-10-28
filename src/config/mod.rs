@@ -9,6 +9,9 @@
 //! - `PONDER_DIR`: Path to the journal directory (defaults to ~/Documents/rubberducks)
 //! - `PONDER_EDITOR`: Editor to use for journal entries
 //! - `EDITOR`: Fallback editor if PONDER_EDITOR is not set (defaults to "vim")
+//! - `PONDER_DB`: Path to the encrypted database file (defaults to PONDER_DIR/ponder.db)
+//! - `PONDER_SESSION_TIMEOUT`: Session timeout in minutes (defaults to 30)
+//! - `OLLAMA_URL`: URL for Ollama API (defaults to http://127.0.0.1:11434)
 //! - `HOME`: Used for expanding the default journal directory path
 
 use crate::constants;
@@ -30,10 +33,10 @@ use std::path::PathBuf;
 /// use ponder::Config;
 /// use std::path::PathBuf;
 ///
-/// let config = Config {
-///     editor: "nano".to_string(),
-///     journal_dir: PathBuf::from("/path/to/journal"),
-/// };
+/// let mut config = Config::default();
+/// config.editor = "nano".to_string();
+/// config.journal_dir = PathBuf::from("/path/to/journal");
+/// config.db_path = PathBuf::from("/path/to/journal/ponder.db");
 /// ```
 ///
 /// Loading configuration from environment variables:
@@ -63,6 +66,24 @@ pub struct Config {
     /// This is loaded from the PONDER_DIR environment variable with a fallback
     /// to ~/Documents/rubberducks if not specified.
     pub journal_dir: PathBuf,
+
+    /// Path to the encrypted SQLCipher database file.
+    ///
+    /// This is loaded from the PONDER_DB environment variable with a fallback
+    /// to journal_dir/ponder.db if not specified.
+    pub db_path: PathBuf,
+
+    /// Session timeout in minutes for passphrase caching.
+    ///
+    /// After this period of inactivity, the user will need to re-enter their passphrase.
+    /// Loaded from PONDER_SESSION_TIMEOUT or defaults to 30 minutes.
+    pub session_timeout_minutes: u64,
+
+    /// URL for the Ollama API server.
+    ///
+    /// This is loaded from the OLLAMA_URL environment variable with a fallback
+    /// to http://127.0.0.1:11434 if not specified.
+    pub ollama_url: String,
 }
 
 impl fmt::Debug for Config {
@@ -80,6 +101,9 @@ impl Default for Config {
         Config {
             editor: constants::DEFAULT_EDITOR_COMMAND.to_string(),
             journal_dir: PathBuf::from(""),
+            db_path: PathBuf::from(""),
+            session_timeout_minutes: constants::DEFAULT_SESSION_TIMEOUT_MINUTES,
+            ollama_url: constants::DEFAULT_OLLAMA_URL.to_string(),
         }
     }
 }
@@ -165,6 +189,9 @@ impl Config {
     /// - `PONDER_EDITOR`: Primary editor command to use
     /// - `EDITOR`: Fallback editor if PONDER_EDITOR is not set
     /// - `PONDER_DIR`: Journal directory path (defaults to ~/Documents/rubberducks)
+    /// - `PONDER_DB`: Database path (defaults to PONDER_DIR/ponder.db)
+    /// - `PONDER_SESSION_TIMEOUT`: Session timeout in minutes (defaults to 30)
+    /// - `OLLAMA_URL`: Ollama API URL (defaults to http://127.0.0.1:11434)
     ///
     /// # Returns
     ///
@@ -175,6 +202,7 @@ impl Config {
     /// Returns `AppError::Config` if:
     /// - The journal directory path expansion fails
     /// - The editor command fails validation (empty, contains spaces or shell metacharacters)
+    /// - Session timeout cannot be parsed as a number
     ///
     /// # Examples
     ///
@@ -214,9 +242,31 @@ impl Config {
             ));
         }
 
+        // Get database path from PONDER_DB env var, default to journal_dir/ponder.db
+        let db_path = if let Ok(db_path_str) = env::var(constants::ENV_VAR_PONDER_DB) {
+            let expanded_db = shellexpand::full(&db_path_str)
+                .map_err(|e| AppError::Config(format!("Failed to expand database path: {}", e)))?;
+            PathBuf::from(expanded_db.into_owned())
+        } else {
+            journal_dir.join(constants::DEFAULT_DB_FILENAME)
+        };
+
+        // Get session timeout from PONDER_SESSION_TIMEOUT, default to 30 minutes
+        let session_timeout_minutes = env::var(constants::ENV_VAR_PONDER_SESSION_TIMEOUT)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(constants::DEFAULT_SESSION_TIMEOUT_MINUTES);
+
+        // Get Ollama URL from OLLAMA_URL, default to localhost
+        let ollama_url = env::var(constants::ENV_VAR_OLLAMA_URL)
+            .unwrap_or_else(|_| constants::DEFAULT_OLLAMA_URL.to_string());
+
         let config = Config {
             editor: editor.to_string(),
             journal_dir,
+            db_path,
+            session_timeout_minutes,
+            ollama_url,
         };
 
         Ok(config)
@@ -251,6 +301,9 @@ impl Config {
     /// let valid_config = Config {
     ///     editor: "vim".to_string(),
     ///     journal_dir: PathBuf::from("/absolute/path"),
+    ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
+    ///     session_timeout_minutes: 30,
+    ///     ollama_url: "http://127.0.0.1:11434".to_string(),
     /// };
     /// assert!(valid_config.validate().is_ok());
     ///
@@ -258,6 +311,9 @@ impl Config {
     /// let invalid_config = Config {
     ///     editor: "".to_string(),
     ///     journal_dir: PathBuf::from("/absolute/path"),
+    ///     db_path: PathBuf::from("/absolute/path/ponder.db"),
+    ///     session_timeout_minutes: 30,
+    ///     ollama_url: "http://127.0.0.1:11434".to_string(),
     /// };
     /// assert!(invalid_config.validate().is_err());
     /// ```
@@ -299,6 +355,7 @@ mod tests {
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from("/home/username/private/journal"),
+            ..Config::default()
         };
 
         // Format it with debug
@@ -432,11 +489,13 @@ mod tests {
 
         // Create a temp directory to use as journal dir
         let temp_dir = tempdir().unwrap();
-        let dir_path = temp_dir.path().to_string_lossy().to_string();
+        let dir_path = temp_dir.path().to_path_buf();
 
         let config = Config {
             editor: "vim".to_string(),
-            journal_dir: PathBuf::from(dir_path),
+            journal_dir: dir_path.clone(),
+            db_path: dir_path.join("ponder.db"),
+            ..Config::default()
         };
 
         assert!(config.validate().is_ok());
@@ -445,8 +504,9 @@ mod tests {
     #[test]
     fn test_validate_empty_editor() {
         let config = Config {
-            editor: "".to_string(),
+            editor: String::new(),
             journal_dir: PathBuf::from("/some/path"),
+            ..Config::default()
         };
 
         let result = config.validate();
@@ -464,6 +524,7 @@ mod tests {
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from(""),
+            ..Config::default()
         };
 
         let result = config.validate();
@@ -481,6 +542,7 @@ mod tests {
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: PathBuf::from("relative/path"),
+            ..Config::default()
         };
 
         let result = config.validate();
@@ -502,6 +564,7 @@ mod tests {
         let config = Config {
             editor: "vim".to_string(),
             journal_dir: dir_path.clone(),
+            ..Config::default()
         };
 
         // Directory shouldn't exist yet

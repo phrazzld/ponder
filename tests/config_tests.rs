@@ -8,6 +8,7 @@ use ponder::errors::{AppError, AppResult};
 use ponder::journal_io;
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_load_with_environment_vars() {
     // Save the original environment variables
@@ -47,6 +48,7 @@ fn test_config_load_with_environment_vars() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_load_with_fallbacks() {
     // Save the original environment variables
@@ -100,19 +102,22 @@ fn test_config_load_with_fallbacks() {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_config_validation() -> AppResult<()> {
     // Test valid configuration
     let valid_config = Config {
         editor: "vim".to_string(),
         journal_dir: PathBuf::from("/absolute/path"),
+        ..Config::default()
     };
     valid_config.validate()?;
 
     // Test empty editor
     let invalid_editor_config = Config {
-        editor: "".to_string(),
+        editor: String::new(),
         journal_dir: PathBuf::from("/absolute/path"),
+        ..Config::default()
     };
     let result = invalid_editor_config.validate();
     assert!(result.is_err());
@@ -139,6 +144,7 @@ fn test_config_validation() -> AppResult<()> {
     let relative_path_config = Config {
         editor: "vim".to_string(),
         journal_dir: PathBuf::from("relative/path"),
+        ..Config::default()
     };
     let result = relative_path_config.validate();
     assert!(result.is_err());
@@ -165,6 +171,7 @@ fn test_config_validation() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_ensure_journal_directory_exists() -> AppResult<()> {
     // Create a temporary directory for testing

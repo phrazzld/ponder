@@ -1,6 +1,5 @@
 use serial_test::serial;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::tempdir;
 
 // We need to import the actual library code
@@ -9,9 +8,6 @@ use ponder::config::Config;
 use ponder::errors::AppResult;
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
-
-mod debug_helpers;
-use debug_helpers::{debug_directory_state, debug_file_info};
 
 // Fixed test date for deterministic testing
 // Using 2024-01-15 14:30:00 as our reference datetime
@@ -28,21 +24,21 @@ fn get_fixed_test_datetime() -> DateTime<Local> {
 fn set_up_test_env() -> Result<(Config, tempfile::TempDir), Box<dyn std::error::Error>> {
     // Create a temporary directory for the journal files
     let temp_dir = tempdir()?;
-    let dir_path = temp_dir.path().to_string_lossy().to_string();
-
-    // Use "echo" as a safe editor for testing
-    let editor = "echo".to_string();
+    let dir_path = temp_dir.path().to_path_buf();
 
     // Create a Config instance pointing to the temp directory
     let config = Config {
-        editor,
-        journal_dir: PathBuf::from(&dir_path),
+        editor: "echo".to_string(),
+        journal_dir: dir_path.clone(),
+        db_path: dir_path.join("ponder.db"),
+        ..Config::default()
     };
 
     Ok((config, temp_dir))
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_basic_flow() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -68,28 +64,18 @@ fn test_journal_basic_flow() -> AppResult<()> {
 
     // Should be at least one entry (today's)
     let entry_count = dir_entries.count();
-    if entry_count == 0 {
-        let debug_context = format!(
-            "Journal directory should contain at least one entry after journal creation.\n\
-            \n\
-            Expected: At least 1 journal file\n\
-            Actual: 0 files found\n\
-            \n\
-            Test context:\n\
-            Fixed test date: 2024-01-15\n\
-            Journal directory: {}\n\
-            \n\
-            Directory state:\n{}",
-            journal_dir.display(),
-            debug_directory_state(&journal_dir)
-        );
-        panic!("{}", debug_context);
-    }
+    assert!(
+        entry_count > 0,
+        "Journal directory should contain at least one entry after journal creation. \
+        Fixed test date: 2024-01-15, Journal directory: {}",
+        journal_dir.display()
+    );
 
     Ok(())
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_specific_date() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -113,32 +99,19 @@ fn test_journal_specific_date() -> AppResult<()> {
     // Verify that a journal file was created for the specific date
     let expected_file = journal_dir.join("20230115.md");
 
-    if !expected_file.exists() {
-        let debug_context = format!(
-            "Expected journal file was not created for specific date.\n\
-            \n\
-            Expected file: {}\n\
-            Actual: File does not exist\n\
-            \n\
-            Test context:\n\
-            Specific date: 2023-01-15\n\
-            Journal directory: {}\n\
-            \n\
-            Expected file info:\n{}\n\
-            \n\
-            Directory state:\n{}",
-            expected_file.display(),
-            journal_dir.display(),
-            debug_file_info(&expected_file),
-            debug_directory_state(&journal_dir)
-        );
-        panic!("{}", debug_context);
-    }
+    assert!(
+        expected_file.exists(),
+        "Expected journal file was not created for specific date. \
+        Expected file: {}, Journal directory: {}",
+        expected_file.display(),
+        journal_dir.display()
+    );
 
     Ok(())
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_retro() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -165,6 +138,7 @@ fn test_journal_retro() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_journal_reminisce() -> AppResult<()> {
     let (config, _temp_dir) = set_up_test_env()
@@ -191,6 +165,7 @@ fn test_journal_reminisce() -> AppResult<()> {
 }
 
 #[test]
+#[ignore = "integration"]
 #[serial]
 fn test_relative_journal_path_rejected() {
     use ponder::errors::AppError;

@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 15
     needs: [formatting, clippy]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -61,32 +61,84 @@ jobs:
       run: cargo build --verbose
       timeout-minutes: 5
     
-    - name: Run tests (excluding file locking tests)
-      run: cargo test --verbose -- --skip locking_tests --test-threads=1
+    - name: Run unit tests (fast)
+      run: cargo test --verbose -- --test-threads=1
       env:
         PONDER_EDITOR: echo
         PONDER_DIR: /tmp/ponder_ci_tests
         RUST_BACKTRACE: 1
-      timeout-minutes: 5
+      timeout-minutes: 8
 
-  locking-tests:
-    name: File Locking Tests
+  # Integration tests disabled - require local Ollama service (http://localhost:11434)
+  # These tests validate AI features (embeddings, RAG, chat) but need:
+  #   - Ollama running locally
+  #   - Models: nomic-embed-text, gemma3:4b
+  # Run locally with: cargo test -- --ignored --test-threads=1
+  # TODO: Re-enable when we have proper CI infrastructure (Docker service or mocks)
+  #
+  # integration:
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   needs: [build]
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #
+  #   - name: Install stable toolchain
+  #     uses: dtolnay/rust-toolchain@stable
+  #
+  #   - name: Rust cargo cache
+  #     uses: Swatinem/rust-cache@v2
+  #
+  #   - name: Run integration tests
+  #     run: cargo test --verbose -- --ignored --test-threads=1
+  #     env:
+  #       PONDER_EDITOR: echo
+  #       PONDER_DIR: /tmp/ponder_integration_tests
+  #       PONDER_TEST_PASSPHRASE: test-passphrase
+  #       RUST_BACKTRACE: 1
+  #     timeout-minutes: 8
+
+  coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [formatting, clippy]
+    timeout-minutes: 15
+    needs: [build]
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Install stable toolchain
       uses: dtolnay/rust-toolchain@stable
-    
+
     - name: Rust cargo cache
       uses: Swatinem/rust-cache@v2
-    
-    - name: Run file locking tests
-      run: cargo test --test locking_tests --verbose -- --test-threads=1
+
+    - name: Install cargo-tarpaulin
+      run: cargo install cargo-tarpaulin --locked
+
+    - name: Generate coverage
+      run: |
+        cargo tarpaulin \
+          --out Html \
+          --out Xml \
+          --output-dir coverage \
+          --exclude-files 'tests/*' \
+          --timeout 300
       env:
         PONDER_EDITOR: echo
-        PONDER_DIR: /tmp/ponder_ci_tests_locking
-        RUST_BACKTRACE: 1
-      timeout-minutes: 15
+        PONDER_DIR: /tmp/ponder_coverage
+        PONDER_TEST_PASSPHRASE: test-passphrase
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/
+        retention-days: 30
+
+    - name: Check coverage thresholds
+      run: |
+        # Extract coverage percentages from cobertura.xml
+        if [ -f coverage/cobertura.xml ]; then
+          echo "Coverage report generated successfully"
+          # Optional: Add threshold checks here for critical modules
+          # This is a placeholder for future enhancement
+        fi

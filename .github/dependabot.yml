@@ -1,0 +1,26 @@
+# GitHub Dependabot configuration
+# Automatically creates PRs for outdated dependencies
+
+version: 2
+updates:
+  # Rust dependencies from Cargo.toml
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "00:00"
+    open-pull-requests-limit: 5
+    # Group dev dependencies together to reduce PR noise
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    # Automatically rebase PRs when they become outdated
+    rebase-strategy: "auto"
+    # Add conventional commit prefix
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"

@@ -205,6 +205,139 @@ pub enum LockError {
     },
 }
 
+/// Represents specific error cases that can occur during cryptographic operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when performing encryption, decryption, or key management operations.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::CryptoError;
+///
+/// let error = CryptoError::VaultLocked;
+/// let message = format!("{}", error);
+/// assert!(message.contains("locked"));
+/// assert!(message.contains("passphrase"));
+/// ```
+#[derive(Debug, Error)]
+pub enum CryptoError {
+    /// Vault is locked and needs to be unlocked before operations can proceed.
+    #[error("Session locked. Run command again to unlock with your passphrase.\n\nNote: Sessions automatically lock after inactivity (configurable via PONDER_SESSION_TIMEOUT).")]
+    VaultLocked,
+
+    /// Incorrect passphrase provided for decryption.
+    #[error("Incorrect passphrase. Please try again with the correct passphrase used to encrypt your journal.")]
+    InvalidPassphrase(#[source] age::DecryptError),
+
+    /// Encrypted data uses unsupported encryption format.
+    #[error("Unsupported encryption format")]
+    UnsupportedFormat,
+
+    /// Invalid file path provided for encryption operation.
+    #[error("Invalid file path: {0}")]
+    InvalidPath(String),
+
+    /// Error during encryption operation.
+    #[error("Encryption failed: {0}")]
+    EncryptionFailed(#[source] age::EncryptError),
+
+    /// Error during decryption operation.
+    #[error("Decryption failed: {0}")]
+    DecryptionFailed(#[source] age::DecryptError),
+
+    /// Passphrase confirmation mismatch during setup.
+    #[error("Passphrase confirmation does not match. Please try again.")]
+    PassphraseMismatch,
+
+    /// Empty passphrase provided.
+    #[error("Passphrase cannot be empty. Please provide a strong passphrase.")]
+    EmptyPassphrase,
+
+    /// Error prompting for passphrase.
+    #[error("Failed to read passphrase: {0}\n\nMake sure you have a terminal available for interactive input.")]
+    PassphrasePrompt(String),
+
+    /// Maximum passphrase retry attempts exceeded.
+    #[error("Maximum passphrase attempts exceeded. Please try again later.")]
+    MaxRetriesExceeded,
+}
+
+/// Represents specific error cases that can occur during database operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when interacting with the encrypted SQLite database.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::DatabaseError;
+///
+/// let error = DatabaseError::NotFound("Entry with id 123 not found".to_string());
+/// assert!(format!("{}", error).contains("not found"));
+/// ```
+#[derive(Debug, Error)]
+pub enum DatabaseError {
+    /// SQLite database error.
+    #[error("Database error: {0}\n\nIf you're seeing 'file is not a database' or cipher errors, this may indicate:\n- Wrong passphrase (the database is encrypted with SQLCipher)\n- Corrupted database file\n- Incompatible database format")]
+    Sqlite(#[from] rusqlite::Error),
+
+    /// Connection pool error.
+    #[error("Failed to get connection from pool: {0}\n\nThis may indicate database connection issues. Try closing other ponder instances.")]
+    Pool(#[from] r2d2::Error),
+
+    /// Requested entry not found in database.
+    #[error("Entry not found: {0}")]
+    NotFound(String),
+
+    /// Custom database error with detailed message.
+    #[error("Database error: {0}")]
+    Custom(String),
+
+    /// Wrong passphrase provided for encrypted database.
+    #[error("Incorrect passphrase for database.\n\nThe passphrase you entered does not match the one used to encrypt this journal.\nPlease try again with the correct passphrase.")]
+    WrongPassphrase,
+}
+
+/// Represents specific error cases that can occur during AI operations.
+///
+/// This enum provides detailed, contextual error information for different failure modes
+/// when interacting with the Ollama API or performing AI operations.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::errors::AIError;
+///
+/// let error = AIError::ModelNotFound("llama3.2:3b".to_string());
+/// assert!(format!("{}", error).contains("llama3.2:3b"));
+/// ```
+#[derive(Debug, Error)]
+pub enum AIError {
+    /// Ollama API is not reachable.
+    #[error("Ollama API error: {0}. Is Ollama running? Try: ollama serve")]
+    OllamaOffline(#[source] reqwest::Error),
+
+    /// Requested model not found in Ollama.
+    #[error("Model not found: {0}. Try: ollama pull {0}")]
+    ModelNotFound(String),
+
+    /// Model exists but doesn't support the requested operation.
+    #[error("Model '{model}' doesn't support {operation}.\n\nThis usually means:\n1. You're using a chat model for embeddings (or vice versa)\n2. Your Ollama version is too old for this model\n\nSuggested fixes:\n- For embeddings, try: ollama pull {suggestion}\n- Update Ollama: https://ollama.com/download\n- Check model type: ollama show {model}")]
+    ModelNotSupported {
+        /// The model that doesn't support the operation
+        model: String,
+        /// The operation that's not supported (e.g., "embeddings", "chat")
+        operation: String,
+        /// Suggested alternative model
+        suggestion: String,
+    },
+
+    /// Invalid or unexpected response from Ollama API.
+    #[error("Invalid response from Ollama: {0}")]
+    InvalidResponse(String),
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
     /// Errors related to configuration loading or validation.
@@ -234,6 +367,27 @@ pub enum AppError {
     /// information about what went wrong with file locking operations.
     #[error("File locking error: {0}")]
     Lock(#[from] LockError),
+
+    /// Errors related to cryptographic operations.
+    ///
+    /// This variant uses a dedicated CryptoError type to provide detailed
+    /// information about what went wrong with encryption, decryption, or key management.
+    #[error("Cryptographic error: {0}")]
+    Crypto(#[from] CryptoError),
+
+    /// Errors related to database operations.
+    ///
+    /// This variant uses a dedicated DatabaseError type to provide detailed
+    /// information about what went wrong with database operations.
+    #[error("Database error: {0}")]
+    Database(#[from] DatabaseError),
+
+    /// Errors related to AI operations.
+    ///
+    /// This variant uses a dedicated AIError type to provide detailed
+    /// information about what went wrong with Ollama API interactions.
+    #[error("AI error: {0}")]
+    AI(#[from] AIError),
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.

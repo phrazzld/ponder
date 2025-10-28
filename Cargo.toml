@@ -6,18 +6,48 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# Existing dependencies
 chrono = "0.4.26"
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 thiserror = "1.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt", "registry", "chrono"] }
+tracing-subscriber = { version = "0.3.20", features = ["json", "env-filter", "fmt", "registry", "chrono"] }
 uuid = { version = "1.4", features = ["v4", "fast-rng", "serde"] }
 shellexpand = "3.1"
 fs2 = "0.4.3"
 
+# Encryption dependencies (Phase 1)
+age = "0.10"
+argon2 = "0.5"
+zeroize = "1.7"
+blake3 = "1.5"
+rpassword = "7.3"  # Secure passphrase prompting
+
+# Database dependencies (Phase 2)
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher", "blob"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"  # Compatible with rusqlite 0.31
+bytemuck = "1.14"  # For f32 <-> u8 conversion in embeddings
+
+# AI/HTTP dependencies (Phase 3)
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Backup/Archive dependencies (Phase 7)
+tar = "0.4"        # Cross-platform tar archive creation
+flate2 = "1.0"     # Gzip compression for archives
+walkdir = "2.4"    # Recursive directory traversal
+tempfile = "3.3"   # Required for backup/restore temp operations
+
 [dev-dependencies]
-tempfile = "3.3"
 assert_cmd = "2.0"
 predicates = "2.1"
 serial_test = "1.0"
 serde_json = "1.0"
+mockito = "1.2"  # For mocking Ollama API in tests
+criterion = "0.5"  # Performance benchmarking
+
+[[bench]]
+name = "crypto_bench"
+harness = false

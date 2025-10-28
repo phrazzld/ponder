@@ -1,63 +1,72 @@
 /*!
-# Ponder - A Simple Journaling Tool
+# Ponder v2.0 - AI-Powered Encrypted Journaling
 
-Ponder is a command-line tool for maintaining a journal of daily reflections.
-It helps you create and manage markdown-formatted journal entries, with support
-for creating entries for today, viewing past entries, and more.
-
-This file contains the main application flow, coordinating the various components
-to implement the journal functionality.
+Ponder v2.0 is a command-line tool for maintaining encrypted journal entries
+with AI-powered insights, semantic search, and RAG query capabilities.
 
 ## Features
 
-- Create and edit today's journal entry
-- Review entries from the past week (retro mode)
-- Review entries from significant past time intervals (reminisce mode)
-- Open entries for specific dates
-- Configurable editor and journal directory
+- **Edit**: Create and edit encrypted journal entries with automatic embedding generation
+- **Ask**: Query your journal using RAG (Retrieval-Augmented Generation)
+- **Reflect**: Generate AI reflections on specific journal entries
+- **Search**: Semantic search over your encrypted journal entries
+- **Lock**: Secure session management with passphrase protection
 
 ## Usage
 
 ```
-ponder [OPTIONS]
+ponder <COMMAND>
+
+Commands:
+  edit      Edit a journal entry with encryption
+  ask       Query journal entries using AI (RAG)
+  reflect   Generate AI reflection on a journal entry
+  search    Semantic search over journal entries
+  lock      Lock the encrypted session
 
 Options:
-  -r, --retro                   Opens entries from the past week excluding today
-  -m, --reminisce               Opens entries from significant past intervals (1 month ago, 3 months ago, etc.)
-  -d, --date <DATE>             Opens an entry for a specific date (format: YYYY-MM-DD or YYYYMMDD)
-  -v, --verbose                 Enable verbose output
-  -h, --help                    Print help information
-  -V, --version                 Print version information
+  -v, --verbose           Enable verbose output
+  --log-format <FORMAT>   Log output format [text|json]
+  -h, --help              Print help
+  -V, --version           Print version
 ```
 
 ## Configuration
 
-The application can be configured with the following environment variables:
-- `PONDER_EDITOR` or `EDITOR`: The editor to use for opening journal entries (defaults to "vim")
-- `PONDER_DIR`: The directory to store journal entries (defaults to "~/Documents/rubberducks")
+Environment variables:
+- `PONDER_DIR`: Journal directory (default: ~/Documents/rubberducks)
+- `PONDER_EDITOR`: Editor command (default: vim)
+- `PONDER_DB`: Database path (default: $PONDER_DIR/ponder.db)
+- `PONDER_SESSION_TIMEOUT`: Session timeout in minutes (default: 30)
+- `OLLAMA_URL`: Ollama API URL (default: http://127.0.0.1:11434)
 */
 
 use chrono::Local;
 use clap::Parser;
-use ponder::cli::CliArgs;
+use ponder::cli::{CliArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
-use ponder::constants;
-use ponder::errors::{AppError, AppResult};
+use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
+use ponder::crypto::SessionManager;
+use ponder::db::Database;
+use ponder::errors::{AppError, AppResult, DatabaseError};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
-use tracing::{debug, info, info_span};
+use ponder::ops;
+use ponder::setup::ensure_model_available;
+use ponder::OllamaClient;
+use tracing::{debug, info, info_span, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use uuid::Uuid;
 
 /// Runs the core application logic with the given correlation ID and CLI arguments.
 ///
-/// This function contains the main application flow:
-/// 1. Loads and validates configuration
-/// 2. Ensures the journal directory exists
-/// 3. Determines which entries to open based on CLI arguments
-/// 4. Opens the appropriate journal entries
-///
-/// Note: Tracing/logging setup must be done before calling this function.
+/// This function dispatches to the appropriate operation based on the subcommand:
+/// - `edit`: Edit encrypted journal entries (v1.0 compatibility + v2.0 encryption)
+/// - `ask`: RAG query over journal entries
+/// - `reflect`: Generate AI reflection on an entry
+/// - `search`: Semantic search over entries
+/// - `lock`: Clear session passphrase
+/// - None: Default to `edit today` for v1.0 compatibility
 ///
 /// # Arguments
 ///
@@ -69,14 +78,6 @@ use uuid::Uuid;
 ///
 /// A Result that is Ok(()) if the application ran successfully,
 /// or an AppError if an error occurred at any point in the flow.
-///
-/// # Errors
-///
-/// This function can return various types of errors, including:
-/// - Configuration errors (missing or invalid configuration)
-/// - I/O errors (file not found, permission denied, etc.)
-/// - Journal logic errors (invalid date format, etc.)
-/// - Editor errors (failed to launch editor)
 fn run_application(
     correlation_id: &str,
     args: CliArgs,
@@ -92,11 +93,9 @@ fn run_application(
     );
     let _guard = root_span.enter();
 
-    // Log the application start with correlation ID
     info!("Starting ponder");
     debug!("CLI arguments: {:?}", args);
 
-    // Set up verbose logging if requested
     if args.verbose {
         debug!("Verbose mode enabled");
     }
@@ -106,24 +105,681 @@ fn run_application(
     let config = Config::load()?;
     config.validate()?;
 
+    // Dispatch based on command
+    match args.command {
+        Some(PonderCommand::Edit(edit_args)) => {
+            cmd_edit(&config, edit_args, current_date, &current_datetime)
+        }
+        Some(PonderCommand::Ask(ask_args)) => cmd_ask(&config, ask_args),
+        Some(PonderCommand::Reflect(reflect_args)) => {
+            cmd_reflect(&config, reflect_args, current_date)
+        }
+        Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
+        Some(PonderCommand::Lock) => cmd_lock(&config),
+        Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
+        Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
+        Some(PonderCommand::Reindex) => cmd_reindex(&config),
+        Some(PonderCommand::CleanupV1(cleanup_args)) => cmd_cleanup_v1(&config, cleanup_args),
+        Some(PonderCommand::Status) => cmd_status(&config),
+        None => {
+            // Default: edit today's entry (v1.0 compatibility)
+            cmd_edit(
+                &config,
+                EditArgs {
+                    retro: false,
+                    reminisce: false,
+                    date: None,
+                    migrate: false,
+                },
+                current_date,
+                &current_datetime,
+            )
+        }
+    }
+}
+
+/// Opens database with passphrase retry logic.
+///
+/// Attempts to open the database, retrying up to MAX_PASSPHRASE_ATTEMPTS times
+/// if the wrong passphrase is provided.
+///
+/// # Arguments
+///
+/// * `config` - Application configuration
+/// * `session` - Session manager
+///
+/// # Returns
+///
+/// Returns the opened database or error after max retries.
+fn open_database_with_retry(config: &Config, session: &mut SessionManager) -> AppResult<Database> {
+    const MAX_PASSPHRASE_ATTEMPTS: u32 = 3;
+
+    // Detect first-run vs existing database
+    let db_exists = config.db_path.exists();
+
+    for attempt in 1..=MAX_PASSPHRASE_ATTEMPTS {
+        // Get passphrase (prompts if locked)
+        let passphrase = session.get_passphrase_or_prompt(db_exists)?;
+
+        // Try to open database
+        match Database::open(&config.db_path, passphrase) {
+            Ok(db) => {
+                info!("Database opened successfully");
+                return Ok(db);
+            }
+            Err(AppError::Database(DatabaseError::WrongPassphrase)) => {
+                // Wrong passphrase - lock session to force re-prompt
+                session.lock();
+
+                if attempt < MAX_PASSPHRASE_ATTEMPTS {
+                    warn!(
+                        "Incorrect passphrase, attempt {}/{}",
+                        attempt, MAX_PASSPHRASE_ATTEMPTS
+                    );
+                    println!(
+                        "\nIncorrect passphrase. Please try again (attempt {}/{}).\n",
+                        attempt + 1,
+                        MAX_PASSPHRASE_ATTEMPTS
+                    );
+                } else {
+                    return Err(ponder::errors::CryptoError::MaxRetriesExceeded.into());
+                }
+            }
+            Err(e) => {
+                // Other error - propagate immediately
+                return Err(e);
+            }
+        }
+    }
+
+    unreachable!("Loop should always return or error before reaching here")
+}
+
+/// Ensures the embedding model is available, offering to install if missing.
+///
+/// This checks if the embedding model is installed and prompts the user
+/// to install it if not found.
+///
+/// # Arguments
+///
+/// * `client` - Ollama client instance
+///
+/// # Returns
+///
+/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
+    ensure_model_available(client, DEFAULT_EMBED_MODEL, "Embedding")
+}
+
+/// Ensures the chat model is available, offering to install if missing.
+///
+/// This checks if the chat model is installed and prompts the user
+/// to install it if not found.
+///
+/// # Arguments
+///
+/// * `client` - Ollama client instance
+///
+/// # Returns
+///
+/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+fn ensure_chat_available(client: &OllamaClient) -> AppResult<()> {
+    ensure_model_available(client, DEFAULT_CHAT_MODEL, "Chat")
+}
+
+/// Edit command: Edit journal entries with encryption and embedding.
+fn cmd_edit(
+    config: &Config,
+    edit_args: EditArgs,
+    current_date: chrono::NaiveDate,
+    current_datetime: &chrono::DateTime<Local>,
+) -> AppResult<()> {
+    info!("Command: edit");
+
     // Ensure journal directory exists
-    debug!("Journal directory: {:?}", config.journal_dir);
     journal_io::ensure_journal_directory_exists(&config.journal_dir)?;
 
-    // Determine which entry type to open based on CLI arguments
-    let date_spec = DateSpecifier::from_cli_args(args.retro, args.reminisce, args.date.as_deref())
-        .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
+    // v2.0: Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
 
-    // Get the dates to open using the current date obtained earlier
+    // Handle --migrate flag
+    if edit_args.migrate {
+        return cmd_migrate(config, &db, &mut session, Some(&ai_client));
+    }
+
+    // Detect v1.0 entries and auto-prompt for migration (one-time)
+    let detection_result = ops::detect_migration_state(&config.journal_dir, &db)?;
+    if detection_result.pending > 0 && !has_migration_been_prompted(&db)? {
+        if prompt_migration(&detection_result)? {
+            return cmd_migrate(config, &db, &mut session, Some(&ai_client));
+        } else {
+            // Mark that we've prompted (don't ask again)
+            mark_migration_prompted(&db)?;
+        }
+    }
+
+    // Parse date specifier from edit args
+    let date_spec = DateSpecifier::from_cli_args(
+        edit_args.retro,
+        edit_args.reminisce,
+        edit_args.date.as_deref(),
+    )
+    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?;
+
     let dates_to_open = date_spec.resolve_dates(current_date);
 
-    // Edit the appropriate journal entries, passing the current date
-    // This includes file locking to prevent concurrent access
-    info!("Opening journal entries (with file locking)");
-    journal_io::edit_journal_entries(&config, &dates_to_open, &current_datetime)?;
+    // Ensure embedding model is available (for automatic embedding generation)
+    ensure_embedding_available(&ai_client)?;
 
-    info!("Journal entries opened successfully");
+    // Edit each entry
+    for date in dates_to_open {
+        info!("Editing entry for: {}", date);
+        ops::edit_entry(
+            config,
+            &db,
+            &mut session,
+            &ai_client,
+            date,
+            current_datetime,
+        )?;
+    }
+
+    info!("Entries edited successfully");
     Ok(())
+}
+
+/// Ask command: Query journal entries using RAG.
+fn cmd_ask(config: &Config, ask_args: ponder::cli::AskArgs) -> AppResult<()> {
+    info!("Command: ask");
+
+    // Parse date range if provided
+    let time_window = parse_date_range(&ask_args.from, &ask_args.to)?;
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure models are available (embedding for search, chat for LLM)
+    ensure_embedding_available(&ai_client)?;
+    ensure_chat_available(&ai_client)?;
+
+    // Query
+    let answer = ops::ask_question(
+        &db,
+        &mut session,
+        &ai_client,
+        &ask_args.question,
+        time_window,
+    )?;
+
+    // Output answer
+    println!("{}", answer);
+
+    Ok(())
+}
+
+/// Reflect command: Generate AI reflection on a journal entry.
+fn cmd_reflect(
+    config: &Config,
+    reflect_args: ponder::cli::ReflectArgs,
+    current_date: chrono::NaiveDate,
+) -> AppResult<()> {
+    info!("Command: reflect");
+
+    // Parse date (default to today)
+    let date = if let Some(date_str) = reflect_args.date {
+        DateSpecifier::from_cli_args(false, false, Some(&date_str))
+            .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+            .resolve_dates(current_date)
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?
+    } else {
+        current_date
+    };
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure chat model is available
+    ensure_chat_available(&ai_client)?;
+
+    // Generate reflection
+    let reflection = ops::reflect_on_entry(&db, &mut session, &ai_client, date)?;
+
+    // Output reflection
+    println!("\n{}\n", reflection);
+
+    Ok(())
+}
+
+/// Search command: Semantic search over journal entries.
+fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResult<()> {
+    info!("Command: search");
+
+    // Parse date range if provided
+    let time_window = parse_date_range(&search_args.from, &search_args.to)?;
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure embedding model is available
+    ensure_embedding_available(&ai_client)?;
+
+    // Search
+    let results = ops::search_entries(
+        &db,
+        &mut session,
+        &ai_client,
+        &search_args.query,
+        search_args.limit,
+        time_window,
+    )?;
+
+    // Output results
+    if results.is_empty() {
+        println!("No results found.");
+    } else {
+        println!("\nFound {} results:\n", results.len());
+        for result in results {
+            println!("Date: {}", result.date);
+            println!("Score: {:.4}", result.score);
+            println!("Excerpt: {}\n", result.excerpt);
+            println!("---\n");
+        }
+    }
+
+    Ok(())
+}
+
+/// Lock command: Clear session passphrase.
+fn cmd_lock(config: &Config) -> AppResult<()> {
+    info!("Command: lock");
+
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    session.lock();
+
+    println!("Session locked successfully.");
+
+    Ok(())
+}
+
+/// Backup command: Create encrypted backup of journal entries and database.
+fn cmd_backup(config: &Config, backup_args: ponder::cli::BackupArgs) -> AppResult<()> {
+    info!("Command: backup");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Create backup (respects PONDER_DB config via config.db_path)
+    let report = ops::create_backup(
+        &db,
+        &mut session,
+        &config.journal_dir,
+        &config.db_path,
+        &backup_args.output,
+    )?;
+
+    println!("✓ Backup created successfully");
+    println!("  Entries: {}", report.total_entries);
+    println!("  Size: {} bytes", report.archive_size);
+    println!("  Checksum: {}", report.checksum);
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+    println!("  Output: {:?}", backup_args.output);
+
+    // Verify if requested
+    if backup_args.verify {
+        println!("\nVerifying backup...");
+        let manifest = ops::verify_backup(&mut session, &backup_args.output)?;
+        println!("✓ Backup verification passed");
+        println!("  Verified entries: {}", manifest.entries.len());
+        println!("  Database: {:?}", manifest.db_path);
+    }
+
+    Ok(())
+}
+
+/// Restore command: Restore from encrypted backup archive.
+fn cmd_restore(config: &Config, restore_args: ponder::cli::RestoreArgs) -> AppResult<()> {
+    info!("Command: restore");
+
+    // Initialize session
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+
+    // Restore backup (respects PONDER_DB config via config.db_path)
+    let report = ops::restore_backup(
+        &mut session,
+        &restore_args.backup,
+        &config.journal_dir,
+        &config.db_path,
+        restore_args.force,
+    )?;
+
+    println!("✓ Restore completed successfully");
+    println!("  Entries restored: {}", report.entries_restored);
+    println!("  Database size: {} bytes", report.db_size);
+    println!("  Checksum: {}", report.checksum);
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+    println!("  Target: {:?}", config.journal_dir);
+
+    Ok(())
+}
+
+/// Migration command: Migrate v1.0 plaintext entries to v2.0 encrypted format.
+fn cmd_migrate(
+    config: &Config,
+    db: &Database,
+    session: &mut SessionManager,
+    ai_client: Option<&OllamaClient>,
+) -> AppResult<()> {
+    info!("Command: migrate");
+
+    // Scan for v1.0 entries
+    let v1_entries = ops::scan_v1_entries(&config.journal_dir)?;
+
+    if v1_entries.is_empty() {
+        println!("No v1.0 entries found to migrate.");
+        return Ok(());
+    }
+
+    println!("Found {} v1.0 entries to migrate", v1_entries.len());
+    println!();
+
+    // Migrate all entries with progress
+    let results = ops::migrate_all_entries(
+        config,
+        db,
+        session,
+        ai_client,
+        v1_entries,
+        Some(Box::new(print_progress)),
+    )?;
+
+    // Summary
+    let successful = results.iter().filter(|r| r.success).count();
+    let failed = results.len() - successful;
+
+    println!();
+    println!("✓ Migration completed");
+    println!("  Successful: {}", successful);
+    if failed > 0 {
+        println!("  Failed: {}", failed);
+    }
+
+    Ok(())
+}
+
+/// Cleanup v1.0 command: Delete verified-migrated v1.0 entries.
+fn cmd_cleanup_v1(config: &Config, cleanup_args: ponder::cli::CleanupV1Args) -> AppResult<()> {
+    info!("Command: cleanup-v1");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Scan for v1.0 entries
+    let detection_result = ops::detect_migration_state(&config.journal_dir, &db)?;
+
+    if detection_result.migrated_entries.is_empty() {
+        println!("No migrated v1.0 entries found to clean up.");
+        return Ok(());
+    }
+
+    println!(
+        "Found {} verified-migrated v1.0 entries",
+        detection_result.migrated_entries.len()
+    );
+    println!();
+
+    // Confirm deletion unless --yes flag provided
+    if !cleanup_args.yes {
+        println!("This will permanently delete the following files:");
+        for path in &detection_result.migrated_entries {
+            println!("  {}", path.display());
+        }
+        println!();
+        print!("Continue? [y/N]: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !input.trim().eq_ignore_ascii_case("y") {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    // Delete files
+    let mut deleted = 0;
+    let mut failed = 0;
+
+    for path in &detection_result.migrated_entries {
+        match std::fs::remove_file(path) {
+            Ok(()) => {
+                deleted += 1;
+                info!("Deleted: {:?}", path);
+            }
+            Err(e) => {
+                failed += 1;
+                warn!("Failed to delete {:?}: {}", path, e);
+            }
+        }
+    }
+
+    println!();
+    println!("✓ Cleanup completed");
+    println!("  Deleted: {}", deleted);
+    if failed > 0 {
+        println!("  Failed: {}", failed);
+    }
+
+    Ok(())
+}
+
+/// Regenerates embeddings for entries missing them.
+fn cmd_reindex(config: &Config) -> AppResult<()> {
+    info!("Command: reindex");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Initialize Ollama client
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    println!("🔍 Checking for entries missing embeddings...");
+    println!();
+
+    // Run reindex operation
+    let report = ops::reindex_entries(&db, &mut session, &ai_client)?;
+
+    if report.total == 0 {
+        println!("✅ All entries already have embeddings");
+        return Ok(());
+    }
+
+    println!();
+    println!("✅ Reindex Complete");
+    println!("  Total: {} entries", report.total);
+    println!("  Success: {} entries", report.success);
+    if report.failed > 0 {
+        println!("  Failed: {} entries", report.failed);
+    }
+    println!("  Duration: {:.2}s", report.duration.as_secs_f64());
+
+    Ok(())
+}
+
+/// Shows journal database health and statistics.
+fn cmd_status(config: &Config) -> AppResult<()> {
+    info!("Command: status");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Create temporary status operation (we'll implement this next)
+    // For now, just show basic stats
+    let conn = db.get_conn()?;
+
+    // Get stats
+    let (embedded, total_entries) = ponder::db::entries::get_embedding_stats(&conn)?;
+    let total_embeddings = ponder::db::embeddings::count_total_embeddings(&conn)?;
+    let (oldest, newest) = ponder::db::entries::get_entry_date_range(&conn)?;
+    let (migration_verified, migration_total) = db.get_migration_stats()?;
+
+    // Calculate DB size
+    let db_path = config.db_path.clone();
+    let db_size_mb = std::fs::metadata(&db_path)?.len() as f64 / 1_048_576.0;
+
+    // Display status
+    println!("📊 Journal Status");
+    println!();
+    println!("Entries:");
+    println!("  Total: {} entries", total_entries);
+    println!(
+        "  With embeddings: {} ({:.1}%)",
+        embedded,
+        if total_entries > 0 {
+            (embedded as f64 / total_entries as f64) * 100.0
+        } else {
+            0.0
+        }
+    );
+    if total_entries > embedded {
+        println!(
+            "  Without embeddings: {} ({:.1}%) ⚠️",
+            total_entries - embedded,
+            if total_entries > 0 {
+                ((total_entries - embedded) as f64 / total_entries as f64) * 100.0
+            } else {
+                0.0
+            }
+        );
+    }
+    if let (Some(oldest_date), Some(newest_date)) = (oldest, newest) {
+        println!("  Date range: {} to {}", oldest_date, newest_date);
+    }
+    println!();
+
+    println!("Embeddings:");
+    println!("  Total vectors: {} chunks", total_embeddings);
+    if total_entries > 0 {
+        println!(
+            "  Average: {:.1} chunks/entry",
+            total_embeddings as f64 / total_entries as f64
+        );
+    }
+    println!();
+
+    if migration_total > 0 {
+        println!("Migration:");
+        println!("  Completed: {} entries", migration_verified);
+        println!(
+            "  Pending: {} entries",
+            migration_total - migration_verified
+        );
+        println!();
+    }
+
+    println!("Database:");
+    println!("  Size: {:.1} MB", db_size_mb);
+    println!("  Location: {}", db_path.display());
+    println!();
+
+    if total_entries > embedded {
+        println!("⚠️  Run 'ponder reindex' to generate missing embeddings");
+    }
+
+    Ok(())
+}
+
+/// Prompt user for migration with yes/no choice.
+fn prompt_migration(detection_result: &ops::MigrationDetectionResult) -> AppResult<bool> {
+    println!();
+    println!("📦 v1.0 Journal Entries Detected");
+    println!();
+    println!(
+        "Found {} plaintext v1.0 entries that can be migrated to v2.0 encrypted format.",
+        detection_result.pending
+    );
+    println!();
+    println!("Migration will:");
+    println!("  • Encrypt entries using age encryption");
+    println!("  • Preserve all content (verified with checksums)");
+    println!("  • Generate embeddings for AI features");
+    println!("  • Keep original files (delete with 'ponder cleanup-v1' after verification)");
+    println!();
+    print!("Migrate now? [y/N]: ");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+
+    Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
+/// Print progress for migration.
+fn print_progress(current: usize, total: usize, result: &ops::MigrationResult) {
+    if result.success {
+        println!("[{}/{}] ✓ Migrated: {}", current, total, result.date);
+    } else {
+        println!(
+            "[{}/{}] ✗ Failed: {} - {}",
+            current,
+            total,
+            result.date,
+            result.error_message.as_deref().unwrap_or("Unknown error")
+        );
+    }
+}
+
+/// Check if migration prompt has been shown (to avoid repeated prompts).
+fn has_migration_been_prompted(db: &Database) -> AppResult<bool> {
+    // Check if migration_state exists (indicates we've prompted or started migration)
+    Ok(db.get_migration_state()?.is_some())
+}
+
+/// Mark that migration prompt has been shown.
+fn mark_migration_prompted(db: &Database) -> AppResult<()> {
+    // Initialize migration state with 0 entries to mark prompt as shown
+    // This prevents repeated prompts while user decides not to migrate yet
+    match db.init_migration_state(0) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            // Already exists, that's fine
+            Ok(())
+        }
+    }
+}
+
+/// Parse date range from optional string arguments.
+fn parse_date_range(
+    from: &Option<String>,
+    to: &Option<String>,
+) -> AppResult<Option<(chrono::NaiveDate, chrono::NaiveDate)>> {
+    match (from, to) {
+        (Some(from_str), Some(to_str)) => {
+            let from_date = chrono::NaiveDate::parse_from_str(from_str, constants::DATE_FORMAT_ISO)
+                .map_err(|e| AppError::Journal(format!("Invalid 'from' date: {}", e)))?;
+            let to_date = chrono::NaiveDate::parse_from_str(to_str, constants::DATE_FORMAT_ISO)
+                .map_err(|e| AppError::Journal(format!("Invalid 'to' date: {}", e)))?;
+            Ok(Some((from_date, to_date)))
+        }
+        (Some(_), None) | (None, Some(_)) => Err(AppError::Journal(
+            "Both --from and --to must be specified together".to_string(),
+        )),
+        (None, None) => Ok(None),
+    }
 }
 
 /// The main entry point for the ponder application.
@@ -135,10 +791,6 @@ fn run_application(
 /// 4. Generates correlation ID for tracing
 /// 5. Runs the core application logic
 /// 6. Handles any errors with structured logging and user-friendly messages
-///
-/// The main function implements structured error logging at the application boundary,
-/// ensuring that all errors are properly logged with correlation IDs for monitoring
-/// while also providing user-friendly error messages to stderr.
 fn main() {
     // Obtain current date/time once at the beginning
     let current_datetime = Local::now();
@@ -146,49 +798,48 @@ fn main() {
     // Parse command-line arguments first (needed for log format)
     let args = CliArgs::parse();
 
-    // Initialize tracing/logging before anything else so it's available for error boundary
+    // Initialize tracing/logging
     let use_json_logging = args.log_format == constants::LOG_FORMAT_JSON
         || std::env::var(constants::ENV_VAR_CI).is_ok();
 
-    // Configure tracing subscriber with appropriate filter
+    // Default to "warn" level for clean UX, "info" with --verbose flag
+    let default_level = if args.verbose {
+        constants::DEFAULT_LOG_LEVEL // "info" - show diagnostics
+    } else {
+        "warn" // Only warnings and errors on happy path
+    };
+
     let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(constants::DEFAULT_LOG_LEVEL))
+        .or_else(|_| EnvFilter::try_new(default_level))
         .unwrap_or_else(|e| {
             eprintln!("Error: Invalid log level configuration: {}", e);
             std::process::exit(1);
         });
 
-    // Create the subscriber builder with the filter
     let subscriber_builder = tracing_subscriber::registry().with(filter_layer);
 
-    // Add the appropriate formatter based on the log format
-    // Use try_init to avoid panics in test environments where subscriber may already be set
     let _init_result = if use_json_logging {
-        // JSON logging for CI or when explicitly requested
         let json_layer = fmt::layer()
             .json()
-            .with_timer(fmt::time::ChronoUtc::default()) // Use UTC time with RFC 3339 format
-            .with_current_span(true) // Include current span info
-            .with_span_list(true) // Include span hierarchy
-            .flatten_event(true); // Flatten event fields into the JSON object
+            .with_timer(fmt::time::ChronoUtc::default())
+            .with_current_span(true)
+            .with_span_list(true)
+            .flatten_event(true);
         subscriber_builder.with(json_layer).try_init()
     } else {
-        // Human-readable logging for development
         let pretty_layer = fmt::layer().pretty().with_writer(std::io::stderr);
         subscriber_builder.with(pretty_layer).try_init()
     };
 
-    // Generate a correlation ID for this application invocation
+    // Generate correlation ID
     let correlation_id = Uuid::new_v4().to_string();
 
-    // Run the core application logic and handle any errors at the boundary
+    // Run application
     match run_application(&correlation_id, args, current_datetime) {
         Ok(()) => {
-            // Application completed successfully
             std::process::exit(0);
         }
         Err(error) => {
-            // Structured logging for monitoring/alerting with full error context
             tracing::error!(
                 error = %error,
                 error_chain = ?error,
@@ -196,319 +847,8 @@ fn main() {
                 "Application failed"
             );
 
-            // User-friendly output for CLI users
             eprintln!("Error: {}", error);
-
-            // Exit with failure code
             std::process::exit(1);
         }
-    }
-}
-
-#[cfg(test)]
-#[allow(dead_code)] // Unit tests disabled due to concurrency issues with temp files
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::tempdir;
-
-    /// Test that run_application succeeds with valid configuration
-    #[test]
-    fn test_run_application_success() -> Result<(), Box<dyn std::error::Error>> {
-        // Create a temporary directory for testing
-        let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().join("journal");
-        fs::create_dir_all(&journal_dir)?;
-
-        // Create CLI args for a specific date with a safe editor
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2024-01-15".to_string()),
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        // Generate a test correlation ID
-        let correlation_id = "test-correlation-123";
-
-        // Set up environment for the test
-        std::env::set_var("PONDER_DIR", journal_dir.to_str().unwrap());
-        std::env::set_var("PONDER_EDITOR", "true"); // Use 'true' command as safe test editor
-
-        // Get current datetime for test
-        let current_datetime = Local::now();
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify success
-        assert!(
-            result.is_ok(),
-            "run_application should succeed with valid configuration"
-        );
-
-        Ok(())
-    }
-
-    /// Test that run_application propagates Config errors correctly
-    #[test]
-    fn test_run_application_config_error() -> Result<(), Box<dyn std::error::Error>> {
-        // Create a temporary directory for testing to ensure path resolution works
-        let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().join("journal");
-        fs::create_dir_all(&journal_dir)?;
-
-        // Create CLI args with an invalid editor (shell metacharacters)
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2024-01-15".to_string()),
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        let correlation_id = "test-correlation-config-error";
-        let current_datetime = Local::now();
-
-        // Set up environment with invalid editor command and valid journal dir
-        std::env::set_var("PONDER_DIR", journal_dir.to_str().unwrap());
-        std::env::set_var("PONDER_EDITOR", "vim;dangerous"); // Contains forbidden semicolon
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify that we get a Config error
-        assert!(
-            result.is_err(),
-            "run_application should fail with invalid editor"
-        );
-        let error = result.unwrap_err();
-        match error {
-            AppError::Config(_) => {
-                // Expected - should be a Config error for invalid editor
-            }
-            other => panic!("Expected Config error, got: {:?}", other),
-        }
-
-        Ok(())
-    }
-
-    /// Test that run_application propagates Journal errors correctly
-    #[test]
-    fn test_run_application_journal_error() -> Result<(), Box<dyn std::error::Error>> {
-        // Create a temporary directory for testing
-        let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().join("journal");
-        fs::create_dir_all(&journal_dir)?;
-
-        // Create CLI args with an invalid date format
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("invalid-date-format".to_string()), // Invalid date format
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        let correlation_id = "test-correlation-journal-error";
-        let current_datetime = Local::now();
-
-        // Set up environment
-        std::env::set_var("PONDER_DIR", journal_dir.to_str().unwrap());
-        std::env::set_var("PONDER_EDITOR", "true");
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify that we get a Journal error
-        assert!(
-            result.is_err(),
-            "run_application should fail with invalid date"
-        );
-        let error = result.unwrap_err();
-        match error {
-            AppError::Journal(_) => {
-                // Expected - should be a Journal error for invalid date
-            }
-            other => panic!("Expected Journal error, got: {:?}", other),
-        }
-
-        Ok(())
-    }
-
-    /// Test that run_application propagates Editor errors correctly
-    #[test]
-    fn test_run_application_editor_error() -> Result<(), Box<dyn std::error::Error>> {
-        // Create a temporary directory for testing
-        let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().join("journal");
-        fs::create_dir_all(&journal_dir)?;
-
-        // Create CLI args with valid settings
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2024-01-15".to_string()),
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        let correlation_id = "test-correlation-editor-error";
-        let current_datetime = Local::now();
-
-        // Set up environment with non-existent editor
-        std::env::set_var("PONDER_DIR", journal_dir.to_str().unwrap());
-        std::env::set_var("PONDER_EDITOR", "command_that_definitely_does_not_exist");
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify that we get an Editor error
-        assert!(
-            result.is_err(),
-            "run_application should fail with missing editor"
-        );
-        let error = result.unwrap_err();
-        match error {
-            AppError::Editor(_) => {
-                // Expected - should be an Editor error for missing command
-            }
-            other => panic!("Expected Editor error, got: {:?}", other),
-        }
-
-        Ok(())
-    }
-
-    /// Test that run_application propagates IO errors correctly
-    #[test]
-    fn test_run_application_io_error() -> Result<(), Box<dyn std::error::Error>> {
-        // Create CLI args with valid settings
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2024-01-15".to_string()),
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        let correlation_id = "test-correlation-io-error";
-        let current_datetime = Local::now();
-
-        // Set up environment with a path that cannot be created (no permission to root)
-        // Using /proc/1/root or similar won't work cross-platform, so we'll use a file as directory
-        let temp_file = tempfile::NamedTempFile::new()?;
-        let file_path = temp_file.path().to_str().unwrap();
-
-        // Try to use a file path as a directory path (will fail when trying to create subdirs)
-        let invalid_journal_path = format!("{}/journal", file_path);
-        std::env::set_var("PONDER_DIR", &invalid_journal_path);
-        std::env::set_var("PONDER_EDITOR", "true");
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify that we get an I/O error
-        assert!(
-            result.is_err(),
-            "run_application should fail with invalid directory"
-        );
-        let error = result.unwrap_err();
-
-        // Should be either I/O error or Config error depending on validation order
-        match error {
-            AppError::Io(_) | AppError::Config(_) => {
-                // Either is acceptable - depends on where the validation fails
-            }
-            other => panic!("Expected I/O or Config error, got: {:?}", other),
-        }
-
-        Ok(())
-    }
-
-    /// Test that error propagation preserves error context through function boundary
-    #[test]
-    fn test_error_propagation_preserves_context() -> Result<(), Box<dyn std::error::Error>> {
-        use std::error::Error;
-
-        // Create CLI args that will cause a specific error
-        let args = CliArgs {
-            retro: false,
-            reminisce: false,
-            date: Some("2024-01-15".to_string()),
-            verbose: false,
-            log_format: "text".to_string(),
-        };
-
-        let correlation_id = "test-correlation-context";
-        let current_datetime = Local::now();
-
-        // Set up environment to cause an Editor error with a specific command
-        let temp_dir = tempdir()?;
-        let journal_dir = temp_dir.path().join("journal");
-        fs::create_dir_all(&journal_dir)?;
-
-        std::env::set_var("PONDER_DIR", journal_dir.to_str().unwrap());
-        std::env::set_var("PONDER_EDITOR", "test_nonexistent_editor_for_context_test");
-
-        // Run the application logic
-        let result = run_application(correlation_id, args, current_datetime);
-
-        // Clean up environment
-        std::env::remove_var("PONDER_DIR");
-        std::env::remove_var("PONDER_EDITOR");
-
-        // Verify error and context preservation
-        assert!(result.is_err(), "Should get an error");
-        let app_error = result.unwrap_err();
-
-        // Verify error chain is preserved
-        let mut error_count = 0;
-        let mut current_error: &dyn Error = &app_error;
-
-        loop {
-            error_count += 1;
-            match current_error.source() {
-                Some(source) => current_error = source,
-                None => break,
-            }
-        }
-
-        // Should have at least 2 levels: AppError -> EditorError (or deeper)
-        assert!(
-            error_count >= 2,
-            "Error chain should have multiple levels, got: {}",
-            error_count
-        );
-
-        // Verify the error message contains context about the issue
-        let error_string = format!("{}", app_error);
-        assert!(
-            error_string.contains("editor") || error_string.contains("Editor"),
-            "Error message should contain the editor command: {}",
-            error_string
-        );
-
-        Ok(())
     }
 }
