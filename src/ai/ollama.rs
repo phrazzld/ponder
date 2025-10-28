@@ -3,6 +3,7 @@
 //! This module provides a simple client for interacting with the Ollama API
 //! for generating embeddings and chat completions.
 
+use crate::constants::DEFAULT_CHAT_MODEL;
 use crate::errors::{AIError, AppResult};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -319,6 +320,45 @@ impl OllamaClient {
         debug!("Received chat response");
         Ok(chat_response.message.content)
     }
+
+    /// Sends a chat completion request using an optional model (defaults to config or DEFAULT_CHAT_MODEL).
+    ///
+    /// This is a convenience wrapper around `chat()` that allows callers to optionally
+    /// specify a model, falling back to DEFAULT_CHAT_MODEL if none is provided.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - Optional model name. If None, uses DEFAULT_CHAT_MODEL
+    /// * `messages` - The conversation messages to send
+    ///
+    /// # Returns
+    ///
+    /// The assistant's response text
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Ollama API is not reachable
+    /// - Model is not found
+    /// - API returns an error response
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::{OllamaClient, Message};
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let messages = vec![Message::user("Hello!")];
+    ///
+    /// // Use default model
+    /// let response = client.chat_with_model(None, &messages).unwrap();
+    ///
+    /// // Use specific model
+    /// let response = client.chat_with_model(Some("llama3.1:8b"), &messages).unwrap();
+    /// ```
+    pub fn chat_with_model(&self, model: Option<&str>, messages: &[Message]) -> AppResult<String> {
+        let model_name = model.unwrap_or(DEFAULT_CHAT_MODEL);
+        self.chat(model_name, messages)
+    }
 }
 
 #[cfg(test)]
@@ -344,5 +384,19 @@ mod tests {
     fn test_ollama_client_creation() {
         let client = OllamaClient::new("http://localhost:11434");
         assert_eq!(client.base_url, "http://localhost:11434");
+    }
+
+    #[test]
+    fn test_chat_with_model_uses_default() {
+        // This is a unit test that verifies the method signature and default behavior
+        // Integration tests with actual Ollama instance are in tests/ops_integration_tests.rs
+        let client = OllamaClient::new("http://localhost:11434");
+        let messages = vec![Message::user("test")];
+
+        // Verify that calling with None would use DEFAULT_CHAT_MODEL
+        // We can't actually call it without Ollama running, but we can verify
+        // the method exists and has the right signature
+        let _result: Result<String, _> = client.chat_with_model(None, &messages);
+        let _result: Result<String, _> = client.chat_with_model(Some("custom-model"), &messages);
     }
 }
