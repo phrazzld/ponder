@@ -53,7 +53,7 @@
   Time: 45min
   ```
 
-- [~] Create patterns table migration in src/db/schema.rs
+- [x] Create patterns table migration in src/db/schema.rs
   ```
   Files: src/db/schema.rs:36-224
   Approach: Follow insights table pattern (lines 96-112)
@@ -63,7 +63,7 @@
   Time: 45min
   ```
 
-- [ ] Create src/db/summaries.rs for summary DB operations
+- [~] Create src/db/summaries.rs for summary DB operations
   ```
   Files: NEW src/db/summaries.rs
   Approach: Follow src/db/entries.rs structure (CRUD operations)

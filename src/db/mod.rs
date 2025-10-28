@@ -9,6 +9,7 @@
 //! - `schema`: Table definitions and schema initialization
 //! - `entries`: Entry CRUD operations
 //! - `embeddings`: Vector storage and similarity search
+//! - `summaries`: Summary CRUD operations (daily, weekly, monthly)
 //!
 //! # Example
 //!
@@ -27,6 +28,7 @@
 pub mod embeddings;
 pub mod entries;
 pub mod schema;
+pub mod summaries;
 
 use crate::errors::AppResult;
 use age::secrecy::{ExposeSecret, SecretString};
