@@ -627,6 +627,7 @@ mod tests {
             db_path: db_path.clone(),
             session_timeout_minutes: 60,
             ollama_url: "http://localhost:11434".to_string(),
+            ai_models: crate::config::AIModels::default(),
         };
 
         // Create v1.0 entry
@@ -719,6 +720,7 @@ mod tests {
             db_path: db_path.clone(),
             session_timeout_minutes: 60,
             ollama_url: "http://localhost:11434".to_string(),
+            ai_models: crate::config::AIModels::default(),
         };
 
         // Create v1.0 entries

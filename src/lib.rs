@@ -80,7 +80,7 @@ pub mod setup;
 // Re-export important types for convenience
 pub use ai::OllamaClient;
 pub use cli::{AskArgs, CliArgs, EditArgs, PonderCommand, ReflectArgs, SearchArgs};
-pub use config::Config;
+pub use config::{AIModels, Config};
 pub use crypto::SessionManager;
 pub use db::Database;
 pub use errors::{AIError, AppError, AppResult, DatabaseError, LockError};

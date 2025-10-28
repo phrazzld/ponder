@@ -84,6 +84,62 @@ pub struct Config {
     /// This is loaded from the OLLAMA_URL environment variable with a fallback
     /// to http://127.0.0.1:11434 if not specified.
     pub ollama_url: String,
+
+    /// AI model configuration for different operations.
+    ///
+    /// Allows configuring which Ollama models to use for different AI tasks.
+    /// Each field can be set via environment variables or uses sensible defaults.
+    pub ai_models: AIModels,
+}
+
+/// AI model configuration for different operation types.
+///
+/// This struct allows fine-grained control over which models are used for
+/// different AI-powered operations in Ponder. Different models excel at
+/// different tasks, and this configuration enables optimization for quality
+/// vs. speed vs. resource usage.
+///
+/// # Examples
+///
+/// ```
+/// use ponder::config::AIModels;
+///
+/// let models = AIModels::default();
+/// assert_eq!(models.embed_model, "nomic-embed-text");
+/// assert_eq!(models.chat_model, "gemma3:4b");
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct AIModels {
+    /// Model for generating embeddings for semantic search.
+    ///
+    /// Loaded from PONDER_EMBED_MODEL env var, defaults to "nomic-embed-text".
+    pub embed_model: String,
+
+    /// Model for general chat, ask, and reflect operations.
+    ///
+    /// Loaded from PONDER_CHAT_MODEL env var, defaults to "gemma3:4b".
+    pub chat_model: String,
+
+    /// Model for deep reasoning and pattern analysis.
+    ///
+    /// Loaded from PONDER_REASONING_MODEL env var, defaults to "deepseek-r1:8b".
+    pub reasoning_model: String,
+
+    /// Model optimized for summarization tasks.
+    ///
+    /// Loaded from PONDER_SUMMARY_MODEL env var, defaults to "phi4:3.8b".
+    pub summary_model: String,
+}
+
+impl Default for AIModels {
+    fn default() -> Self {
+        Self {
+            embed_model: constants::DEFAULT_EMBED_MODEL.to_string(),
+            chat_model: constants::DEFAULT_CHAT_MODEL.to_string(),
+            reasoning_model: "deepseek-r1:8b".to_string(),
+            summary_model: "phi4:3.8b".to_string(),
+        }
+    }
 }
 
 impl fmt::Debug for Config {
@@ -104,6 +160,7 @@ impl Default for Config {
             db_path: PathBuf::from(""),
             session_timeout_minutes: constants::DEFAULT_SESSION_TIMEOUT_MINUTES,
             ollama_url: constants::DEFAULT_OLLAMA_URL.to_string(),
+            ai_models: AIModels::default(),
         }
     }
 }
@@ -261,12 +318,16 @@ impl Config {
         let ollama_url = env::var(constants::ENV_VAR_OLLAMA_URL)
             .unwrap_or_else(|_| constants::DEFAULT_OLLAMA_URL.to_string());
 
+        // Initialize AI models with defaults (will be loaded from env vars in next task)
+        let ai_models = AIModels::default();
+
         let config = Config {
             editor: editor.to_string(),
             journal_dir,
             db_path,
             session_timeout_minutes,
             ollama_url,
+            ai_models,
         };
 
         Ok(config)
@@ -688,6 +749,62 @@ mod tests {
         } else {
             env::remove_var("EDITOR");
         }
+        if let Some(val) = orig_ponder_dir {
+            env::set_var("PONDER_DIR", val);
+        } else {
+            env::remove_var("PONDER_DIR");
+        }
+    }
+
+    #[test]
+    fn test_ai_models_default() {
+        let models = AIModels::default();
+        assert_eq!(models.embed_model, constants::DEFAULT_EMBED_MODEL);
+        assert_eq!(models.chat_model, constants::DEFAULT_CHAT_MODEL);
+        assert_eq!(models.reasoning_model, "deepseek-r1:8b");
+        assert_eq!(models.summary_model, "phi4:3.8b");
+    }
+
+    #[test]
+    fn test_ai_models_debug() {
+        let models = AIModels::default();
+        let debug_str = format!("{:?}", models);
+        // Should contain model names (not redacted, as these are config not secrets)
+        assert!(debug_str.contains("nomic-embed-text"));
+        assert!(debug_str.contains("gemma3:4b"));
+    }
+
+    #[test]
+    fn test_ai_models_clone() {
+        let models1 = AIModels::default();
+        let models2 = models1.clone();
+        assert_eq!(models1, models2);
+    }
+
+    #[test]
+    fn test_config_includes_ai_models() {
+        let config = Config::default();
+        assert_eq!(config.ai_models.embed_model, constants::DEFAULT_EMBED_MODEL);
+        assert_eq!(config.ai_models.chat_model, constants::DEFAULT_CHAT_MODEL);
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_load_initializes_ai_models() {
+        // Store and clear environment
+        let orig_ponder_dir = env::var("PONDER_DIR").ok();
+        let temp_dir = tempdir().unwrap();
+        env::set_var("PONDER_DIR", temp_dir.path());
+
+        let config = Config::load().unwrap();
+
+        // Verify AI models are initialized with defaults
+        assert_eq!(config.ai_models.embed_model, constants::DEFAULT_EMBED_MODEL);
+        assert_eq!(config.ai_models.chat_model, constants::DEFAULT_CHAT_MODEL);
+        assert_eq!(config.ai_models.reasoning_model, "deepseek-r1:8b");
+        assert_eq!(config.ai_models.summary_model, "phi4:3.8b");
+
+        // Restore environment
         if let Some(val) = orig_ponder_dir {
             env::set_var("PONDER_DIR", val);
         } else {
