@@ -119,6 +119,7 @@ fn run_application(
         }
         Some(PonderCommand::Summaries(summaries_args)) => cmd_summaries(&config, summaries_args),
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
+        Some(PonderCommand::Converse(_converse_args)) => cmd_converse(&config),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
@@ -599,6 +600,25 @@ fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResul
             println!("---\n");
         }
     }
+
+    Ok(())
+}
+
+/// Converse command: Interactive conversational AI for journal exploration.
+fn cmd_converse(config: &Config) -> AppResult<()> {
+    info!("Command: converse");
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure models are available (embedding for context search, chat for conversation)
+    ensure_embedding_available(&ai_client)?;
+    ensure_chat_available(&ai_client)?;
+
+    // Start conversation
+    ops::start_conversation(&db, &mut session, &ai_client, config)?;
 
     Ok(())
 }

@@ -102,21 +102,25 @@ pub fn start_conversation(
         let user_input = user_input.trim();
 
         // Check for exit conditions
-        if user_input.is_empty() || user_input.eq_ignore_ascii_case("quit") || user_input.eq_ignore_ascii_case("exit") {
+        if user_input.is_empty()
+            || user_input.eq_ignore_ascii_case("quit")
+            || user_input.eq_ignore_ascii_case("exit")
+        {
             println!("\n👋 Goodbye! Thanks for the conversation.");
             break;
         }
 
         // Assemble context from journal entries
         debug!("Assembling context for question: {}", user_input);
-        let context_chunks = match assemble_conversation_context(db, session, ai_client, user_input, 10) {
-            Ok(chunks) => chunks,
-            Err(e) => {
-                eprintln!("\n❌ Error assembling context: {}", e);
-                eprintln!("   Continuing without journal context...\n");
-                Vec::new()
-            }
-        };
+        let context_chunks =
+            match assemble_conversation_context(db, session, ai_client, user_input, 10) {
+                Ok(chunks) => chunks,
+                Err(e) => {
+                    eprintln!("\n❌ Error assembling context: {}", e);
+                    eprintln!("   Continuing without journal context...\n");
+                    Vec::new()
+                }
+            };
 
         // Build user message with context
         let user_message = if context_chunks.is_empty() {
@@ -146,7 +150,10 @@ pub fn start_conversation(
             Err(e) => {
                 eprintln!("\n❌ Error getting AI response: {}", e);
                 eprintln!("   Make sure Ollama is running: ollama serve");
-                eprintln!("   And the model is available: ollama pull {}\n", _config.ai_models.chat_model);
+                eprintln!(
+                    "   And the model is available: ollama pull {}\n",
+                    _config.ai_models.chat_model
+                );
                 conversation_history.pop(); // Remove user message since we got no response
                 continue;
             }
@@ -161,7 +168,9 @@ pub fn start_conversation(
         if conversation_history.len() > 21 {
             // Keep system message (index 0) and most recent 20 messages
             let system_msg = conversation_history[0].clone();
-            let recent_messages: Vec<Message> = conversation_history.drain(conversation_history.len() - 20..).collect();
+            let recent_messages: Vec<Message> = conversation_history
+                .drain(conversation_history.len() - 20..)
+                .collect();
             conversation_history = vec![system_msg];
             conversation_history.extend(recent_messages);
             debug!("Trimmed conversation history to 20 most recent messages");
@@ -300,10 +309,11 @@ mod tests {
         let db_path = temp_dir.path().join("test.db");
         let passphrase = SecretString::new("test_password".to_string());
         let db = Database::open(&db_path, &passphrase).unwrap();
-        let mut session = SessionManager::new(std::time::Duration::from_secs(1800));
-        session.unlock(passphrase.clone()).unwrap();
+        let mut session = SessionManager::new(30); // 30 minutes
+        session.unlock(passphrase.clone());
 
-        let ollama_url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+        let ollama_url =
+            std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
         let ai_client = OllamaClient::new(&ollama_url);
 
         let result = assemble_conversation_context(&db, &mut session, &ai_client, "test query", 5);
@@ -326,10 +336,11 @@ mod tests {
         let path = PathBuf::from("/tmp/test.md");
         upsert_entry(&conn, &path, date, "abc123", 100).unwrap();
 
-        let mut session = SessionManager::new(std::time::Duration::from_secs(1800));
-        session.unlock(passphrase).unwrap();
+        let mut session = SessionManager::new(30); // 30 minutes
+        session.unlock(passphrase);
 
-        let ollama_url = std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+        let ollama_url =
+            std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
         let ai_client = OllamaClient::new(&ollama_url);
 
         // Should not panic even with embeddings missing

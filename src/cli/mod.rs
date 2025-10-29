@@ -75,6 +75,9 @@ pub enum PonderCommand {
     /// Semantic search over journal entries
     Search(SearchArgs),
 
+    /// Interactive conversational AI for journal exploration
+    Converse(ConverseArgs),
+
     /// Lock the encrypted session (clear passphrase from memory)
     Lock,
 
@@ -217,6 +220,12 @@ pub struct SearchArgs {
     /// Optional date range end (YYYY-MM-DD)
     #[clap(long)]
     pub to: Option<String>,
+}
+
+/// Arguments for the `converse` subcommand.
+#[derive(Parser)]
+pub struct ConverseArgs {
+    // No arguments for MVP - just start the conversation
 }
 
 /// Arguments for the `backup` subcommand.
