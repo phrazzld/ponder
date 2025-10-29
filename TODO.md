@@ -228,7 +228,7 @@
   Time: 2hr
   ```
 
-- [ ] Implement topic clustering in patterns.rs
+- [x] Implement topic clustering in patterns.rs
   ```
   Files: src/ops/patterns.rs
   Approach: Cluster embeddings by cosine similarity, label with AI
