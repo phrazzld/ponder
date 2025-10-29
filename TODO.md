@@ -184,7 +184,7 @@
   Time: 45min
   ```
 
-- [~] Add Summaries subcommand for viewing past summaries
+- [x] Add Summaries subcommand for viewing past summaries
   ```
   Files: src/cli/mod.rs:58-89
   Approach: Follow Search pattern (lines 70, 135-152)

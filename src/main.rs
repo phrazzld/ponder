@@ -41,7 +41,7 @@ Environment variables:
 - `OLLAMA_URL`: Ollama API URL (default: http://127.0.0.1:11434)
 */
 
-use chrono::Local;
+use chrono::{Datelike, Local};
 use clap::Parser;
 use ponder::cli::{CliArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
@@ -114,10 +114,8 @@ fn run_application(
         Some(PonderCommand::Reflect(reflect_args)) => {
             cmd_reflect(&config, reflect_args, current_date)
         }
-        Some(PonderCommand::Summarize(_summarize_args)) => {
-            eprintln!("The 'summarize' command is not yet implemented.");
-            eprintln!("This feature is coming soon!");
-            std::process::exit(1);
+        Some(PonderCommand::Summarize(summarize_args)) => {
+            cmd_summarize(&config, summarize_args, current_date)
         }
         Some(PonderCommand::Summaries(_summaries_args)) => {
             eprintln!("The 'summaries' command is not yet implemented.");
@@ -364,6 +362,100 @@ fn cmd_reflect(
 
     // Output reflection
     println!("\n{}\n", reflection);
+
+    Ok(())
+}
+
+/// Summarize command: Generate AI-powered summaries (daily, weekly, monthly).
+fn cmd_summarize(
+    config: &Config,
+    summarize_args: ponder::cli::SummarizeArgs,
+    current_date: chrono::NaiveDate,
+) -> AppResult<()> {
+    use ponder::cli::SummaryPeriod;
+
+    info!("Command: summarize");
+
+    // Parse date based on period
+    let (date, year, month) = match summarize_args.period {
+        SummaryPeriod::Daily => {
+            let date = if let Some(date_str) = summarize_args.date {
+                DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?
+            } else {
+                current_date
+            };
+            (Some(date), None, None)
+        }
+        SummaryPeriod::Weekly => {
+            let end_date = if let Some(date_str) = summarize_args.date {
+                DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?
+            } else {
+                // Default to last Sunday
+                let days_since_sunday = current_date.weekday().num_days_from_sunday();
+                current_date - chrono::Duration::days(days_since_sunday as i64)
+            };
+            (Some(end_date), None, None)
+        }
+        SummaryPeriod::Monthly => {
+            let (year, month) = if let Some(date_str) = summarize_args.date {
+                let date = DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?;
+                (date.year(), date.month())
+            } else {
+                (current_date.year(), current_date.month())
+            };
+            (None, Some(year), Some(month))
+        }
+    };
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure chat model is available
+    ensure_chat_available(&ai_client)?;
+
+    // Generate summary based on period
+    let summary_id = match summarize_args.period {
+        SummaryPeriod::Daily => {
+            let date = date.unwrap();
+            println!("Generating daily summary for {}...", date);
+            ops::generate_daily_summary(&db, &mut session, &ai_client, date)?
+        }
+        SummaryPeriod::Weekly => {
+            let end_date = date.unwrap();
+            let start_date = end_date - chrono::Duration::days(6);
+            println!(
+                "Generating weekly summary for {} to {}...",
+                start_date, end_date
+            );
+            ops::generate_weekly_summary(&db, &mut session, &ai_client, end_date)?
+        }
+        SummaryPeriod::Monthly => {
+            let year = year.unwrap();
+            let month = month.unwrap();
+            println!("Generating monthly summary for {}-{:02}...", year, month);
+            ops::generate_monthly_summary(&db, &mut session, &ai_client, year, month)?
+        }
+    };
+
+    println!("Summary generated successfully (ID: {}).", summary_id);
+    println!("Use 'ponder summaries' to view past summaries.");
 
     Ok(())
 }
