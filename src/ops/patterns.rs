@@ -6,14 +6,20 @@
 //! - Sentiment trends (coming soon)
 //! - Correlation discovery (coming soon)
 
+use crate::ai::OllamaClient;
+use crate::crypto::age::decrypt_with_passphrase;
+use crate::crypto::SessionManager;
+use crate::db::embeddings::search_similar_chunks;
 use crate::db::patterns::{insert_pattern, PatternType};
 use crate::db::Database;
 use crate::errors::{AppResult, DatabaseError};
+use bytemuck;
 use chrono::{Datelike, NaiveDate, Weekday};
 use rusqlite::params;
 use serde_json::json;
-use std::collections::HashMap;
-use tracing::{debug, info};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use tracing::{debug, info, warn};
 
 /// Result of temporal pattern detection.
 #[derive(Debug, Clone)]
@@ -247,6 +253,260 @@ pub fn detect_temporal_patterns(db: &Database) -> AppResult<TemporalPatterns> {
     })
 }
 
+/// Topic cluster result.
+#[derive(Debug, Clone)]
+pub struct TopicCluster {
+    /// Main topic label
+    pub topic: String,
+    /// Entry dates in this cluster
+    pub entry_dates: Vec<NaiveDate>,
+    /// Confidence score
+    pub confidence: f64,
+}
+
+/// Result of topic pattern detection.
+#[derive(Debug, Clone)]
+pub struct TopicPatterns {
+    /// Detected topic clusters
+    pub clusters: Vec<TopicCluster>,
+    /// Total entries analyzed
+    pub total_entries: usize,
+}
+
+/// Detects topic patterns by clustering similar journal entries.
+///
+/// Uses vector embeddings to group entries by semantic similarity, then uses AI
+/// to extract and label the dominant topics in each cluster.
+///
+/// # Flow
+///
+/// 1. Query all entries with embeddings
+/// 2. For each entry, find similar entries using embedding similarity
+/// 3. Group entries into clusters based on similarity threshold
+/// 4. For each cluster, decrypt entries and extract topics using AI
+/// 5. Store topic patterns in database
+/// 6. Return topic clusters
+///
+/// # Arguments
+///
+/// * `db` - Database connection
+/// * `session` - Session manager for decryption
+/// * `ai_client` - Ollama client for topic extraction
+/// * `similarity_threshold` - Minimum similarity score to group entries (0.0-1.0)
+/// * `min_cluster_size` - Minimum number of entries to form a cluster
+///
+/// # Returns
+///
+/// Returns `TopicPatterns` with detected clusters and their topics.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Database query fails
+/// - Decryption fails
+/// - AI topic extraction fails
+pub fn detect_topic_patterns(
+    db: &Database,
+    session: &mut SessionManager,
+    ai_client: &OllamaClient,
+    similarity_threshold: f32,
+    min_cluster_size: usize,
+) -> AppResult<TopicPatterns> {
+    info!("Detecting topic patterns via embedding clustering");
+
+    let conn = db.get_conn()?;
+    let passphrase = session.get_passphrase()?;
+
+    // Get all entries that have embeddings
+    let mut stmt = conn
+        .prepare(
+            r#"
+        SELECT DISTINCT e.id, e.date, e.path
+        FROM entries e
+        INNER JOIN embeddings emb ON e.id = emb.entry_id
+        ORDER BY e.date DESC
+        "#,
+        )
+        .map_err(DatabaseError::Sqlite)?;
+
+    let entries: Vec<(i64, String, String)> = stmt
+        .query_map(params![], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(DatabaseError::Sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(DatabaseError::Sqlite)?;
+
+    let total_entries = entries.len();
+
+    if total_entries == 0 {
+        info!("No entries with embeddings found for topic clustering");
+        return Ok(TopicPatterns {
+            clusters: vec![],
+            total_entries: 0,
+        });
+    }
+
+    debug!("Analyzing {} entries for topic clustering", total_entries);
+
+    // Simple clustering: for each entry, find similar entries
+    // Group entries that are mutually similar
+    let mut clusters: Vec<Vec<(i64, NaiveDate, String)>> = Vec::new();
+    let mut processed: HashSet<i64> = HashSet::new();
+
+    for (entry_id, date_str, path_str) in &entries {
+        if processed.contains(entry_id) {
+            continue;
+        }
+
+        let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .map_err(|e| DatabaseError::Custom(format!("Invalid date format: {}", e)))?;
+
+        // Get this entry's first embedding as the representative
+        let embedding_result: Result<Vec<u8>, _> = conn
+            .query_row(
+                "SELECT embedding FROM embeddings WHERE entry_id = ? LIMIT 1",
+                params![entry_id],
+                |row| row.get(0),
+            )
+            .map_err(DatabaseError::Sqlite);
+
+        let embedding_bytes = match embedding_result {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                warn!("Could not get embedding for entry {}", entry_id);
+                continue;
+            }
+        };
+
+        // Convert bytes to f32 slice
+        let embedding: Vec<f32> = bytemuck::cast_slice(&embedding_bytes).to_vec();
+
+        // Find similar entries
+        let similar = search_similar_chunks(&conn, &embedding, 50)?;
+
+        // Group entries with similarity above threshold
+        let mut cluster_members = vec![(*entry_id, date, path_str.clone())];
+        processed.insert(*entry_id);
+
+        for similar_chunk in similar {
+            if similar_chunk.similarity >= similarity_threshold
+                && !processed.contains(&similar_chunk.entry_id)
+            {
+                // Get the entry info
+                if let Some((_, sim_date_str, sim_path_str)) = entries
+                    .iter()
+                    .find(|(id, _, _)| *id == similar_chunk.entry_id)
+                {
+                    if let Ok(sim_date) = NaiveDate::parse_from_str(sim_date_str, "%Y-%m-%d") {
+                        cluster_members.push((
+                            similar_chunk.entry_id,
+                            sim_date,
+                            sim_path_str.clone(),
+                        ));
+                        processed.insert(similar_chunk.entry_id);
+                    }
+                }
+            }
+        }
+
+        if cluster_members.len() >= min_cluster_size {
+            clusters.push(cluster_members);
+        }
+    }
+
+    debug!("Found {} topic clusters", clusters.len());
+
+    // Extract topics for each cluster using AI
+    let mut topic_clusters = Vec::new();
+
+    for (cluster_idx, cluster_members) in clusters.iter().enumerate() {
+        debug!(
+            "Processing cluster {} with {} entries",
+            cluster_idx,
+            cluster_members.len()
+        );
+
+        // Decrypt a sample of entries from the cluster (max 3) to extract topics
+        let sample_size = cluster_members.len().min(3);
+        let mut combined_text = String::new();
+
+        for (_, _, path_str) in cluster_members.iter().take(sample_size) {
+            match fs::read(path_str) {
+                Ok(encrypted_content) => {
+                    match decrypt_with_passphrase(&encrypted_content, passphrase) {
+                        Ok(decrypted) => {
+                            if let Ok(text) = String::from_utf8(decrypted) {
+                                // Take first 500 chars to avoid overwhelming the AI
+                                let excerpt = text.chars().take(500).collect::<String>();
+                                combined_text.push_str(&excerpt);
+                                combined_text.push_str("\n\n");
+                            }
+                        }
+                        Err(e) => warn!("Failed to decrypt entry: {}", e),
+                    }
+                }
+                Err(e) => warn!("Failed to read entry file: {}", e),
+            }
+        }
+
+        if combined_text.is_empty() {
+            continue;
+        }
+
+        // Extract topics using AI
+        match ai_client.extract_topics(&combined_text) {
+            Ok(topics) => {
+                if !topics.is_empty() {
+                    let main_topic = topics[0].clone();
+                    let dates: Vec<NaiveDate> =
+                        cluster_members.iter().map(|(_, date, _)| *date).collect();
+
+                    // Store pattern in database
+                    let metadata = json!({
+                        "topics": topics,
+                        "entry_count": cluster_members.len(),
+                        "sample_size": sample_size
+                    });
+
+                    let first_date = dates
+                        .iter()
+                        .min()
+                        .map(|d| d.to_string())
+                        .unwrap_or_default();
+                    let last_date = dates
+                        .iter()
+                        .max()
+                        .map(|d| d.to_string())
+                        .unwrap_or_default();
+
+                    insert_pattern(
+                        &conn,
+                        PatternType::Topic,
+                        &format!("Topic cluster: {}", main_topic),
+                        Some(&metadata.to_string()),
+                        Some(cluster_members.len() as f64 / total_entries as f64),
+                        &first_date,
+                        &last_date,
+                    )?;
+
+                    topic_clusters.push(TopicCluster {
+                        topic: main_topic,
+                        entry_dates: dates,
+                        confidence: cluster_members.len() as f64 / total_entries as f64,
+                    });
+                }
+            }
+            Err(e) => warn!("Failed to extract topics for cluster: {}", e),
+        }
+    }
+
+    info!("Detected {} topic clusters", topic_clusters.len());
+
+    Ok(TopicPatterns {
+        clusters: topic_clusters,
+        total_entries,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,7 +553,7 @@ mod tests {
         let result = detect_temporal_patterns(&db).unwrap();
 
         assert_eq!(result.total_entries, 4);
-        assert!(result.patterns.len() > 0);
+        assert!(!result.patterns.is_empty());
         assert!(result.avg_gap_days > 0.0);
     }
 
