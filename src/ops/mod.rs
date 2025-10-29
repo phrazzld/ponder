@@ -9,6 +9,7 @@ pub mod backup;
 pub mod detection;
 pub mod edit;
 pub mod migration;
+pub mod patterns;
 pub mod reflect;
 pub mod reindex;
 pub mod search;
@@ -22,6 +23,7 @@ pub use detection::{
 };
 pub use edit::edit_entry;
 pub use migration::{migrate_all_entries, migrate_entry, verify_migration, MigrationResult};
+pub use patterns::{detect_temporal_patterns, TemporalPatterns};
 pub use reflect::reflect_on_entry;
 pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;
