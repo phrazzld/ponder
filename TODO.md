@@ -194,7 +194,7 @@
   Time: 30min
   ```
 
-- [ ] Implement cmd_summarize handler in src/main.rs
+- [x] Implement cmd_summarize handler in src/main.rs
   ```
   Files: src/main.rs
   Approach: Follow cmd_reflect pattern (similar to ask/reflect)
@@ -204,7 +204,7 @@
   Time: 1hr
   ```
 
-- [ ] Implement cmd_summaries handler for browsing summaries
+- [x] Implement cmd_summaries handler for browsing summaries
   ```
   Files: src/main.rs
   Approach: Follow cmd_search pattern
