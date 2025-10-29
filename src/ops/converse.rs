@@ -73,6 +73,7 @@ pub fn start_conversation(
     session: &mut SessionManager,
     ai_client: &OllamaClient,
     _config: &Config,
+    show_context: bool,
 ) -> AppResult<()> {
     info!("Starting conversational interface");
 
@@ -121,6 +122,28 @@ pub fn start_conversation(
                     Vec::new()
                 }
             };
+
+        // Display context preview for user verification
+        if show_context && !context_chunks.is_empty() {
+            println!("\n📚 Context ({} entries):", context_chunks.len());
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            for (date, excerpt) in &context_chunks {
+                // Truncate to ~80 chars for readability
+                let truncated: String = excerpt
+                    .chars()
+                    .take(80)
+                    .collect::<String>()
+                    .trim()
+                    .replace('\n', " ");
+                println!(
+                    "📝 {}: \"{}{}\"",
+                    date,
+                    truncated,
+                    if excerpt.len() > 80 { "..." } else { "" }
+                );
+            }
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        }
 
         // Build user message with context
         let user_message = if context_chunks.is_empty() {

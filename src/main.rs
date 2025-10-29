@@ -43,7 +43,7 @@ Environment variables:
 
 use chrono::{Datelike, Local};
 use clap::Parser;
-use ponder::cli::{CliArgs, EditArgs, PonderCommand};
+use ponder::cli::{CliArgs, ConverseArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
 use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
 use ponder::crypto::SessionManager;
@@ -119,7 +119,7 @@ fn run_application(
         }
         Some(PonderCommand::Summaries(summaries_args)) => cmd_summaries(&config, summaries_args),
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
-        Some(PonderCommand::Converse(_converse_args)) => cmd_converse(&config),
+        Some(PonderCommand::Converse(converse_args)) => cmd_converse(&config, &converse_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
@@ -605,7 +605,7 @@ fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResul
 }
 
 /// Converse command: Interactive conversational AI for journal exploration.
-fn cmd_converse(config: &Config) -> AppResult<()> {
+fn cmd_converse(config: &Config, converse_args: &ConverseArgs) -> AppResult<()> {
     info!("Command: converse");
 
     // Initialize session, database, and AI client
@@ -617,8 +617,9 @@ fn cmd_converse(config: &Config) -> AppResult<()> {
     ensure_embedding_available(&ai_client)?;
     ensure_chat_available(&ai_client)?;
 
-    // Start conversation
-    ops::start_conversation(&db, &mut session, &ai_client, config)?;
+    // Start conversation with context visibility (inverted from --no-context flag)
+    let show_context = !converse_args.no_context;
+    ops::start_conversation(&db, &mut session, &ai_client, config, show_context)?;
 
     Ok(())
 }

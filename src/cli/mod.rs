@@ -225,7 +225,9 @@ pub struct SearchArgs {
 /// Arguments for the `converse` subcommand.
 #[derive(Parser)]
 pub struct ConverseArgs {
-    // No arguments for MVP - just start the conversation
+    /// Hide context preview before AI responses
+    #[arg(long)]
+    pub no_context: bool,
 }
 
 /// Arguments for the `backup` subcommand.
