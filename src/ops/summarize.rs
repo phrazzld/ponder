@@ -4,7 +4,7 @@
 //! granularities (daily, weekly, monthly). Summaries are encrypted and stored in the
 //! database for later retrieval.
 
-use crate::ai::prompts::{daily_summary_prompt, weekly_summary_prompt};
+use crate::ai::prompts::{daily_summary_prompt, monthly_summary_prompt, weekly_summary_prompt};
 use crate::ai::OllamaClient;
 use crate::constants::DEFAULT_CHAT_MODEL;
 use crate::crypto::age::{decrypt_with_passphrase, encrypt_with_passphrase};
@@ -235,6 +235,150 @@ pub fn generate_weekly_summary(
     Ok(summary_id)
 }
 
+/// Generates a monthly summary by aggregating weekly summaries.
+///
+/// # Flow
+///
+/// 1. Calculate the number of weeks in the month
+/// 2. Fetch weekly summaries for each week in the month
+/// 3. Decrypt each weekly summary
+/// 4. Aggregate weekly summaries using AI
+/// 5. Extract topics and sentiment from aggregated content
+/// 6. Encrypt monthly summary
+/// 7. Store encrypted summary in database
+///
+/// # Arguments
+///
+/// * `db` - Database connection
+/// * `session` - Session manager for encryption/decryption
+/// * `ai_client` - Ollama client for summary generation
+/// * `year` - Year of the month to summarize
+/// * `month` - Month to summarize (1-12)
+///
+/// # Returns
+///
+/// The ID of the stored monthly summary record.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Session is locked
+/// - Invalid month (not 1-12)
+/// - No weekly summaries exist for the month
+/// - Decryption fails
+/// - Summary generation fails
+/// - Encryption fails
+/// - Database operation fails
+pub fn generate_monthly_summary(
+    db: &Database,
+    session: &mut SessionManager,
+    ai_client: &OllamaClient,
+    year: i32,
+    month: u32,
+) -> AppResult<i64> {
+    if !(1..=12).contains(&month) {
+        return Err(AppError::Journal(format!(
+            "Invalid month: {}. Must be 1-12",
+            month
+        )));
+    }
+
+    info!("Generating monthly summary for {}-{:02}", year, month);
+
+    // Ensure session is unlocked
+    let passphrase = session.get_passphrase()?;
+
+    // Calculate the month's date range
+    let start_date = NaiveDate::from_ymd_opt(year, month, 1)
+        .ok_or_else(|| AppError::Journal(format!("Invalid date: {}-{:02}-01", year, month)))?;
+
+    // Get the last day of the month
+    let next_month_start = if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .ok_or_else(|| AppError::Journal("Failed to calculate month end".to_string()))?;
+
+    let end_date = next_month_start - Duration::days(1);
+
+    debug!(
+        "Fetching weekly summaries from {} to {}",
+        start_date, end_date
+    );
+
+    // Fetch and decrypt weekly summaries
+    // We'll check for weekly summaries at regular intervals (every 7 days)
+    let conn = db.get_conn()?;
+    let mut weekly_summaries = Vec::new();
+
+    let mut current_date = start_date;
+    while current_date <= end_date {
+        let date_str = current_date.to_string();
+
+        if let Some(summary) = get_summary(&conn, &date_str, SummaryLevel::Weekly)? {
+            let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+            let text = String::from_utf8(decrypted).map_err(|e| {
+                AppError::Journal(format!("Invalid UTF-8 in weekly summary: {}", e))
+            })?;
+            weekly_summaries.push(text);
+            debug!("Loaded weekly summary for {}", current_date);
+        }
+
+        // Move to next week
+        current_date += Duration::days(7);
+    }
+
+    if weekly_summaries.is_empty() {
+        return Err(AppError::Journal(format!(
+            "No weekly summaries found for {}-{:02}",
+            year, month
+        )));
+    }
+
+    info!("Aggregating {} weekly summaries", weekly_summaries.len());
+
+    // Generate monthly summary using AI
+    let messages = monthly_summary_prompt(&weekly_summaries);
+    let summary_text = ai_client.chat(DEFAULT_CHAT_MODEL, &messages)?;
+
+    info!("Generated monthly summary ({} chars)", summary_text.len());
+
+    // Extract topics and sentiment from the monthly summary itself
+    let topics = ai_client.extract_topics(&summary_text)?;
+    let topics_json = if topics.is_empty() {
+        None
+    } else {
+        Some(
+            serde_json::to_string(&topics)
+                .map_err(|e| AppError::Journal(format!("Failed to serialize topics: {}", e)))?,
+        )
+    };
+
+    debug!("Extracted {} topics from monthly summary", topics.len());
+
+    let sentiment = ai_client.analyze_sentiment(&summary_text)?;
+    debug!("Monthly sentiment score: {}", sentiment);
+
+    // Encrypt summary
+    let encrypted_summary = encrypt_with_passphrase(summary_text.as_bytes(), passphrase)?;
+
+    // Store in database (use first day of month as the date)
+    let word_count = summary_text.split_whitespace().count() as i64;
+    let summary_id = upsert_summary(
+        &conn,
+        &start_date.to_string(),
+        SummaryLevel::Monthly,
+        &encrypted_summary,
+        topics_json.as_deref(),
+        Some(sentiment as f64),
+        Some(word_count),
+    )?;
+
+    info!("Monthly summary stored with id {}", summary_id);
+    Ok(summary_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +419,22 @@ mod tests {
 
         // Just verify the function exists with correct signature
         let _result: Result<i64, _> = generate_weekly_summary(&db, &mut session, &client, end_date);
+    }
+
+    #[test]
+    fn test_generate_monthly_summary_signature() {
+        // Unit test verifying function signature
+        // Integration tests with actual Ollama in tests/ops_integration_tests.rs
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let passphrase = SecretString::new("test".to_string());
+
+        let db = Database::open(&db_path, &passphrase).unwrap();
+        let mut session = SessionManager::new(60);
+        session.unlock(passphrase.clone());
+        let client = OllamaClient::new("http://localhost:11434");
+
+        // Just verify the function exists with correct signature
+        let _result: Result<i64, _> = generate_monthly_summary(&db, &mut session, &client, 2024, 1);
     }
 }

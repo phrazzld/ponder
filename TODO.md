@@ -152,7 +152,7 @@
   Time: 1.5hr
   ```
 
-- [~] Implement weekly summary aggregation in summarize.rs
+- [x] Implement weekly summary aggregation in summarize.rs
   ```
   Files: src/ops/summarize.rs
   Approach: Fetch 7 daily summaries, aggregate with AI
@@ -162,7 +162,7 @@
   Time: 1hr
   ```
 
-- [ ] Implement monthly summary aggregation in summarize.rs
+- [~] Implement monthly summary aggregation in summarize.rs
   ```
   Files: src/ops/summarize.rs
   Approach: Follow weekly pattern, aggregate weekly summaries

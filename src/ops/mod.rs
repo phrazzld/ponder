@@ -25,4 +25,4 @@ pub use migration::{migrate_all_entries, migrate_entry, verify_migration, Migrat
 pub use reflect::reflect_on_entry;
 pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;
-pub use summarize::{generate_daily_summary, generate_weekly_summary};
+pub use summarize::{generate_daily_summary, generate_monthly_summary, generate_weekly_summary};
