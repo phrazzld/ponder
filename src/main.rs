@@ -119,6 +119,11 @@ fn run_application(
             eprintln!("This feature is coming soon!");
             std::process::exit(1);
         }
+        Some(PonderCommand::Summaries(_summaries_args)) => {
+            eprintln!("The 'summaries' command is not yet implemented.");
+            eprintln!("This feature is coming soon!");
+            std::process::exit(1);
+        }
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),

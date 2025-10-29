@@ -174,7 +174,7 @@
 
 ### CLI Integration
 
-- [~] Add Summarize subcommand to src/cli/mod.rs
+- [x] Add Summarize subcommand to src/cli/mod.rs
   ```
   Files: src/cli/mod.rs:58-89
   Approach: Follow Reflect pattern (lines 67, 127-133)
@@ -184,7 +184,7 @@
   Time: 45min
   ```
 
-- [ ] Add Summaries subcommand for viewing past summaries
+- [~] Add Summaries subcommand for viewing past summaries
   ```
   Files: src/cli/mod.rs:58-89
   Approach: Follow Search pattern (lines 70, 135-152)
