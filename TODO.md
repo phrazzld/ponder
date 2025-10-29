@@ -162,7 +162,7 @@
   Time: 1hr
   ```
 
-- [~] Implement monthly summary aggregation in summarize.rs
+- [x] Implement monthly summary aggregation in summarize.rs
   ```
   Files: src/ops/summarize.rs
   Approach: Follow weekly pattern, aggregate weekly summaries
@@ -174,7 +174,7 @@
 
 ### CLI Integration
 
-- [ ] Add Summarize subcommand to src/cli/mod.rs
+- [~] Add Summarize subcommand to src/cli/mod.rs
   ```
   Files: src/cli/mod.rs:58-89
   Approach: Follow Reflect pattern (lines 67, 127-133)
