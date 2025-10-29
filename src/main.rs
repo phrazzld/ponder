@@ -117,11 +117,7 @@ fn run_application(
         Some(PonderCommand::Summarize(summarize_args)) => {
             cmd_summarize(&config, summarize_args, current_date)
         }
-        Some(PonderCommand::Summaries(_summaries_args)) => {
-            eprintln!("The 'summaries' command is not yet implemented.");
-            eprintln!("This feature is coming soon!");
-            std::process::exit(1);
-        }
+        Some(PonderCommand::Summaries(summaries_args)) => cmd_summaries(&config, summaries_args),
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
@@ -456,6 +452,112 @@ fn cmd_summarize(
 
     println!("Summary generated successfully (ID: {}).", summary_id);
     println!("Use 'ponder summaries' to view past summaries.");
+
+    Ok(())
+}
+
+/// Summaries command: Browse and view past AI-generated summaries.
+fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) -> AppResult<()> {
+    use ponder::cli::SummaryPeriod;
+    use ponder::crypto::age::decrypt_with_passphrase;
+    use ponder::db::summaries::{get_summary, list_all_summaries, list_summaries, SummaryLevel};
+
+    info!("Command: summaries");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Check if showing a specific summary or listing summaries
+    if let Some(date_str) = summaries_args.date {
+        // Show specific summary - need to determine level
+        // Try each level until we find a match
+        let conn = db.get_conn()?;
+        let passphrase = session.get_passphrase()?;
+
+        let mut found = false;
+        for level in [
+            SummaryLevel::Daily,
+            SummaryLevel::Weekly,
+            SummaryLevel::Monthly,
+        ] {
+            if let Some(summary) = get_summary(&conn, &date_str, level)? {
+                // Decrypt summary content
+                let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+                let content = String::from_utf8(decrypted).map_err(|e| {
+                    AppError::Journal(format!("Invalid UTF-8 in summary content: {}", e))
+                })?;
+
+                // Display summary
+                println!(
+                    "\n{} Summary for {}",
+                    level.as_str().to_uppercase(),
+                    summary.date
+                );
+                println!("Created: {}", summary.created_at);
+                if let Some(word_count) = summary.word_count {
+                    println!("Word count: {}", word_count);
+                }
+                if let Some(sentiment) = summary.sentiment {
+                    println!("Sentiment: {:.2}", sentiment);
+                }
+                if let Some(topics) = &summary.topics {
+                    if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+                        if !topics_vec.is_empty() {
+                            println!("Topics: {}", topics_vec.join(", "));
+                        }
+                    }
+                }
+                println!("\n{}\n", content);
+
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            println!("No summary found for date: {}", date_str);
+        }
+    } else {
+        // List summaries
+        let conn = db.get_conn()?;
+        let summaries = if let Some(period) = summaries_args.period {
+            let level = match period {
+                SummaryPeriod::Daily => SummaryLevel::Daily,
+                SummaryPeriod::Weekly => SummaryLevel::Weekly,
+                SummaryPeriod::Monthly => SummaryLevel::Monthly,
+            };
+            list_summaries(&conn, level, summaries_args.limit)?
+        } else {
+            list_all_summaries(&conn, summaries_args.limit)?
+        };
+
+        if summaries.is_empty() {
+            println!("No summaries found.");
+        } else {
+            println!("\nFound {} summaries:\n", summaries.len());
+            for summary in summaries {
+                println!("Date: {} ({})", summary.date, summary.level.as_str());
+                if let Some(word_count) = summary.word_count {
+                    print!("  Word count: {}", word_count);
+                }
+                if let Some(sentiment) = summary.sentiment {
+                    print!("  Sentiment: {:.2}", sentiment);
+                }
+                println!();
+                if let Some(topics) = &summary.topics {
+                    if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+                        if !topics_vec.is_empty() {
+                            println!("  Topics: {}", topics_vec.join(", "));
+                        }
+                    }
+                }
+                println!("  Created: {}", summary.created_at);
+                println!();
+            }
+            println!("Use 'ponder summaries --date YYYY-MM-DD' to view full summary content.");
+        }
+    }
 
     Ok(())
 }
