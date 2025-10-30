@@ -225,7 +225,14 @@ pub fn start_conversation(
                     temporal_constraint
                 );
 
-                match assemble_conversation_context(db, session, ai_client, user_input, 10) {
+                match assemble_conversation_context(
+                    db,
+                    session,
+                    ai_client,
+                    user_input,
+                    Some(temporal_constraint.clone()),
+                    10,
+                ) {
                     Ok(chunks) => chunks,
                     Err(e) => {
                         eprintln!("\n❌ Error assembling context: {}", e);
@@ -375,40 +382,48 @@ pub fn assemble_conversation_context(
     session: &mut SessionManager,
     ai_client: &OllamaClient,
     query: &str,
+    temporal_constraint: Option<TemporalConstraint>,
     limit: usize,
 ) -> AppResult<Vec<(NaiveDate, String)>> {
     // Ensure session is unlocked
     let passphrase = session.get_passphrase()?;
 
-    // Step 1: Analyze query for temporal constraints
-    debug!("Analyzing query for temporal constraints");
-    let analysis = crate::ops::query_analysis::analyze_query(ai_client, query)?;
-
-    debug!(
-        "Query analysis complete - Topic: '{}', Constraint: {:?}",
-        analysis.topic, analysis.temporal_constraint
-    );
+    // Step 1: Get temporal constraint (either provided or analyzed from query)
+    let constraint = if let Some(provided_constraint) = temporal_constraint {
+        debug!(
+            "Using provided temporal constraint: {:?}",
+            provided_constraint
+        );
+        provided_constraint
+    } else {
+        // Analyze query for temporal constraints
+        debug!("Analyzing query for temporal constraints");
+        let analysis = crate::ops::query_analysis::analyze_query(ai_client, query)?;
+        debug!(
+            "Query analysis complete - Topic: '{}', Constraint: {:?}",
+            analysis.topic, analysis.temporal_constraint
+        );
+        analysis.temporal_constraint
+    };
 
     // Step 2: Generate embedding for the query
     debug!("Generating embedding for conversational query");
     let query_embedding = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, query, 3)?;
 
     // Step 3: Build temporal search config if we have date constraints
-    let temporal_config = if let Some(date_range) = analysis
-        .temporal_constraint
-        .to_date_range(crate::ops::query_analysis::today())
-    {
-        debug!("Using temporal filter: {:?}", date_range);
-        Some(crate::db::embeddings::TemporalSearchConfig {
-            date_range: Some(date_range),
-            recency_decay_days: 30.0,
-            min_results_threshold: 3,
-            reference_date: crate::ops::query_analysis::today(),
-        })
-    } else {
-        debug!("No temporal constraint detected, using standard search");
-        None
-    };
+    let temporal_config =
+        if let Some(date_range) = constraint.to_date_range(crate::ops::query_analysis::today()) {
+            debug!("Using temporal filter: {:?}", date_range);
+            Some(crate::db::embeddings::TemporalSearchConfig {
+                date_range: Some(date_range),
+                recency_decay_days: 30.0,
+                min_results_threshold: 3,
+                reference_date: crate::ops::query_analysis::today(),
+            })
+        } else {
+            debug!("No temporal constraint detected, using standard search");
+            None
+        };
 
     // Step 4: Search for similar chunks with temporal awareness
     let conn = db.get_conn()?;
@@ -505,7 +520,8 @@ mod tests {
             std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
         let ai_client = OllamaClient::new(&ollama_url);
 
-        let result = assemble_conversation_context(&db, &mut session, &ai_client, "test query", 5);
+        let result =
+            assemble_conversation_context(&db, &mut session, &ai_client, "test query", None, 5);
 
         // Should succeed but return empty context
         assert!(result.is_ok());
@@ -533,7 +549,8 @@ mod tests {
         let ai_client = OllamaClient::new(&ollama_url);
 
         // Should not panic even with embeddings missing
-        let result = assemble_conversation_context(&db, &mut session, &ai_client, "test query", 3);
+        let result =
+            assemble_conversation_context(&db, &mut session, &ai_client, "test query", None, 3);
 
         // Will fail to find similar chunks (no embeddings), but shouldn't panic
         assert!(result.is_ok());
@@ -615,7 +632,7 @@ mod tests {
         // Query with content semantically related to first two entries
         let query = "How did I feel about my presentation?";
         let context =
-            assemble_conversation_context(&db, &mut session, &ai_client, query, 5).unwrap();
+            assemble_conversation_context(&db, &mut session, &ai_client, query, None, 5).unwrap();
 
         // Should find at least one relevant chunk
         assert!(
@@ -705,7 +722,7 @@ mod tests {
         // Query for the encrypted content
         let query = "What are my secret thoughts about testing?";
         let context =
-            assemble_conversation_context(&db, &mut session, &ai_client, query, 5).unwrap();
+            assemble_conversation_context(&db, &mut session, &ai_client, query, None, 5).unwrap();
 
         // Should successfully decrypt and return plaintext
         assert!(!context.is_empty(), "Should find encrypted entry");
@@ -803,7 +820,7 @@ mod tests {
         // Query with limit of 3
         let query = "What do I think about Rust?";
         let context =
-            assemble_conversation_context(&db, &mut session, &ai_client, query, 3).unwrap();
+            assemble_conversation_context(&db, &mut session, &ai_client, query, None, 3).unwrap();
 
         // Should respect limit
         assert!(
