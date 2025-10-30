@@ -45,6 +45,12 @@ pub enum TemporalConstraint {
     Relative { days_ago: i64 },
 }
 
+impl Default for TemporalConstraint {
+    fn default() -> Self {
+        TemporalConstraint::None
+    }
+}
+
 impl TemporalConstraint {
     /// Converts temporal constraint to an absolute date range.
     ///

@@ -14,11 +14,70 @@ use crate::crypto::temp::decrypt_to_temp;
 use crate::crypto::SessionManager;
 use crate::db::Database;
 use crate::errors::AppResult;
+use crate::ops::query_analysis::TemporalConstraint;
 use chrono::NaiveDate;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use tracing::{debug, info};
+
+/// System prompt for reflection phase to decide search vs respond directly.
+///
+/// This prompt guides the LLM to analyze the user's query and decide whether
+/// to search the journal (factual questions about recorded content) or respond
+/// directly (meta-questions, opinions, advice).
+const REFLECTION_SYSTEM_PROMPT: &str = r#"Analyze this query and decide how to respond.
+
+If user is asking ABOUT their journal (activities, events, feelings recorded):
+→ Action: "search"
+→ Specify temporal_constraint if mentioned:
+  - "past week" → {"type": "relative", "days_ago": 7}
+  - "last month" → {"type": "relative", "days_ago": 30}
+  - "past 2 weeks" → {"type": "relative", "days_ago": 14}
+  - "last 3 months" → {"type": "relative", "days_ago": 90}
+  - "yesterday" → {"type": "relative", "days_ago": 1}
+  - no time mentioned → {"type": "none"}
+
+If user is asking FOR YOUR OPINION (meta-questions, advice, your thoughts):
+→ Action: "respond"
+
+Respond with ONLY valid JSON matching this format:
+{
+  "action": "search" | "respond",
+  "temporal_constraint": { /* only if action="search" */ },
+  "reasoning": "brief explanation of why this action was chosen"
+}
+
+Examples:
+- "what did I write yesterday?" → search with relative constraint (1 day)
+- "how have I been feeling lately?" → search with relative constraint (30 days)
+- "what do you think about this situation?" → respond (no search needed)
+- "any advice on handling stress?" → respond (meta-question)
+"#;
+
+/// Reflection decision from LLM indicating search or direct response.
+///
+/// This enum represents the LLM's decision about how to handle a user query.
+/// The decision is deserialized from JSON with a tagged format where the
+/// "action" field determines which variant to use.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "action", rename_all = "lowercase")]
+enum ReflectionDecision {
+    /// Search journal entries for relevant context
+    Search {
+        /// Optional temporal filter to limit search by date
+        #[serde(default)]
+        temporal_constraint: TemporalConstraint,
+        /// LLM's reasoning for choosing search
+        reasoning: String,
+    },
+    /// Respond directly without searching journal
+    Respond {
+        /// LLM's reasoning for choosing direct response
+        reasoning: String,
+    },
+}
 
 /// Starts an interactive conversational session with the AI.
 ///

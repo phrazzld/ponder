@@ -257,23 +257,21 @@ When this phase is complete:
 
 ### Cleanup Work
 
-- [~] Revert tool calling infrastructure from ollama.rs
+- [x] Revert tool calling infrastructure from ollama.rs
   ```
   Files: src/ai/ollama.rs
-  Remove:
-    - ToolDefinition, FunctionDefinition structs (lines 83-97)
-    - ChatWithToolsRequest struct (lines 99-106)
-    - ToolCall, ToolCallFunction structs (lines 108-119)
-    - ChatWithToolsResponse, MessageWithTools structs (lines 121-132)
-    - chat_with_tools() method (lines 716-811)
-  Reason: Tool calling is over-engineered for binary decision (search vs respond)
-  Success criteria: ollama.rs only contains streaming support, no tool definitions
-  ~100 lines removed
+  Status: COMPLETE - Commit c85c9fb
+  Work Log:
+  - Removed 6 tool-related structs
+  - Removed chat_with_tools() method
+  - Cleaned up orphaned doc comments
+  - All tests pass, build clean
+  - Pre-commit hooks pass
   ```
 
 ### Core Types
 
-- [ ] Create ReflectionDecision enum in ops/converse.rs
+- [~] Create ReflectionDecision enum in ops/converse.rs
   ```
   Files: src/ops/converse.rs (top of file after imports)
   Add:
@@ -295,7 +293,7 @@ When this phase is complete:
   ~15 lines
   ```
 
-- [ ] Add reflection system prompt constant
+- [~] Add reflection system prompt constant
   ```
   Files: src/ops/converse.rs (after imports, before ReflectionDecision)
   Add:
