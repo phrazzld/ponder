@@ -271,59 +271,31 @@ When this phase is complete:
 
 ### Core Types
 
-- [~] Create ReflectionDecision enum in ops/converse.rs
+- [x] Create ReflectionDecision enum in ops/converse.rs
   ```
-  Files: src/ops/converse.rs (top of file after imports)
-  Add:
-    #[derive(Debug, Clone, Deserialize)]
-    #[serde(tag = "action", rename_all = "lowercase")]
-    enum ReflectionDecision {
-        Search {
-            #[serde(default)]
-            temporal_constraint: TemporalConstraint,
-            reasoning: String,
-        },
-        Respond {
-            reasoning: String,
-        },
-    }
-  Reason: Type-safe decision from LLM, reuses existing TemporalConstraint
-  Success criteria: Deserializes from JSON {"action": "search"|"respond", ...}
-  Pattern: Similar to serde tagged enum pattern in query_analysis.rs
-  ~15 lines
+  Status: COMPLETE - Commit b8283fc
+  Work Log:
+  - Added ReflectionDecision enum with Search/Respond variants
+  - Search variant includes optional temporal_constraint (defaults to None)
+  - Both variants include reasoning field for transparency
+  - Reuses TemporalConstraint from query_analysis module
+  - Added Default impl for TemporalConstraint (defaults to None)
   ```
 
-- [~] Add reflection system prompt constant
+- [x] Add reflection system prompt constant
   ```
-  Files: src/ops/converse.rs (after imports, before ReflectionDecision)
-  Add:
-    const REFLECTION_SYSTEM_PROMPT: &str = r#"Analyze this query and decide how to respond.
-
-    If user is asking ABOUT their journal (activities, events, feelings recorded):
-    → Action: "search"
-    → Specify temporal_constraint if mentioned:
-      - "past week" → {"type": "relative", "days_ago": 7}
-      - "last month" → {"type": "relative", "days_ago": 30}
-      - no time → {"type": "none"}
-
-    If user is asking FOR YOUR OPINION (meta-questions, advice, your thoughts):
-    → Action: "respond"
-
-    Respond with JSON:
-    {
-      "action": "search" | "respond",
-      "temporal_constraint": {...},  // only if action="search"
-      "reasoning": "brief explanation"
-    }"#;
-  Reason: Clear decision criteria, reuses TemporalConstraint schema
-  Success criteria: LLM understands distinction, outputs valid JSON
-  Pattern: Similar to QUERY_ANALYSIS_PROMPT in query_analysis.rs
-  ~25 lines
+  Status: COMPLETE - Commit b8283fc (batched with enum)
+  Work Log:
+  - Added REFLECTION_SYSTEM_PROMPT constant (28 lines)
+  - Clear decision criteria for search vs respond
+  - Includes temporal constraint examples
+  - JSON format specification
+  - Example queries for both actions
   ```
 
 ### Phase 1: Reflection (Decision Making)
 
-- [ ] Implement reflection phase in conversation loop
+- [~] Implement reflection phase in conversation loop
   ```
   Files: src/ops/converse.rs (in start_conversation(), after user input, before context assembly)
   Location: Replace lines 113-123 (current context assembly)

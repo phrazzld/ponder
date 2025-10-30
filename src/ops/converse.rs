@@ -169,17 +169,77 @@ pub fn start_conversation(
             break;
         }
 
-        // Assemble context from journal entries
-        debug!("Assembling context for question: {}", user_input);
-        let context_chunks =
-            match assemble_conversation_context(db, session, ai_client, user_input, 10) {
-                Ok(chunks) => chunks,
+        // Phase 1: Reflection - Decide whether to search or respond directly
+        debug!("Analyzing query intent: {}", user_input);
+
+        // Build reflection messages: system prompt + last 3 conversation turns + user query
+        let mut reflection_messages = vec![Message::system(REFLECTION_SYSTEM_PROMPT)];
+
+        // Add recent conversation context (last 3 turns = 6 messages: user+assistant pairs)
+        let recent_history: Vec<&Message> = conversation_history
+            .iter()
+            .rev()
+            .skip(1) // Skip system message
+            .take(6)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        reflection_messages.extend(recent_history.iter().map(|m| (*m).clone()));
+        reflection_messages.push(Message::user(user_input));
+
+        // Call LLM for reflection decision
+        let decision = match ai_client.chat_with_json_format(&reflection_messages) {
+            Ok(json_response) => match serde_json::from_str::<ReflectionDecision>(&json_response) {
+                Ok(d) => d,
                 Err(e) => {
-                    eprintln!("\n❌ Error assembling context: {}", e);
-                    eprintln!("   Continuing without journal context...\n");
-                    Vec::new()
+                    eprintln!("\n⚠️  Failed to parse reflection decision: {}", e);
+                    eprintln!("   Response: {}", json_response);
+                    eprintln!("   Falling back to search mode...\n");
+                    // Fallback: assume search with no temporal constraint
+                    ReflectionDecision::Search {
+                        temporal_constraint: TemporalConstraint::None,
+                        reasoning: "Parse error - defaulting to search".to_string(),
+                    }
                 }
-            };
+            },
+            Err(e) => {
+                eprintln!("\n❌ Error getting reflection decision: {}", e);
+                eprintln!("   Falling back to search mode...\n");
+                ReflectionDecision::Search {
+                    temporal_constraint: TemporalConstraint::None,
+                    reasoning: "LLM error - defaulting to search".to_string(),
+                }
+            }
+        };
+
+        // Phase 2: Conditional Execution - Assemble context based on decision
+        let context_chunks = match &decision {
+            ReflectionDecision::Search {
+                temporal_constraint,
+                reasoning,
+            } => {
+                println!("💭 Searching journal: {}", reasoning);
+                debug!(
+                    "Search decision with temporal constraint: {:?}",
+                    temporal_constraint
+                );
+
+                match assemble_conversation_context(db, session, ai_client, user_input, 10) {
+                    Ok(chunks) => chunks,
+                    Err(e) => {
+                        eprintln!("\n❌ Error assembling context: {}", e);
+                        eprintln!("   Continuing without journal context...\n");
+                        Vec::new()
+                    }
+                }
+            }
+            ReflectionDecision::Respond { reasoning } => {
+                println!("💭 Responding directly: {}", reasoning);
+                debug!("Respond decision - no journal search needed");
+                Vec::new()
+            }
+        };
 
         // Display context preview for user verification
         if show_context && !context_chunks.is_empty() {
