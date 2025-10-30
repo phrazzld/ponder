@@ -106,37 +106,29 @@
 
 ### CLI Integration
 
-- [~] Add Converse subcommand to src/cli/mod.rs
+- [x] Add Converse subcommand to src/cli/mod.rs
   ```
   Files: src/cli/mod.rs
-  Add: Converse variant to PonderCommand enum
-  Args: ConverseArgs struct (minimal - no flags for MVP)
-  Pattern: Follow Ask/Reflect subcommand patterns (lines 64, 67)
-  Success criteria: `ponder converse` parsed correctly, no arguments needed for MVP
-  ~15 lines
+  Status: COMPLETE - Converse variant exists (line 79), ConverseArgs struct (lines 225-231)
+  Work Log:
+  - Already implemented with --no-context flag
+  - Follows existing subcommand patterns
   ```
 
-- [~] Implement cmd_converse handler in src/main.rs
+- [x] Implement cmd_converse handler in src/main.rs
   ```
   Files: src/main.rs
-  Function: cmd_converse(config) -> AppResult<()>
-  Logic:
-    1. Initialize SessionManager (prompt for passphrase)
-    2. Open Database with passphrase
-    3. Create OllamaClient from config
-    4. Call ops::converse::start_conversation()
-    5. Handle graceful shutdown on Ctrl+C
-  Success criteria: Orchestrates deps correctly, handles session lifecycle
-  Pattern: Follow cmd_ask pattern (similar orchestration)
-  Error handling: Print user-friendly messages for Ollama connection, session timeout
-  ~60 lines
+  Status: COMPLETE - cmd_converse() exists (line 608)
+  Work Log:
+  - Orchestrates SessionManager → Database → OllamaClient
+  - Calls ops::converse::start_conversation()
+  - Error handling for Ollama connection, session timeout
   ```
 
-- [~] Update ops/mod.rs to export converse module
+- [x] Update ops/mod.rs to export converse module
   ```
   Files: src/ops/mod.rs
-  Add: pub mod converse; and pub use converse::start_conversation;
-  ~2 lines
+  Status: COMPLETE - Module declared (line 9), re-exported (line 23)
   ```
 
 ### Testing
@@ -245,6 +237,258 @@ When this phase is complete:
 6. ✅ Works with existing journal entries (no migration needed)
 7. ✅ No new database tables required (uses existing embeddings)
 8. ✅ Graceful error handling (Ollama down, session timeout, context errors)
+
+---
+
+---
+
+## Phase 5: Intent-Aware Context Retrieval (3-Phase Workflow)
+
+### Context & Rationale
+
+**Problem**: Conversational interface retrieves context for ALL queries, including meta-questions ("what do you think?") that don't need journal context. This wastes time and pollutes responses with irrelevant entries.
+
+**Ultrathink Verdict**: Use LLM-driven reflection phase with structured JSON output (NOT tool calling - that's over-engineered for 2 tools). Three-phase workflow:
+1. **Reflection**: LLM decides search vs. respond directly
+2. **Conditional Execution**: Fetch context only if needed
+3. **Response**: Stream answer with/without context
+
+**Key Design Decision**: Structured JSON → Rust enum, reuse existing TemporalConstraint type. Simpler than tool calling, fewer failure modes, faster.
+
+### Cleanup Work
+
+- [~] Revert tool calling infrastructure from ollama.rs
+  ```
+  Files: src/ai/ollama.rs
+  Remove:
+    - ToolDefinition, FunctionDefinition structs (lines 83-97)
+    - ChatWithToolsRequest struct (lines 99-106)
+    - ToolCall, ToolCallFunction structs (lines 108-119)
+    - ChatWithToolsResponse, MessageWithTools structs (lines 121-132)
+    - chat_with_tools() method (lines 716-811)
+  Reason: Tool calling is over-engineered for binary decision (search vs respond)
+  Success criteria: ollama.rs only contains streaming support, no tool definitions
+  ~100 lines removed
+  ```
+
+### Core Types
+
+- [ ] Create ReflectionDecision enum in ops/converse.rs
+  ```
+  Files: src/ops/converse.rs (top of file after imports)
+  Add:
+    #[derive(Debug, Clone, Deserialize)]
+    #[serde(tag = "action", rename_all = "lowercase")]
+    enum ReflectionDecision {
+        Search {
+            #[serde(default)]
+            temporal_constraint: TemporalConstraint,
+            reasoning: String,
+        },
+        Respond {
+            reasoning: String,
+        },
+    }
+  Reason: Type-safe decision from LLM, reuses existing TemporalConstraint
+  Success criteria: Deserializes from JSON {"action": "search"|"respond", ...}
+  Pattern: Similar to serde tagged enum pattern in query_analysis.rs
+  ~15 lines
+  ```
+
+- [ ] Add reflection system prompt constant
+  ```
+  Files: src/ops/converse.rs (after imports, before ReflectionDecision)
+  Add:
+    const REFLECTION_SYSTEM_PROMPT: &str = r#"Analyze this query and decide how to respond.
+
+    If user is asking ABOUT their journal (activities, events, feelings recorded):
+    → Action: "search"
+    → Specify temporal_constraint if mentioned:
+      - "past week" → {"type": "relative", "days_ago": 7}
+      - "last month" → {"type": "relative", "days_ago": 30}
+      - no time → {"type": "none"}
+
+    If user is asking FOR YOUR OPINION (meta-questions, advice, your thoughts):
+    → Action: "respond"
+
+    Respond with JSON:
+    {
+      "action": "search" | "respond",
+      "temporal_constraint": {...},  // only if action="search"
+      "reasoning": "brief explanation"
+    }"#;
+  Reason: Clear decision criteria, reuses TemporalConstraint schema
+  Success criteria: LLM understands distinction, outputs valid JSON
+  Pattern: Similar to QUERY_ANALYSIS_PROMPT in query_analysis.rs
+  ~25 lines
+  ```
+
+### Phase 1: Reflection (Decision Making)
+
+- [ ] Implement reflection phase in conversation loop
+  ```
+  Files: src/ops/converse.rs (in start_conversation(), after user input, before context assembly)
+  Location: Replace lines 113-123 (current context assembly)
+  Logic:
+    1. Build reflection messages: [system(REFLECTION_SYSTEM_PROMPT), ...last 3 turns, user(input)]
+    2. Call ai_client.chat_with_json_format(&reflection_messages)
+    3. Parse JSON into ReflectionDecision enum
+    4. Handle parse errors gracefully (show user error, continue loop)
+    5. Print reasoning to user: "💭 Searching journal: [reasoning]" or "💭 Responding directly: [reasoning]"
+  Success criteria:
+    - LLM correctly classifies "what did I do yesterday?" as Search
+    - LLM correctly classifies "what do you think?" as Respond
+    - User sees reasoning for transparency
+    - Parse errors shown clearly to user
+  Error handling:
+    - serde_json parse failure → print user-friendly message, continue loop
+    - Ollama unreachable → propagate error (existing handling)
+  Testing: Unit test with mock JSON responses for both action types
+  ~40 lines (includes error handling and reasoning display)
+  ```
+
+### Phase 2: Conditional Execution
+
+- [ ] Implement conditional context assembly
+  ```
+  Files: src/ops/converse.rs (after reflection phase)
+  Location: Replace existing context assembly (lines 115-123)
+  Logic:
+    match decision {
+        ReflectionDecision::Search { temporal_constraint, .. } => {
+            // Call updated assemble_conversation_context (next task)
+            assemble_conversation_context(db, session, ai_client, user_input, Some(temporal_constraint), 10)?
+        },
+        ReflectionDecision::Respond { .. } => {
+            Vec::new()  // No context needed
+        },
+    }
+  Success criteria:
+    - Search action → context assembled with temporal filter
+    - Respond action → empty context, no DB query
+    - Existing error handling preserved
+  Pattern: Simple match expression on enum
+  ~15 lines
+  ```
+
+- [ ] Update assemble_conversation_context to accept optional temporal constraint
+  ```
+  Files: src/ops/converse.rs (function signature and implementation)
+  Location: Lines 215-280 (existing function)
+  Changes:
+    1. Add parameter: temporal_constraint: Option<TemporalConstraint>
+    2. If Some(constraint), apply date filtering before/after vector search:
+       - constraint.to_date_range(today()) → (start, end)
+       - Filter entry dates to be within range
+    3. If None, search all dates (current behavior)
+  Success criteria:
+    - Temporal constraint correctly filters entries by date
+    - None constraint searches all dates (backward compatible)
+    - Existing tests still pass
+  Error handling: Invalid date range → log warning, proceed without filter
+  Testing: Add unit test with relative/absolute/none constraints
+  ~20 lines modified + 30 lines new test
+  ```
+
+### Phase 3: Response Generation (Already Implemented)
+
+- [ ] Verify streaming response works with new workflow
+  ```
+  Files: src/ops/converse.rs (lines 167-210)
+  Verification: Existing streaming code (Phase 3) unchanged
+  Success criteria:
+    - Responses stream word-by-word regardless of context presence
+    - Empty context (Respond action) still generates coherent answers
+    - Context (Search action) properly integrated into prompt
+  Testing: Manual QA with both action types
+  Notes: No code changes needed - just verification
+  ```
+
+### Testing
+
+- [ ] Unit tests for ReflectionDecision deserialization
+  ```
+  Files: src/ops/converse.rs (test module)
+  Tests:
+    - test_reflection_decision_search_with_relative: Valid search JSON with days_ago
+    - test_reflection_decision_search_with_none: Valid search JSON without temporal constraint
+    - test_reflection_decision_respond: Valid respond JSON
+    - test_reflection_decision_invalid_action: Invalid action type errors gracefully
+    - test_reflection_decision_missing_reasoning: Missing required field errors
+  Success criteria: All valid JSON deserializes, invalid JSON returns clear errors
+  Pattern: Similar to test_query_analysis_json_* tests in query_analysis.rs
+  ~60 lines (5 tests)
+  ```
+
+- [ ] Integration test for meta-question workflow
+  ```
+  Files: tests/ops_integration_tests.rs
+  Test: test_conversation_meta_question_skips_retrieval
+  Setup:
+    - Create temp journal with entries
+    - Generate embeddings
+  Test flow:
+    1. Query: "what do you think about this?" (meta-question)
+    2. Verify: ReflectionDecision::Respond returned
+    3. Verify: No DB context query executed (empty context)
+    4. Verify: Response generated from conversation history only
+  Success criteria:
+    - Meta-questions don't trigger DB queries
+    - Responses still coherent without context
+    - Reasoning displayed to user
+  Requires: Ollama running (mark #[ignore])
+  ~80 lines
+  ```
+
+- [ ] Integration test for temporal-filtered search
+  ```
+  Files: tests/ops_integration_tests.rs
+  Test: test_conversation_search_with_temporal_filter
+  Setup:
+    - Create entries across 3 months (Jan, Feb, March)
+    - Generate embeddings for all
+  Test flow:
+    1. Query: "what did I do last month?" (assuming today is March)
+    2. Verify: ReflectionDecision::Search with relative constraint (30 days)
+    3. Verify: Context only includes February entries, excludes Jan/March
+    4. Verify: Response cites only February entries
+  Success criteria:
+    - Temporal filtering works correctly
+    - LLM extracts correct temporal constraint
+    - Context assembly respects date range
+  Requires: Ollama running (mark #[ignore])
+  ~100 lines
+  ```
+
+### Documentation
+
+- [ ] Update CLAUDE.md with three-phase workflow explanation
+  ```
+  Files: CLAUDE.md
+  Section: Update "Conversational Operations (v2.1)" section
+  Add:
+    - Subsection: "Intent-Aware Context Retrieval (v2.2)"
+    - Three-phase workflow diagram
+    - Example: Meta-question vs. factual query handling
+    - ReflectionDecision enum explanation
+    - Design rationale (why not tool calling)
+  Success criteria: Developers understand workflow, design decisions clear
+  Pattern: Similar to existing RAG pipeline explanation
+  ~50 lines
+  ```
+
+- [ ] Add inline documentation for reflection phase
+  ```
+  Files: src/ops/converse.rs
+  Add:
+    - Module-level doc comment explaining three phases
+    - Doc comments on ReflectionDecision enum variants
+    - Doc comment on REFLECTION_SYSTEM_PROMPT explaining criteria
+    - Inline comments in reflection logic explaining flow
+  Success criteria: Code self-documents workflow, easy to understand
+  Pattern: Follow existing ops module doc style
+  ~30 lines total
+  ```
 
 ---
 

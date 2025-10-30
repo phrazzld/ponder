@@ -63,12 +63,21 @@ struct ChatRequest {
     model: String,
     messages: Vec<Message>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<String>,
 }
 
 /// Response from chat completion.
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
     message: Message,
+}
+
+/// Response chunk from streaming chat completion.
+#[derive(Debug, Deserialize)]
+struct ChatStreamChunk {
+    message: Message,
+    done: bool,
 }
 
 /// Type-safe wrapper for embedding model name.
@@ -291,6 +300,7 @@ impl OllamaClient {
             model: model.to_string(),
             messages: messages.to_vec(),
             stream: false,
+            format: None,
         };
 
         let response = self
@@ -420,6 +430,76 @@ impl OllamaClient {
         Ok(clamped)
     }
 
+    /// Sends a chat completion request with JSON format enforcement.
+    ///
+    /// This method is specifically for structured output use cases where you need
+    /// the LLM to return valid JSON. Ollama will enforce JSON formatting in the response.
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - Conversation messages (should include JSON schema in system prompt)
+    ///
+    /// # Returns
+    ///
+    /// The assistant's response as a JSON string
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Ollama API is not reachable
+    /// - Model is not found
+    /// - API returns an error response
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::{OllamaClient, Message};
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let messages = vec![
+    ///     Message::system("Return JSON: {\"name\": string, \"age\": number}"),
+    ///     Message::user("Tell me about Alice, who is 30")
+    /// ];
+    /// let json_response = client.chat_with_json_format(&messages).unwrap();
+    /// ```
+    pub fn chat_with_json_format(&self, messages: &[Message]) -> AppResult<String> {
+        debug!("Sending chat request with JSON format enforcement");
+
+        let url = format!("{}/api/chat", self.base_url);
+        let request = ChatRequest {
+            model: DEFAULT_CHAT_MODEL.to_string(),
+            messages: messages.to_vec(),
+            stream: false,
+            format: Some("json".to_string()),
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .map_err(AIError::OllamaOffline)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().unwrap_or_default();
+
+            if status.as_u16() == 404 {
+                return Err(AIError::ModelNotFound(DEFAULT_CHAT_MODEL.to_string()).into());
+            }
+
+            return Err(
+                AIError::InvalidResponse(format!("HTTP {}: {}", status, error_text)).into(),
+            );
+        }
+
+        let chat_response: ChatResponse = response.json().map_err(|e| {
+            AIError::InvalidResponse(format!("Failed to parse chat response: {}", e))
+        })?;
+
+        debug!("Received JSON-formatted chat response");
+        Ok(chat_response.message.content)
+    }
+
     /// Extracts key topics from text using an LLM.
     ///
     /// Returns a list of 3-5 main topics or themes identified in the text.
@@ -463,6 +543,124 @@ impl OllamaClient {
 
         debug!("Extracted {} topics", topics.len());
         Ok(topics)
+    }
+
+    /// Sends a chat completion request with streaming response.
+    ///
+    /// Returns chunks of the response as they arrive, enabling real-time display.
+    /// This method is async and requires a tokio runtime.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - Name of the chat model
+    /// * `messages` - Conversation messages
+    ///
+    /// # Returns
+    ///
+    /// A vector of response content strings (chunks)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Ollama API is not reachable
+    /// - Model is not found
+    /// - API returns an error response
+    /// - Streaming response cannot be parsed
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use ponder::ai::{OllamaClient, Message};
+    /// # use tokio;
+    /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+    /// let client = OllamaClient::new("http://127.0.0.1:11434");
+    /// let messages = vec![Message::user("Hello!")];
+    /// let chunks = client.chat_stream("gemma3:4b", &messages).await.unwrap();
+    /// for chunk in chunks {
+    ///     print!("{}", chunk);
+    /// }
+    /// # });
+    /// ```
+    pub async fn chat_stream(&self, model: &str, messages: &[Message]) -> AppResult<Vec<String>> {
+        use futures::StreamExt;
+
+        debug!("Sending streaming chat request with model: {}", model);
+
+        let url = format!("{}/api/chat", self.base_url);
+        let request = ChatRequest {
+            model: model.to_string(),
+            messages: messages.to_vec(),
+            stream: true,
+            format: None,
+        };
+
+        // Create async client (note: this is separate from the blocking client)
+        let async_client = reqwest::Client::new();
+
+        let response = async_client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(AIError::OllamaOffline)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+
+            if status.as_u16() == 404 {
+                return Err(AIError::ModelNotFound(model.to_string()).into());
+            }
+
+            return Err(
+                AIError::InvalidResponse(format!("HTTP {}: {}", status, error_text)).into(),
+            );
+        }
+
+        // Process streaming response chunk by chunk
+        let mut chunks = Vec::new();
+        let mut bytes_stream = response.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(result) = bytes_stream.next().await {
+            let bytes = result
+                .map_err(|e| AIError::InvalidResponse(format!("Failed to read stream: {}", e)))?;
+
+            // Convert bytes to string and add to buffer
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|e| AIError::InvalidResponse(format!("Invalid UTF-8 in stream: {}", e)))?;
+            buffer.push_str(text);
+
+            // Process complete lines from buffer
+            while let Some(newline_pos) = buffer.find('\n') {
+                let line = buffer[..newline_pos].trim().to_string();
+                buffer.drain(..=newline_pos);
+
+                if line.is_empty() {
+                    continue;
+                }
+
+                // Parse JSON response chunk
+                let chunk: ChatStreamChunk = serde_json::from_str(&line).map_err(|e| {
+                    AIError::InvalidResponse(format!(
+                        "Failed to parse stream chunk '{}': {}",
+                        line, e
+                    ))
+                })?;
+
+                if !chunk.message.content.is_empty() {
+                    chunks.push(chunk.message.content);
+                }
+
+                if chunk.done {
+                    debug!("Received {} chunks from stream", chunks.len());
+                    return Ok(chunks);
+                }
+            }
+        }
+
+        debug!("Received {} chunks from stream", chunks.len());
+        Ok(chunks)
     }
 }
 

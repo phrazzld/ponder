@@ -12,7 +12,6 @@ use crate::config::Config;
 use crate::constants::{DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_MODEL};
 use crate::crypto::temp::decrypt_to_temp;
 use crate::crypto::SessionManager;
-use crate::db::embeddings::search_similar_chunks;
 use crate::db::Database;
 use crate::errors::AppResult;
 use chrono::NaiveDate;
@@ -164,12 +163,22 @@ pub fn start_conversation(
         // Add user message to history
         conversation_history.push(Message::user(&user_message));
 
-        // Get AI response (non-streaming for MVP - streaming can be added later)
+        // Get AI response with streaming
         print!("\n🤖 Assistant: ");
         io::stdout().flush()?;
 
-        let response = match ai_client.chat(&_config.ai_models.chat_model, &conversation_history) {
-            Ok(resp) => resp,
+        // Create tokio runtime for async streaming
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            crate::errors::AppError::AI(crate::errors::AIError::InvalidResponse(format!(
+                "Failed to create runtime: {}",
+                e
+            )))
+        })?;
+
+        let chunks = match runtime
+            .block_on(ai_client.chat_stream(&_config.ai_models.chat_model, &conversation_history))
+        {
+            Ok(chunks) => chunks,
             Err(e) => {
                 eprintln!("\n❌ Error getting AI response: {}", e);
                 eprintln!("   Make sure Ollama is running: ollama serve");
@@ -182,7 +191,14 @@ pub fn start_conversation(
             }
         };
 
-        println!("{}\n", response);
+        // Print chunks as they arrive and build full response
+        let mut response = String::new();
+        for chunk in &chunks {
+            print!("{}", chunk);
+            io::stdout().flush()?;
+            response.push_str(chunk);
+        }
+        println!("\n");
 
         // Add assistant response to history
         conversation_history.push(Message::assistant(&response));
@@ -245,13 +261,44 @@ pub fn assemble_conversation_context(
     // Ensure session is unlocked
     let passphrase = session.get_passphrase()?;
 
-    // Generate embedding for the query
+    // Step 1: Analyze query for temporal constraints
+    debug!("Analyzing query for temporal constraints");
+    let analysis = crate::ops::query_analysis::analyze_query(ai_client, query)?;
+
+    debug!(
+        "Query analysis complete - Topic: '{}', Constraint: {:?}",
+        analysis.topic, analysis.temporal_constraint
+    );
+
+    // Step 2: Generate embedding for the query
     debug!("Generating embedding for conversational query");
     let query_embedding = ai_client.embed_with_retry(DEFAULT_EMBED_MODEL, query, 3)?;
 
-    // Search for similar chunks
+    // Step 3: Build temporal search config if we have date constraints
+    let temporal_config = if let Some(date_range) = analysis
+        .temporal_constraint
+        .to_date_range(crate::ops::query_analysis::today())
+    {
+        debug!("Using temporal filter: {:?}", date_range);
+        Some(crate::db::embeddings::TemporalSearchConfig {
+            date_range: Some(date_range),
+            recency_decay_days: 30.0,
+            min_results_threshold: 3,
+            reference_date: crate::ops::query_analysis::today(),
+        })
+    } else {
+        debug!("No temporal constraint detected, using standard search");
+        None
+    };
+
+    // Step 4: Search for similar chunks with temporal awareness
     let conn = db.get_conn()?;
-    let similar_chunks = search_similar_chunks(&conn, &query_embedding, limit)?;
+    let similar_chunks = crate::db::embeddings::search_similar_chunks_with_temporal(
+        &conn,
+        &query_embedding,
+        limit,
+        temporal_config.as_ref(),
+    )?;
 
     if similar_chunks.is_empty() {
         debug!("No relevant journal entries found");

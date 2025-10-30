@@ -94,6 +94,63 @@ $ ponder converse
 
 ---
 
+### Tool Calling Infrastructure (For Extensibility)
+
+**Current State**: Phase 5 uses simplified structured JSON output (2 actions: search, respond)
+**Enhancement**: Full Ollama tool calling if we add 5+ different tools/actions
+
+**Why Deferred**: Tool calling is **over-engineered for binary decision** (search vs. respond). Current approach is simpler, faster, fewer failure modes.
+
+**When to Build**: If we add many more actions beyond search/respond:
+- `search_summaries` - Retrieve from summaries table
+- `search_patterns` - Query detected patterns
+- `generate_insight` - Create new insight entry
+- `compare_timeframes` - "Compare July vs August"
+- `cite_specific_entry` - "Show me the entry from Oct 15"
+
+**Implementation** (full tool calling):
+1. Tool registry in ollama.rs:
+   ```rust
+   struct ToolRegistry {
+       tools: HashMap<String, ToolDefinition>,
+   }
+
+   impl ToolRegistry {
+       fn get_available_tools(&self) -> Vec<ToolDefinition> { ... }
+       fn execute(&self, tool_call: ToolCall, ctx: &Context) -> AppResult<ToolResult> { ... }
+   }
+   ```
+
+2. Update reflection phase to use `chat_with_tools()`:
+   ```rust
+   let tools = registry.get_available_tools();
+   let tool_call = ai_client.chat_with_tools(&model, &messages, &tools)?;
+   let result = registry.execute(tool_call, &context)?;
+   ```
+
+3. Dynamic argument validation via JSON schemas
+4. Better error messages for tool selection failures
+
+**Benefits over current approach**:
+- ✅ Idiomatic Ollama usage (native tool calling API)
+- ✅ Better model support (Qwen3, Llama3.1 optimize for this)
+- ✅ Extensible (easy to add new tools)
+- ✅ Self-documenting (tools have descriptions, schemas)
+
+**Tradeoffs**:
+- ❌ More complex (tool registry, schemas, argument parsing)
+- ❌ More failure modes (tool not found, invalid args, schema mismatch)
+- ❌ Slower (extra round-trip for tool selection)
+- ❌ Only worth it with 5+ tools
+
+**Effort**: 2-3 days (reimplement reflection phase with tool calling)
+**Value**: LOW until we have many tools, HIGH once we do
+**Decision Point**: Only if we add 3+ new action types beyond search/respond
+
+**Note**: Tool calling infrastructure partially implemented in src/ai/ollama.rs (lines 83-132, 716-811) but will be removed in Phase 5 cleanup per ultrathink recommendation. Can be restored from git history if needed.
+
+---
+
 ### Multi-Session Context Tracking
 
 **Current State**: Each `ponder converse` session starts fresh

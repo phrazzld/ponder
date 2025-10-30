@@ -11,6 +11,7 @@ pub mod detection;
 pub mod edit;
 pub mod migration;
 pub mod patterns;
+pub mod query_analysis;
 pub mod reflect;
 pub mod reindex;
 pub mod search;
@@ -28,6 +29,7 @@ pub use migration::{migrate_all_entries, migrate_entry, verify_migration, Migrat
 pub use patterns::{
     detect_temporal_patterns, detect_topic_patterns, TemporalPatterns, TopicCluster, TopicPatterns,
 };
+pub use query_analysis::{analyze_query, today, QueryAnalysis, TemporalConstraint};
 pub use reflect::reflect_on_entry;
 pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;
