@@ -153,8 +153,8 @@ pub fn analyze_query(ai_client: &OllamaClient, query: &str) -> AppResult<QueryAn
 
     let messages = vec![Message::system(QUERY_ANALYSIS_PROMPT), Message::user(query)];
 
-    // Call LLM with JSON format (Ollama supports format parameter)
-    let response = ai_client.chat_with_json_format(&messages)?;
+    // Call LLM with schema-enforced JSON for guaranteed structure
+    let response = ai_client.chat_query_analysis(&messages)?;
 
     // Parse JSON response into QueryAnalysis
     let analysis: QueryAnalysis = serde_json::from_str(&response).map_err(|e| {

@@ -24,6 +24,11 @@ pub struct TemporalSearchConfig {
     /// Optional date range filter (start_date, end_date)
     pub date_range: Option<(NaiveDate, NaiveDate)>,
 
+    /// Whether the temporal constraint was explicitly provided by the user.
+    /// If true, window expansion will be disabled to respect user intent.
+    /// If false, the constraint is implicit/default and expansion is allowed.
+    pub explicit_temporal_constraint: bool,
+
     /// Recency decay factor in days (smaller = faster decay)
     /// Boost formula: exp(-days_old / decay_factor)
     /// Default: 30 days
@@ -31,6 +36,7 @@ pub struct TemporalSearchConfig {
 
     /// Minimum results before expanding date window
     /// If filtered results < threshold, expand window and retry
+    /// Only applies when explicit_temporal_constraint is false
     /// Default: 3
     pub min_results_threshold: usize,
 
@@ -200,15 +206,27 @@ pub fn search_similar_chunks_with_temporal(
     }
 
     // Check if we need to expand the date window
-    if results.len() < config.min_results_threshold && config.date_range.is_some() {
+    // Only expand if constraint is implicit (not explicitly provided by user)
+    if results.len() < config.min_results_threshold
+        && config.date_range.is_some()
+        && !config.explicit_temporal_constraint
+    {
         debug!(
-            "Only {} results with date filter, expanding window",
+            "Only {} results with date filter (implicit constraint), expanding window",
             results.len()
         );
 
         // Retry without date filter, but keep recency boosting
         results = search_with_date_filter(conn, query_embedding, limit * 2, None)?;
         apply_recency_boost(conn, &mut results, config)?;
+    } else if results.len() < config.min_results_threshold
+        && config.date_range.is_some()
+        && config.explicit_temporal_constraint
+    {
+        debug!(
+            "Only {} results with explicit date filter - respecting user constraint, not expanding",
+            results.len()
+        );
     }
 
     // Sort by final score and take top N

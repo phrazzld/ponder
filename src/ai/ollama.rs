@@ -57,6 +57,57 @@ struct EmbedResponse {
     embedding: Vec<f32>,
 }
 
+/// Creates JSON schema for reflection decision (search vs respond).
+///
+/// This schema enforces the structure expected by ReflectionDecision enum.
+fn reflection_decision_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["search", "respond"]
+            },
+            "temporal_constraint": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["none", "relative", "absolute"]},
+                    "days_ago": {"type": "number"},
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"}
+                },
+                "required": ["type"]
+            },
+            "reasoning": {"type": "string"}
+        },
+        "required": ["action", "reasoning"]
+    })
+}
+
+/// Creates JSON schema for query analysis (topic + temporal extraction).
+///
+/// This schema enforces the structure expected by QueryAnalysis struct.
+fn query_analysis_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "topic": {"type": "string"},
+            "temporal_constraint": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["none", "relative", "absolute"]},
+                    "days_ago": {"type": "number"},
+                    "start_date": {"type": "string"},
+                    "end_date": {"type": "string"}
+                },
+                "required": ["type"]
+            },
+            "confidence": {"type": "number"}
+        },
+        "required": ["topic", "temporal_constraint", "confidence"]
+    })
+}
+
 /// Request body for chat completion.
 #[derive(Debug, Serialize)]
 struct ChatRequest {
@@ -64,7 +115,7 @@ struct ChatRequest {
     messages: Vec<Message>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    format: Option<String>,
+    format: Option<serde_json::Value>, // Can be string "json" or schema object
 }
 
 /// Response from chat completion.
@@ -456,20 +507,45 @@ impl OllamaClient {
     /// # use ponder::ai::{OllamaClient, Message};
     /// let client = OllamaClient::new("http://127.0.0.1:11434");
     /// let messages = vec![
-    ///     Message::system("Return JSON: {\"name\": string, \"age\": number}"),
+    ///     Message::system("Return JSON with name and age"),
     ///     Message::user("Tell me about Alice, who is 30")
     /// ];
-    /// let json_response = client.chat_with_json_format(&messages).unwrap();
+    /// let schema = serde_json::json!({
+    ///     "type": "object",
+    ///     "properties": {
+    ///         "name": {"type": "string"},
+    ///         "age": {"type": "number"}
+    ///     }
+    /// });
+    /// let json_response = client.chat_with_json_schema(&messages, schema).unwrap();
     /// ```
-    pub fn chat_with_json_format(&self, messages: &[Message]) -> AppResult<String> {
-        debug!("Sending chat request with JSON format enforcement");
+    /// Sends a chat request with JSON schema enforcement using Ollama's grammar-based constraints.
+    ///
+    /// Uses Ollama's structured outputs feature (requires Ollama v0.5+) to guarantee
+    /// the response conforms to the provided JSON schema. This is more reliable than
+    /// prompting-based JSON mode as it uses grammar constraints at token generation.
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - The conversation messages
+    /// * `schema` - JSON schema object defining required structure
+    ///
+    /// # Returns
+    ///
+    /// Returns the model's response as a JSON string guaranteed to match the schema.
+    pub fn chat_with_json_schema(
+        &self,
+        messages: &[Message],
+        schema: serde_json::Value,
+    ) -> AppResult<String> {
+        debug!("Sending chat request with JSON schema enforcement");
 
         let url = format!("{}/api/chat", self.base_url);
         let request = ChatRequest {
             model: DEFAULT_CHAT_MODEL.to_string(),
             messages: messages.to_vec(),
             stream: false,
-            format: Some("json".to_string()),
+            format: Some(schema), // Use grammar-based constraints via schema
         };
 
         let response = self
@@ -496,8 +572,40 @@ impl OllamaClient {
             AIError::InvalidResponse(format!("Failed to parse chat response: {}", e))
         })?;
 
-        debug!("Received JSON-formatted chat response");
+        debug!("Received JSON-schema-formatted chat response");
         Ok(chat_response.message.content)
+    }
+
+    /// Sends a chat request for reflection decision with enforced schema.
+    ///
+    /// Uses grammar-based JSON schema constraints to guarantee the response
+    /// matches the ReflectionDecision structure (search vs respond).
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - The conversation messages
+    ///
+    /// # Returns
+    ///
+    /// Returns JSON string conforming to reflection decision schema.
+    pub fn chat_reflection_decision(&self, messages: &[Message]) -> AppResult<String> {
+        self.chat_with_json_schema(messages, reflection_decision_schema())
+    }
+
+    /// Sends a chat request for query analysis with enforced schema.
+    ///
+    /// Uses grammar-based JSON schema constraints to guarantee the response
+    /// matches the QueryAnalysis structure (topic + temporal + confidence).
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - The conversation messages
+    ///
+    /// # Returns
+    ///
+    /// Returns JSON string conforming to query analysis schema.
+    pub fn chat_query_analysis(&self, messages: &[Message]) -> AppResult<String> {
+        self.chat_with_json_schema(messages, query_analysis_schema())
     }
 
     /// Extracts key topics from text using an LLM.

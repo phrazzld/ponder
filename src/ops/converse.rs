@@ -27,33 +27,29 @@ use tracing::{debug, info};
 /// This prompt guides the LLM to analyze the user's query and decide whether
 /// to search the journal (factual questions about recorded content) or respond
 /// directly (meta-questions, opinions, advice).
-const REFLECTION_SYSTEM_PROMPT: &str = r#"Analyze this query and decide how to respond.
+const REFLECTION_SYSTEM_PROMPT: &str = r#"Respond with ONLY valid JSON. No other text.
 
-If user is asking ABOUT their journal (activities, events, feelings recorded):
-→ Action: "search"
-→ Specify temporal_constraint if mentioned:
-  - "past week" → {"type": "relative", "days_ago": 7}
-  - "last month" → {"type": "relative", "days_ago": 30}
-  - "past 2 weeks" → {"type": "relative", "days_ago": 14}
-  - "last 3 months" → {"type": "relative", "days_ago": 90}
-  - "yesterday" → {"type": "relative", "days_ago": 1}
-  - no time mentioned → {"type": "none"}
+If user asks ABOUT journal (what happened, how they felt):
+  → action: "search"
+  → Include temporal_constraint if time mentioned:
+    - "past month" → {"type": "relative", "days_ago": 30}
+    - "past week" → {"type": "relative", "days_ago": 7}
+    - "yesterday" → {"type": "relative", "days_ago": 1}
+    - No time → {"type": "none"}
 
-If user is asking FOR YOUR OPINION (meta-questions, advice, your thoughts):
-→ Action: "respond"
-
-Respond with ONLY valid JSON matching this format:
-{
-  "action": "search" | "respond",
-  "temporal_constraint": { /* only if action="search" */ },
-  "reasoning": "brief explanation of why this action was chosen"
-}
+If user asks FOR OPINION (greetings, advice, meta-questions):
+  → action: "respond"
 
 Examples:
-- "what did I write yesterday?" → search with relative constraint (1 day)
-- "how have I been feeling lately?" → search with relative constraint (30 days)
-- "what do you think about this situation?" → respond (no search needed)
-- "any advice on handling stress?" → respond (meta-question)
+
+"what have i been up to this past month?"
+{"action": "search", "temporal_constraint": {"type": "relative", "days_ago": 30}, "reasoning": "past month activity query"}
+
+"hey what's up"
+{"action": "respond", "reasoning": "greeting"}
+
+"how have I been feeling?"
+{"action": "search", "temporal_constraint": {"type": "none"}, "reasoning": "general feeling query"}
 "#;
 
 /// Reflection decision from LLM indicating search or direct response.
@@ -118,11 +114,11 @@ enum ReflectionDecision {
 /// # use ponder::{Config, Database, SessionManager, ai::OllamaClient};
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let config = Config::load()?;
-/// let mut session = SessionManager::new(std::time::Duration::from_secs(1800));
-/// let db = Database::open(&config.database_path, session.get_passphrase()?)?;
+/// let mut session = SessionManager::new(30); // minutes
+/// let db = Database::open(&config.db_path, session.get_passphrase()?)?;
 /// let ai_client = OllamaClient::new(&config.ollama_url);
 ///
-/// start_conversation(&db, &mut session, &ai_client, &config)?;
+/// start_conversation(&db, &mut session, &ai_client, &config, false)?;
 /// # Ok(())
 /// # }
 /// ```
@@ -172,43 +168,41 @@ pub fn start_conversation(
         // Phase 1: Reflection - Decide whether to search or respond directly
         debug!("Analyzing query intent: {}", user_input);
 
-        // Build reflection messages: system prompt + last 3 conversation turns + user query
-        let mut reflection_messages = vec![Message::system(REFLECTION_SYSTEM_PROMPT)];
+        // Build reflection messages: system prompt + current query only
+        // Note: We don't include conversation history here to reduce token count
+        // and improve reliability with smaller models (gemma3:4b)
+        let reflection_messages = vec![
+            Message::system(REFLECTION_SYSTEM_PROMPT),
+            Message::user(user_input),
+        ];
 
-        // Add recent conversation context (last 3 turns = 6 messages: user+assistant pairs)
-        let recent_history: Vec<&Message> = conversation_history
-            .iter()
-            .rev()
-            .skip(1) // Skip system message
-            .take(6)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        reflection_messages.extend(recent_history.iter().map(|m| (*m).clone()));
-        reflection_messages.push(Message::user(user_input));
-
-        // Call LLM for reflection decision
-        let decision = match ai_client.chat_with_json_format(&reflection_messages) {
+        // Call LLM for reflection decision with schema enforcement
+        let decision = match ai_client.chat_reflection_decision(&reflection_messages) {
             Ok(json_response) => match serde_json::from_str::<ReflectionDecision>(&json_response) {
                 Ok(d) => d,
                 Err(e) => {
                     eprintln!("\n⚠️  Failed to parse reflection decision: {}", e);
                     eprintln!("   Response: {}", json_response);
-                    eprintln!("   Falling back to search mode...\n");
-                    // Fallback: assume search with no temporal constraint
+                    eprintln!("   Note: Schema enforcement should prevent this. Check Ollama version >= 0.5");
+                    eprintln!("   Falling back to search without temporal constraint...\n");
+
+                    // Fallback: Search without temporal constraint
+                    // With schema enforcement, this should rarely happen
                     ReflectionDecision::Search {
                         temporal_constraint: TemporalConstraint::None,
-                        reasoning: "Parse error - defaulting to search".to_string(),
+                        reasoning: "Parse error despite schema enforcement".to_string(),
                     }
                 }
             },
             Err(e) => {
                 eprintln!("\n❌ Error getting reflection decision: {}", e);
-                eprintln!("   Falling back to search mode...\n");
+                eprintln!("   Check: Is Ollama running? Is model available?");
+                eprintln!("   Falling back to search without temporal constraint...\n");
+
+                // Fallback: Search without temporal constraint
                 ReflectionDecision::Search {
                     temporal_constraint: TemporalConstraint::None,
-                    reasoning: "LLM error - defaulting to search".to_string(),
+                    reasoning: "LLM error - defaulting to general search".to_string(),
                 }
             }
         };
@@ -388,22 +382,22 @@ pub fn assemble_conversation_context(
     // Ensure session is unlocked
     let passphrase = session.get_passphrase()?;
 
-    // Step 1: Get temporal constraint (either provided or analyzed from query)
-    let constraint = if let Some(provided_constraint) = temporal_constraint {
-        debug!(
-            "Using provided temporal constraint: {:?}",
-            provided_constraint
-        );
-        provided_constraint
-    } else {
-        // Analyze query for temporal constraints
-        debug!("Analyzing query for temporal constraints");
-        let analysis = crate::ops::query_analysis::analyze_query(ai_client, query)?;
-        debug!(
-            "Query analysis complete - Topic: '{}', Constraint: {:?}",
-            analysis.topic, analysis.temporal_constraint
-        );
-        analysis.temporal_constraint
+    // Step 1: Use temporal constraint from reflection phase (single source of truth)
+    // If reflection phase didn't provide one, proceed without temporal filtering
+    let (constraint, is_explicit) = match temporal_constraint {
+        Some(provided_constraint) => {
+            debug!(
+                "Using temporal constraint from reflection phase: {:?}",
+                provided_constraint
+            );
+            (provided_constraint, true) // From reflection = explicit
+        }
+        None => {
+            debug!(
+                "No temporal constraint from reflection phase, proceeding without temporal filter"
+            );
+            (TemporalConstraint::None, false) // No constraint
+        }
     };
 
     // Step 2: Generate embedding for the query
@@ -413,9 +407,13 @@ pub fn assemble_conversation_context(
     // Step 3: Build temporal search config if we have date constraints
     let temporal_config =
         if let Some(date_range) = constraint.to_date_range(crate::ops::query_analysis::today()) {
-            debug!("Using temporal filter: {:?}", date_range);
+            debug!(
+                "Using temporal filter: {:?} (explicit={})",
+                date_range, is_explicit
+            );
             Some(crate::db::embeddings::TemporalSearchConfig {
                 date_range: Some(date_range),
+                explicit_temporal_constraint: is_explicit,
                 recency_decay_days: 30.0,
                 min_results_threshold: 3,
                 reference_date: crate::ops::query_analysis::today(),

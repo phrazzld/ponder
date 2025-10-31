@@ -474,7 +474,7 @@ fn test_conversation_context_assembly_integration() {
 
     // Test 1: Query about presentation anxiety
     let query1 = "How was I feeling about the presentation?";
-    let context1 = assemble_conversation_context(&db, &mut session, &ai_client, query1, 5)
+    let context1 = assemble_conversation_context(&db, &mut session, &ai_client, query1, None, 5)
         .expect("get context");
 
     assert!(!context1.is_empty(), "Should find relevant context");
@@ -489,7 +489,7 @@ fn test_conversation_context_assembly_integration() {
 
     // Test 2: Query about outcome
     let query2 = "How did the presentation go?";
-    let context2 = assemble_conversation_context(&db, &mut session, &ai_client, query2, 5)
+    let context2 = assemble_conversation_context(&db, &mut session, &ai_client, query2, None, 5)
         .expect("get context");
 
     assert!(!context2.is_empty(), "Should find outcome context");
@@ -502,7 +502,7 @@ fn test_conversation_context_assembly_integration() {
 
     // Test 3: Query about unrelated topic (hiking)
     let query3 = "Did I do any outdoor activities?";
-    let context3 = assemble_conversation_context(&db, &mut session, &ai_client, query3, 5)
+    let context3 = assemble_conversation_context(&db, &mut session, &ai_client, query3, None, 5)
         .expect("get context");
 
     assert!(!context3.is_empty(), "Should find hiking context");
@@ -515,8 +515,9 @@ fn test_conversation_context_assembly_integration() {
 
     // Test 4: Verify limit is respected
     let query4 = "presentation";
-    let context4_limited = assemble_conversation_context(&db, &mut session, &ai_client, query4, 3)
-        .expect("get context");
+    let context4_limited =
+        assemble_conversation_context(&db, &mut session, &ai_client, query4, None, 3)
+            .expect("get context");
     assert!(
         context4_limited.len() <= 3,
         "Should respect limit of 3 chunks"

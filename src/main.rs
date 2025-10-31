@@ -52,7 +52,7 @@ use ponder::errors::{AppError, AppResult, DatabaseError};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 use ponder::ops;
-use ponder::setup::ensure_model_available;
+use ponder::setup::{ensure_model_available, ModelType};
 use ponder::OllamaClient;
 use tracing::{debug, info, info_span, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -213,7 +213,7 @@ fn open_database_with_retry(config: &Config, session: &mut SessionManager) -> Ap
 ///
 /// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
 fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
-    ensure_model_available(client, DEFAULT_EMBED_MODEL, "Embedding")
+    ensure_model_available(client, DEFAULT_EMBED_MODEL, ModelType::Embed, "Embedding")
 }
 
 /// Ensures the chat model is available, offering to install if missing.
@@ -229,7 +229,7 @@ fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
 ///
 /// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
 fn ensure_chat_available(client: &OllamaClient) -> AppResult<()> {
-    ensure_model_available(client, DEFAULT_CHAT_MODEL, "Chat")
+    ensure_model_available(client, DEFAULT_CHAT_MODEL, ModelType::Chat, "Chat")
 }
 
 /// Edit command: Edit journal entries with encryption and embedding.

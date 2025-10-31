@@ -3,11 +3,20 @@
 //! This module provides helpers for checking and installing Ollama models,
 //! prompting users for consent, and managing first-run setup.
 
-use crate::ai::OllamaClient;
+use crate::ai::{Message, OllamaClient};
 use crate::errors::{AIError, AppError, AppResult};
 use std::io::{self, Write};
 use std::process::Command;
 use tracing::{debug, info, warn};
+
+/// Model type for determining which API endpoint to use for model checking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelType {
+    /// Embedding model (uses /api/embeddings endpoint)
+    Embed,
+    /// Chat model (uses /api/chat endpoint)
+    Chat,
+}
 
 /// Prompts the user for a yes/no answer with a default.
 ///
@@ -49,17 +58,38 @@ pub fn prompt_yes_no(question: &str, default: bool) -> bool {
 ///
 /// * `client` - Ollama client instance
 /// * `model` - Name of the model to check
+/// * `model_type` - Type of model (Embed or Chat) to use correct API endpoint
 ///
 /// # Returns
 ///
 /// Returns `Ok(true)` if model is installed, `Ok(false)` if not.
 /// Returns `Err` if Ollama is not running or connection fails.
-pub fn check_model_installed(client: &OllamaClient, model: &str) -> AppResult<bool> {
-    debug!("Checking if model '{}' is installed", model);
+pub fn check_model_installed(
+    client: &OllamaClient,
+    model: &str,
+    model_type: ModelType,
+) -> AppResult<bool> {
+    debug!(
+        "Checking if {} model '{}' is installed",
+        match model_type {
+            ModelType::Embed => "embedding",
+            ModelType::Chat => "chat",
+        },
+        model
+    );
 
-    // Try to use the model with a minimal request to check if it exists
-    // We use a tiny prompt to minimize resource usage
-    let result = client.embed(model, "test");
+    // Use appropriate API endpoint based on model type
+    let result = match model_type {
+        ModelType::Embed => {
+            // For embedding models, try to embed a test string
+            client.embed(model, "test").map(|_| ()) // Convert to () for uniform type
+        }
+        ModelType::Chat => {
+            // For chat models, send a minimal chat request
+            let messages = vec![Message::user("test")];
+            client.chat(model, &messages).map(|_| ()) // Convert to () for uniform type
+        }
+    };
 
     match result {
         Ok(_) => {
@@ -72,9 +102,13 @@ pub fn check_model_installed(client: &OllamaClient, model: &str) -> AppResult<bo
             Ok(false)
         }
         Err(AppError::AI(AIError::ModelNotSupported { .. })) => {
-            // Model exists but doesn't support embeddings (wrong model type)
-            // Treat as "not available" for embedding purposes
-            warn!("Model '{}' doesn't support embeddings", model);
+            // Model exists but doesn't support the requested operation
+            // This shouldn't happen if we're using the correct model_type,
+            // but if it does, treat as "not available"
+            warn!(
+                "Model '{}' doesn't support {:?} operations",
+                model, model_type
+            );
             Ok(false)
         }
         Err(e) => {
@@ -133,7 +167,8 @@ pub fn pull_model(model: &str) -> AppResult<()> {
 ///
 /// * `client` - Ollama client instance
 /// * `model` - Name of the model to check/install
-/// * `model_type` - Description of model type (e.g., "embedding", "chat")
+/// * `model_type` - Type of model (Embed or Chat)
+/// * `model_description` - Human-readable description (e.g., "embedding", "chat")
 ///
 /// # Returns
 ///
@@ -149,25 +184,32 @@ pub fn pull_model(model: &str) -> AppResult<()> {
 pub fn ensure_model_available(
     client: &OllamaClient,
     model: &str,
-    model_type: &str,
+    model_type: ModelType,
+    model_description: &str,
 ) -> AppResult<()> {
     // Skip model check in test/CI environments
     // PONDER_TEST_PASSPHRASE indicates non-interactive testing
     // CI indicates GitHub Actions or similar CI environment
     if std::env::var("PONDER_TEST_PASSPHRASE").is_ok() || std::env::var("CI").is_ok() {
-        debug!("Skipping {} model check in test/CI environment", model_type);
+        debug!(
+            "Skipping {} model check in test/CI environment",
+            model_description
+        );
         return Ok(());
     }
 
-    match check_model_installed(client, model) {
+    match check_model_installed(client, model, model_type) {
         Ok(true) => {
-            debug!("{} model '{}' is available", model_type, model);
+            debug!("{} model '{}' is available", model_description, model);
             Ok(())
         }
         Ok(false) => {
             // Model not found - offer to install
-            warn!("{} model '{}' not found", model_type, model);
-            println!("\n{} model '{}' is not installed.", model_type, model);
+            warn!("{} model '{}' not found", model_description, model);
+            println!(
+                "\n{} model '{}' is not installed.",
+                model_description, model
+            );
 
             if prompt_yes_no("Would you like to pull it now?", true) {
                 pull_model(model)?;
