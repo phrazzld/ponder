@@ -506,6 +506,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    #[ignore = "requires Ollama"]
     fn test_assemble_context_no_entries() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
@@ -527,6 +528,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires Ollama"]
     fn test_assemble_context_limits_results() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
