@@ -13,7 +13,7 @@ use crate::db::entries::get_entry_by_date;
 use crate::db::summaries::{get_summary, upsert_summary, SummaryLevel};
 use crate::db::Database;
 use crate::errors::{AppError, AppResult};
-use chrono::{Duration, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate};
 use std::fs;
 use tracing::{debug, info, warn};
 
@@ -156,9 +156,6 @@ pub fn generate_weekly_summary(
 ) -> AppResult<i64> {
     info!("Generating weekly summary ending on {}", end_date);
 
-    // Ensure session is unlocked
-    let passphrase = session.get_passphrase()?;
-
     // Calculate the 7-day range (inclusive)
     let start_date = end_date - Duration::days(6);
     debug!(
@@ -166,30 +163,60 @@ pub fn generate_weekly_summary(
         start_date, end_date
     );
 
-    // Fetch and decrypt daily summaries
+    // Fetch and decrypt daily summaries, auto-generating any that are missing
     let conn = db.get_conn()?;
     let mut daily_summaries = Vec::new();
+    let mut generated_count = 0;
 
     for days_offset in 0..7 {
         let date = start_date + Duration::days(days_offset);
         let date_str = date.to_string();
 
+        // Check if daily summary already exists
         if let Some(summary) = get_summary(&conn, &date_str, SummaryLevel::Daily)? {
+            let passphrase = session.get_passphrase()?;
             let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
             let text = String::from_utf8(decrypted)
                 .map_err(|e| AppError::Journal(format!("Invalid UTF-8 in daily summary: {}", e)))?;
             daily_summaries.push(text);
-            debug!("Loaded daily summary for {}", date);
+            debug!("Loaded existing daily summary for {}", date);
         } else {
-            warn!("No daily summary found for {}", date);
+            // Try to auto-generate daily summary if entry exists
+            match generate_daily_summary(db, session, ai_client, date) {
+                Ok(_) => {
+                    // Fetch the newly generated summary
+                    if let Some(summary) = get_summary(&conn, &date_str, SummaryLevel::Daily)? {
+                        let passphrase = session.get_passphrase()?;
+                        let decrypted =
+                            decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+                        let text = String::from_utf8(decrypted).map_err(|e| {
+                            AppError::Journal(format!("Invalid UTF-8 in daily summary: {}", e))
+                        })?;
+                        daily_summaries.push(text);
+                        generated_count += 1;
+                        info!("Auto-generated daily summary for {}", date);
+                    }
+                }
+                Err(e) => {
+                    // If no entry exists for this day, that's okay - not every day has an entry
+                    debug!("No entry found for {} ({})", date, e);
+                }
+            }
         }
     }
 
     if daily_summaries.is_empty() {
         return Err(AppError::Journal(format!(
-            "No daily summaries found for week ending {}",
+            "No journal entries found for week ending {}. Cannot generate weekly summary.",
             end_date
         )));
+    }
+
+    if generated_count > 0 {
+        info!(
+            "Auto-generated {} daily summaries for week ending {}",
+            generated_count, end_date
+        );
     }
 
     info!("Aggregating {} daily summaries", daily_summaries.len());
@@ -217,6 +244,7 @@ pub fn generate_weekly_summary(
     debug!("Weekly sentiment score: {}", sentiment);
 
     // Encrypt summary
+    let passphrase = session.get_passphrase()?;
     let encrypted_summary = encrypt_with_passphrase(summary_text.as_bytes(), passphrase)?;
 
     // Store in database
@@ -285,9 +313,6 @@ pub fn generate_monthly_summary(
 
     info!("Generating monthly summary for {}-{:02}", year, month);
 
-    // Ensure session is unlocked
-    let passphrase = session.get_passphrase()?;
-
     // Calculate the month's date range
     let start_date = NaiveDate::from_ymd_opt(year, month, 1)
         .ok_or_else(|| AppError::Journal(format!("Invalid date: {}-{:02}-01", year, month)))?;
@@ -307,33 +332,105 @@ pub fn generate_monthly_summary(
         start_date, end_date
     );
 
-    // Fetch and decrypt weekly summaries
-    // We'll check for weekly summaries at regular intervals (every 7 days)
+    // Fetch existing weekly summaries in the month's date range
     let conn = db.get_conn()?;
-    let mut weekly_summaries = Vec::new();
+    let existing_summaries = crate::db::summaries::list_summaries_by_date_range(
+        &conn,
+        SummaryLevel::Weekly,
+        &start_date.to_string(),
+        &end_date.to_string(),
+    )?;
 
-    let mut current_date = start_date;
-    while current_date <= end_date {
-        let date_str = current_date.to_string();
+    debug!(
+        "Found {} existing weekly summaries",
+        existing_summaries.len()
+    );
 
-        if let Some(summary) = get_summary(&conn, &date_str, SummaryLevel::Weekly)? {
-            let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
-            let text = String::from_utf8(decrypted).map_err(|e| {
-                AppError::Journal(format!("Invalid UTF-8 in weekly summary: {}", e))
-            })?;
-            weekly_summaries.push(text);
-            debug!("Loaded weekly summary for {}", current_date);
+    // Determine which weeks need summaries (find all week end dates in month)
+    let mut week_end_dates = Vec::new();
+    let mut current = start_date;
+    while current <= end_date {
+        // Find the next Sunday (or end of month, whichever comes first)
+        let days_until_sunday = (7 - current.weekday().num_days_from_sunday()) % 7;
+        let mut week_end = current + Duration::days(days_until_sunday as i64);
+
+        // If this Sunday is past the month end, use month end as week end
+        if week_end > end_date {
+            week_end = end_date;
         }
 
-        // Move to next week
-        current_date += Duration::days(7);
+        week_end_dates.push(week_end);
+
+        // Move to next week (day after this week's end)
+        current = week_end + Duration::days(1);
+
+        // If we've reached or passed the end of month, stop
+        if current > end_date {
+            break;
+        }
     }
 
-    if weekly_summaries.is_empty() {
+    info!(
+        "Need weekly summaries for {} weeks in {}-{:02}",
+        week_end_dates.len(),
+        year,
+        month
+    );
+
+    // Auto-generate any missing weekly summaries
+    let mut generated_count = 0;
+    let existing_dates: std::collections::HashSet<String> =
+        existing_summaries.iter().map(|s| s.date.clone()).collect();
+
+    for week_end in &week_end_dates {
+        let week_end_str = week_end.to_string();
+        if !existing_dates.contains(&week_end_str) {
+            info!(
+                "Auto-generating weekly summary for week ending {}",
+                week_end
+            );
+            match generate_weekly_summary(db, session, ai_client, *week_end) {
+                Ok(_) => {
+                    generated_count += 1;
+                }
+                Err(e) => {
+                    warn!("Failed to generate weekly summary for {}: {}", week_end, e);
+                }
+            }
+        }
+    }
+
+    if generated_count > 0 {
+        info!(
+            "Auto-generated {} weekly summaries for {}-{:02}",
+            generated_count, year, month
+        );
+    }
+
+    // Fetch all weekly summaries again (including newly generated ones)
+    let all_summaries = crate::db::summaries::list_summaries_by_date_range(
+        &conn,
+        SummaryLevel::Weekly,
+        &start_date.to_string(),
+        &end_date.to_string(),
+    )?;
+
+    if all_summaries.is_empty() {
         return Err(AppError::Journal(format!(
-            "No weekly summaries found for {}-{:02}",
+            "No journal entries found for {}-{:02}. Cannot generate monthly summary.",
             year, month
         )));
+    }
+
+    // Decrypt all weekly summaries
+    let passphrase = session.get_passphrase()?;
+    let mut weekly_summaries = Vec::new();
+    for summary in all_summaries {
+        let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+        let text = String::from_utf8(decrypted)
+            .map_err(|e| AppError::Journal(format!("Invalid UTF-8 in weekly summary: {}", e)))?;
+        weekly_summaries.push(text);
+        debug!("Loaded weekly summary for {}", summary.date);
     }
 
     info!("Aggregating {} weekly summaries", weekly_summaries.len());

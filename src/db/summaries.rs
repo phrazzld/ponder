@@ -9,7 +9,7 @@ use std::str::FromStr;
 use tracing::debug;
 
 /// Summary granularity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SummaryLevel {
     Daily,
     Weekly,
@@ -23,6 +23,24 @@ impl SummaryLevel {
             SummaryLevel::Daily => "daily",
             SummaryLevel::Weekly => "weekly",
             SummaryLevel::Monthly => "monthly",
+        }
+    }
+
+    /// Convert to display-friendly emoji icon.
+    pub fn icon(&self) -> &'static str {
+        match self {
+            SummaryLevel::Daily => "📄",
+            SummaryLevel::Weekly => "📆",
+            SummaryLevel::Monthly => "📅",
+        }
+    }
+
+    /// Convert to display-friendly label (plural).
+    pub fn label_plural(&self) -> &'static str {
+        match self {
+            SummaryLevel::Daily => "Daily Summaries",
+            SummaryLevel::Weekly => "Weekly Summaries",
+            SummaryLevel::Monthly => "Monthly Summaries",
         }
     }
 }
@@ -260,6 +278,146 @@ pub fn list_all_summaries(conn: &Connection, limit: usize) -> AppResult<Vec<Summ
 
     debug!("Found {} summaries", summaries.len());
     Ok(summaries)
+}
+
+/// Lists summaries within a date range for a specific level.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+/// * `level` - Summary granularity level to filter by
+/// * `start_date` - Start date (inclusive, YYYY-MM-DD format)
+/// * `end_date` - End date (inclusive, YYYY-MM-DD format)
+///
+/// # Errors
+///
+/// Returns an error if the database operation fails.
+pub fn list_summaries_by_date_range(
+    conn: &Connection,
+    level: SummaryLevel,
+    start_date: &str,
+    end_date: &str,
+) -> AppResult<Vec<Summary>> {
+    debug!(
+        "Listing {} summaries from {} to {}",
+        level.as_str(),
+        start_date,
+        end_date
+    );
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, date, level, summary_encrypted, topics, sentiment, word_count, created_at
+            FROM summaries
+            WHERE level = ?1 AND date >= ?2 AND date <= ?3
+            ORDER BY date ASC
+            "#,
+        )
+        .map_err(DatabaseError::Sqlite)?;
+
+    let summaries = stmt
+        .query_map(params![level.as_str(), start_date, end_date], |row| {
+            let level_str: String = row.get(2)?;
+            Ok(Summary {
+                id: row.get(0)?,
+                date: row.get(1)?,
+                level: level_str.parse().unwrap(),
+                summary_encrypted: row.get(3)?,
+                topics: row.get(4)?,
+                sentiment: row.get(5)?,
+                word_count: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })
+        .map_err(DatabaseError::Sqlite)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(DatabaseError::Sqlite)?;
+
+    debug!("Found {} summaries in range", summaries.len());
+    Ok(summaries)
+}
+
+/// Gets recent summaries with hierarchical priority.
+///
+/// Ensures monthly summaries are always included by querying each level separately.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+/// * `monthly_limit` - Max monthly summaries to return
+/// * `weekly_limit` - Max weekly summaries to return
+/// * `daily_limit` - Max daily summaries to return
+///
+/// # Returns
+///
+/// Combined list ordered: Monthly → Weekly → Daily, each internally ordered by date DESC
+///
+/// # Errors
+///
+/// Returns an error if database operations fail.
+pub fn get_recent_summaries_hierarchical(
+    conn: &Connection,
+    monthly_limit: usize,
+    weekly_limit: usize,
+    daily_limit: usize,
+) -> AppResult<Vec<Summary>> {
+    let mut results = Vec::new();
+
+    // Get monthly summaries
+    let monthly = list_summaries(conn, SummaryLevel::Monthly, monthly_limit)?;
+    results.extend(monthly);
+
+    // Get weekly summaries
+    let weekly = list_summaries(conn, SummaryLevel::Weekly, weekly_limit)?;
+    results.extend(weekly);
+
+    // Get daily summaries
+    let daily = list_summaries(conn, SummaryLevel::Daily, daily_limit)?;
+    results.extend(daily);
+
+    debug!(
+        "Hierarchical query returned {} total summaries",
+        results.len()
+    );
+    Ok(results)
+}
+
+/// Format a summary date for display based on its level.
+///
+/// # Arguments
+///
+/// * `date` - Date string in YYYY-MM-DD format
+/// * `level` - Summary granularity level
+///
+/// # Returns
+///
+/// User-friendly formatted date string:
+/// - Monthly: "October 2025" or "2025-10"
+/// - Weekly: "Week ending Oct 31, 2025"
+/// - Daily: "Oct 31, 2025"
+pub fn format_summary_date(date: &str, level: SummaryLevel) -> String {
+    use chrono::NaiveDate;
+
+    let parsed_date = match NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+        Ok(d) => d,
+        Err(_) => return date.to_string(), // Fallback to original if parse fails
+    };
+
+    match level {
+        SummaryLevel::Monthly => {
+            // Format as "October 2025"
+            parsed_date.format("%B %Y").to_string()
+        }
+        SummaryLevel::Weekly => {
+            // Format as "Week ending Oct 31, 2025"
+            format!("Week ending {}", parsed_date.format("%b %d, %Y"))
+        }
+        SummaryLevel::Daily => {
+            // Format as "Oct 31, 2025"
+            parsed_date.format("%b %d, %Y").to_string()
+        }
+    }
 }
 
 #[cfg(test)]

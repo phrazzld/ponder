@@ -29,10 +29,11 @@ fn default_confidence() -> f32 {
 }
 
 /// Temporal constraint extracted from user query.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum TemporalConstraint {
     /// No temporal constraint in query (search all dates)
+    #[default]
     None,
 
     /// Absolute date range (e.g., "between Jan 1 and Jan 31")
@@ -43,12 +44,6 @@ pub enum TemporalConstraint {
 
     /// Relative to current date (e.g., "past 2 weeks", "last month")
     Relative { days_ago: i64 },
-}
-
-impl Default for TemporalConstraint {
-    fn default() -> Self {
-        TemporalConstraint::None
-    }
 }
 
 impl TemporalConstraint {

@@ -200,18 +200,96 @@ fn open_database_with_retry(config: &Config, session: &mut SessionManager) -> Ap
     unreachable!("Loop should always return or error before reaching here")
 }
 
-/// Ensures the embedding model is available, offering to install if missing.
+/// Truncates text to max length with ellipsis if needed.
+fn truncate_with_ellipsis(text: &str, max_len: usize) -> String {
+    if text.len() <= max_len {
+        text.to_string()
+    } else {
+        // Find a good break point (space) before max_len
+        let truncated = &text[..max_len];
+        let last_space = truncated.rfind(' ').unwrap_or(max_len);
+        format!("{}...", truncated[..last_space].trim())
+    }
+}
+
+/// Parses flexible date formats for summary viewing.
 ///
-/// This checks if the embedding model is installed and prompts the user
-/// to install it if not found.
-///
-/// # Arguments
-///
-/// * `client` - Ollama client instance
-///
-/// # Returns
-///
-/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+/// Supports:
+/// - YYYY-MM-DD (full date)
+/// - YYYY-MM (monthly, converts to YYYY-MM-01)
+fn parse_flexible_date(date_str: &str) -> AppResult<String> {
+    use chrono::NaiveDate;
+
+    // Try full date format first
+    if NaiveDate::parse_from_str(date_str, "%Y-%m-%d").is_ok() {
+        return Ok(date_str.to_string());
+    }
+
+    // Try monthly format (YYYY-MM) - convert to YYYY-MM-01
+    if date_str.len() == 7 && date_str.chars().nth(4) == Some('-') {
+        let full_date = format!("{}-01", date_str);
+        if NaiveDate::parse_from_str(&full_date, "%Y-%m-%d").is_ok() {
+            return Ok(full_date);
+        }
+    }
+
+    Err(AppError::Journal(format!(
+        "Invalid date format: '{}'. Use YYYY-MM-DD or YYYY-MM",
+        date_str
+    )))
+}
+
+/// Displays a full summary with formatted output.
+fn display_summary(
+    db: &Database,
+    session: &mut SessionManager,
+    date_str: &str,
+    level: ponder::db::summaries::SummaryLevel,
+) -> AppResult<()> {
+    use ponder::crypto::age::decrypt_with_passphrase;
+    use ponder::db::summaries::{format_summary_date, get_summary};
+
+    let conn = db.get_conn()?;
+    let summary = get_summary(&conn, date_str, level)?
+        .ok_or_else(|| AppError::Journal("Failed to fetch generated summary".to_string()))?;
+
+    let passphrase = session.get_passphrase()?;
+    let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+    let content = String::from_utf8(decrypted)
+        .map_err(|e| AppError::Journal(format!("Invalid UTF-8 in summary: {}", e)))?;
+
+    // Display with nice formatting
+    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!(
+        "{} {} Summary: {}",
+        level.icon(),
+        level.as_str().to_uppercase(),
+        format_summary_date(date_str, level)
+    );
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    println!("{}\n", content);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // Metadata
+    if let Some(sentiment) = summary.sentiment {
+        print!("Sentiment: {:.2}", sentiment);
+    }
+    if let Some(word_count) = summary.word_count {
+        print!("  |  {} words", word_count);
+    }
+    println!();
+    if let Some(topics) = &summary.topics {
+        if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+            if !topics_vec.is_empty() {
+                println!("Topics: {}", topics_vec.join(", "));
+            }
+        }
+    }
+    println!("Saved with ID: {}\n", summary.id);
+
+    Ok(())
+}
+
 fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
     ensure_model_available(client, DEFAULT_EMBED_MODEL, ModelType::Embed, "Embedding")
 }
@@ -370,6 +448,7 @@ fn cmd_summarize(
     current_date: chrono::NaiveDate,
 ) -> AppResult<()> {
     use ponder::cli::SummaryPeriod;
+    use ponder::db::summaries::SummaryLevel;
 
     info!("Command: summarize");
 
@@ -428,11 +507,19 @@ fn cmd_summarize(
     ensure_chat_available(&ai_client)?;
 
     // Generate summary based on period
-    let summary_id = match summarize_args.period {
+    let _summary_id = match summarize_args.period {
         SummaryPeriod::Daily => {
             let date = date.unwrap();
             println!("Generating daily summary for {}...", date);
-            ops::generate_daily_summary(&db, &mut session, &ai_client, date)?
+            let id = ops::generate_daily_summary(&db, &mut session, &ai_client, date)?;
+            println!(
+                "✓ Daily summary for {} generated successfully (ID: {})",
+                date, id
+            );
+
+            // Display the full summary immediately
+            display_summary(&db, &mut session, &date.to_string(), SummaryLevel::Daily)?;
+            id
         }
         SummaryPeriod::Weekly => {
             let end_date = date.unwrap();
@@ -441,18 +528,37 @@ fn cmd_summarize(
                 "Generating weekly summary for {} to {}...",
                 start_date, end_date
             );
-            ops::generate_weekly_summary(&db, &mut session, &ai_client, end_date)?
+            let id = ops::generate_weekly_summary(&db, &mut session, &ai_client, end_date)?;
+            println!(
+                "✓ Weekly summary for week ending {} generated successfully (ID: {})",
+                end_date, id
+            );
+
+            // Display the full summary immediately
+            display_summary(
+                &db,
+                &mut session,
+                &end_date.to_string(),
+                SummaryLevel::Weekly,
+            )?;
+            id
         }
         SummaryPeriod::Monthly => {
             let year = year.unwrap();
             let month = month.unwrap();
             println!("Generating monthly summary for {}-{:02}...", year, month);
-            ops::generate_monthly_summary(&db, &mut session, &ai_client, year, month)?
+            let id = ops::generate_monthly_summary(&db, &mut session, &ai_client, year, month)?;
+            println!(
+                "✓ Monthly summary for {}-{:02} generated successfully (ID: {})",
+                year, month, id
+            );
+
+            // Display the full summary immediately
+            let date_str = format!("{}-{:02}-01", year, month);
+            display_summary(&db, &mut session, &date_str, SummaryLevel::Monthly)?;
+            id
         }
     };
-
-    println!("Summary generated successfully (ID: {}).", summary_id);
-    println!("Use 'ponder summaries' to view past summaries.");
 
     Ok(())
 }
@@ -461,7 +567,7 @@ fn cmd_summarize(
 fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) -> AppResult<()> {
     use ponder::cli::SummaryPeriod;
     use ponder::crypto::age::decrypt_with_passphrase;
-    use ponder::db::summaries::{get_summary, list_all_summaries, list_summaries, SummaryLevel};
+    use ponder::db::summaries::{get_summary, list_summaries, SummaryLevel};
 
     info!("Command: summaries");
 
@@ -471,6 +577,9 @@ fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) ->
 
     // Check if showing a specific summary or listing summaries
     if let Some(date_str) = summaries_args.date {
+        // Parse flexible date format (YYYY-MM-DD or YYYY-MM)
+        let parsed_date = parse_flexible_date(&date_str)?;
+
         // Show specific summary - need to determine level
         // Try each level until we find a match
         let conn = db.get_conn()?;
@@ -482,7 +591,7 @@ fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) ->
             SummaryLevel::Weekly,
             SummaryLevel::Monthly,
         ] {
-            if let Some(summary) = get_summary(&conn, &date_str, level)? {
+            if let Some(summary) = get_summary(&conn, &parsed_date, level)? {
                 // Decrypt summary content
                 let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
                 let content = String::from_utf8(decrypted).map_err(|e| {
@@ -530,33 +639,86 @@ fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) ->
             };
             list_summaries(&conn, level, summaries_args.limit)?
         } else {
-            list_all_summaries(&conn, summaries_args.limit)?
+            // Use smart hierarchical query by default
+            use ponder::db::summaries::get_recent_summaries_hierarchical;
+            get_recent_summaries_hierarchical(&conn, 1, 3, 10)?
         };
 
         if summaries.is_empty() {
             println!("No summaries found.");
         } else {
-            println!("\nFound {} summaries:\n", summaries.len());
+            // Group summaries by level for hierarchical display
+            use std::collections::HashMap;
+            let mut grouped: HashMap<SummaryLevel, Vec<_>> = HashMap::new();
             for summary in summaries {
-                println!("Date: {} ({})", summary.date, summary.level.as_str());
-                if let Some(word_count) = summary.word_count {
-                    print!("  Word count: {}", word_count);
-                }
-                if let Some(sentiment) = summary.sentiment {
-                    print!("  Sentiment: {:.2}", sentiment);
-                }
-                println!();
-                if let Some(topics) = &summary.topics {
-                    if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
-                        if !topics_vec.is_empty() {
-                            println!("  Topics: {}", topics_vec.join(", "));
+                grouped
+                    .entry(summary.level)
+                    .or_insert_with(Vec::new)
+                    .push(summary);
+            }
+
+            println!(
+                "\nFound {} summaries:\n",
+                grouped.values().map(|v| v.len()).sum::<usize>()
+            );
+
+            // Get passphrase for decrypting previews
+            let passphrase = session.get_passphrase()?;
+
+            // Display in hierarchical order: Monthly → Weekly → Daily
+            for level in [
+                SummaryLevel::Monthly,
+                SummaryLevel::Weekly,
+                SummaryLevel::Daily,
+            ] {
+                if let Some(summaries) = grouped.get(&level) {
+                    println!(
+                        "{} {} ({})",
+                        level.icon(),
+                        level.label_plural(),
+                        summaries.len()
+                    );
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    for summary in summaries {
+                        println!(
+                            "{}",
+                            ponder::db::summaries::format_summary_date(&summary.date, level)
+                        );
+                        if let Some(word_count) = summary.word_count {
+                            print!("  Word count: {}", word_count);
                         }
+                        if let Some(sentiment) = summary.sentiment {
+                            print!("  Sentiment: {:.2}", sentiment);
+                        }
+                        println!();
+                        if let Some(topics) = &summary.topics {
+                            if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+                                if !topics_vec.is_empty() {
+                                    println!("  Topics: {}", topics_vec.join(", "));
+                                }
+                            }
+                        }
+
+                        // Decrypt and show content preview
+                        if let Ok(decrypted) =
+                            decrypt_with_passphrase(&summary.summary_encrypted, passphrase)
+                        {
+                            if let Ok(content) = String::from_utf8(decrypted) {
+                                let preview = truncate_with_ellipsis(&content, 150);
+                                println!("  Preview: {}", preview);
+                            }
+                        }
+
+                        println!("  Created: {}", summary.created_at);
+                        println!();
                     }
                 }
-                println!("  Created: {}", summary.created_at);
-                println!();
             }
-            println!("Use 'ponder summaries --date YYYY-MM-DD' to view full summary content.");
+
+            // Footer with helpful hints
+            println!("Filter by level: --period {{monthly|weekly|daily}}");
+            println!("Show full summary: --date YYYY-MM-DD");
         }
     }
 
