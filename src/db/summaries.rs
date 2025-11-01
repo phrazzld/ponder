@@ -164,10 +164,17 @@ pub fn get_summary(
             params![date, level.as_str()],
             |row| {
                 let level_str: String = row.get(2)?;
+                let level = level_str.parse().map_err(|e: String| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Text,
+                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+                    )
+                })?;
                 Ok(Summary {
                     id: row.get(0)?,
                     date: row.get(1)?,
-                    level: level_str.parse().unwrap(),
+                    level,
                     summary_encrypted: row.get(3)?,
                     topics: row.get(4)?,
                     sentiment: row.get(5)?,

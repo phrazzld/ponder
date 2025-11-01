@@ -19,6 +19,8 @@ Ponder v2.0 is an AI-powered encrypted journaling tool for daily reflections. It
 - **No Plaintext Leakage**: All sensitive data encrypted at rest
 
 ### AI Features (v2.0)
+- **Conversational Interface**: Interactive chat to explore your journal naturally with Chain-of-Thought reasoning
+- **Progressive Summaries**: AI-generated daily, weekly, and monthly summaries with hierarchical organization
 - **Semantic Search**: Find journal entries by meaning, not just keywords
 - **RAG Queries**: Ask questions about your journal using AI (Retrieval-Augmented Generation)
 - **AI Reflections**: Get thoughtful AI-generated insights on your entries
@@ -36,6 +38,29 @@ Ponder uses **zero-knowledge encryption** - your passphrase encrypts all journal
 - Write it down and store in a secure physical location
 - Consider using a password manager
 - Test backup/restore before relying on Ponder for important data
+
+### Privacy Considerations for AI Features
+
+When using AI features (semantic search, RAG queries, summaries, etc.), be aware:
+
+**Embeddings and Local AI**:
+- Vector embeddings are generated from your journal content to enable semantic search
+- Embeddings are mathematical representations that encode meaning and topics
+- While encrypted at rest in the database, embeddings may reveal semantic information about your journal topics if the database is compromised
+- **For maximum privacy**: Run Ollama locally (default: `http://127.0.0.1:11434`)
+- **Avoid remote Ollama instances** for sensitive content, as your journal text will be transmitted for embedding/analysis
+
+**What's sent to Ollama**:
+- **Embeddings**: Full text of journal entries (for vectorization)
+- **Chat/Ask**: Context chunks from relevant entries + your question
+- **Summaries**: Entry content being summarized
+- **Reflections**: Specific entry content for reflection
+
+**Recommendations**:
+- Use the default local Ollama installation (your data never leaves your machine)
+- Avoid configuring `OLLAMA_URL` to point to remote servers with sensitive content
+- Understand that semantic search quality depends on embeddings, which encode meaning
+- Review the [Ollama privacy policy](https://ollama.ai/privacy) if using their services
 
 ## Installation 🔧
 
@@ -103,9 +128,81 @@ ponder <COMMAND> [OPTIONS]
 | `ask` | Query your journal using AI (RAG) |
 | `reflect` | Generate AI reflection on an entry |
 | `search` | Semantic search over journal entries |
+| `converse` | Interactive conversational interface (v2.1) |
+| `summarize` | Generate AI summaries (daily/weekly/monthly) (v2.1) |
+| `summaries` | View generated summaries (v2.1) |
 | `lock` | Lock the encrypted session |
 | `backup` | Create encrypted backup archive |
 | `restore` | Restore from encrypted backup |
+
+### Getting Started with AI Features 🤖
+
+New to Ponder's AI capabilities? Here's a quick start guide:
+
+**1. Conversational Interface** - Explore your journal through natural dialogue:
+```bash
+$ ponder converse
+
+🤖 Ponder Conversational Assistant
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ask me anything about your journal entries!
+
+You: What patterns do you see in my recent entries?
+
+🤖 Let me think through this step-by-step...
+   [AI analyzes your journal with Chain-of-Thought reasoning]
+
+You: Tell me more about the stress patterns you mentioned
+
+🤖 [Continues the conversation with context from previous exchanges]
+
+You: quit
+```
+
+**2. Progressive Summaries** - Generate hierarchical summaries:
+```bash
+# Generate daily summary
+$ ponder summarize daily 2024-01-15
+
+# Generate weekly summary (auto-creates missing daily summaries)
+$ ponder summarize weekly 2024-01-21
+
+# Generate monthly summary (auto-creates missing weekly summaries)
+$ ponder summarize monthly 2024 1
+
+# View all summaries
+$ ponder summaries list
+
+# View specific summary
+$ ponder summaries show 2024-01-15 daily
+```
+
+**3. Semantic Search** - Find entries by meaning:
+```bash
+# Search for anxiety-related entries
+$ ponder search "managing stress and anxiety"
+
+# Limit results
+$ ponder search "productivity techniques" --limit 10
+```
+
+**4. RAG Queries** - Ask questions about your journal:
+```bash
+# Ask about specific topics
+$ ponder ask "What were my main goals last month?"
+
+# With date filters
+$ ponder ask "How did I feel about work?" --from 2024-01-01 --to 2024-01-31
+```
+
+**5. AI Reflections** - Get insights on specific entries:
+```bash
+# Reflect on today's entry
+$ ponder reflect
+
+# Reflect on specific date
+$ ponder reflect --date 2024-01-15
+```
 
 ### Global Options
 

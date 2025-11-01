@@ -22,6 +22,12 @@ use std::fs;
 use std::io::{self, Write};
 use tracing::{debug, info};
 
+/// Maximum number of conversation messages to retain in history (excluding system message).
+const MAX_CONVERSATION_HISTORY: usize = 20;
+
+/// Character width for context preview truncation in terminal output.
+const CONTEXT_PREVIEW_WIDTH: usize = 80;
+
 /// System prompt for reflection phase to decide search vs respond directly.
 ///
 /// This prompt guides the LLM to analyze the user's query and decide whether
@@ -247,10 +253,10 @@ pub fn start_conversation(
             println!("\n📚 Context ({} entries):", context_chunks.len());
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             for (date, excerpt) in &context_chunks {
-                // Truncate to ~80 chars for readability
+                // Truncate to CONTEXT_PREVIEW_WIDTH chars for readability
                 let truncated: String = excerpt
                     .chars()
-                    .take(80)
+                    .take(CONTEXT_PREVIEW_WIDTH)
                     .collect::<String>()
                     .trim()
                     .replace('\n', " ");
@@ -258,7 +264,11 @@ pub fn start_conversation(
                     "📝 {}: \"{}{}\"",
                     date,
                     truncated,
-                    if excerpt.len() > 80 { "..." } else { "" }
+                    if excerpt.len() > CONTEXT_PREVIEW_WIDTH {
+                        "..."
+                    } else {
+                        ""
+                    }
                 );
             }
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
@@ -323,16 +333,19 @@ pub fn start_conversation(
         // Add assistant response to history
         conversation_history.push(Message::assistant(&response));
 
-        // Keep conversation history manageable (last 20 messages + system message)
-        if conversation_history.len() > 21 {
-            // Keep system message (index 0) and most recent 20 messages
+        // Keep conversation history manageable (last MAX_CONVERSATION_HISTORY messages + system message)
+        if conversation_history.len() > MAX_CONVERSATION_HISTORY + 1 {
+            // Keep system message (index 0) and most recent MAX_CONVERSATION_HISTORY messages
             let system_msg = conversation_history[0].clone();
             let recent_messages: Vec<Message> = conversation_history
-                .drain(conversation_history.len() - 20..)
+                .drain(conversation_history.len() - MAX_CONVERSATION_HISTORY..)
                 .collect();
             conversation_history = vec![system_msg];
             conversation_history.extend(recent_messages);
-            debug!("Trimmed conversation history to 20 most recent messages");
+            debug!(
+                "Trimmed conversation history to {} most recent messages",
+                MAX_CONVERSATION_HISTORY
+            );
         }
     }
 
