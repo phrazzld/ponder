@@ -6,7 +6,6 @@
 
 use crate::ai::prompts::{daily_summary_prompt, monthly_summary_prompt, weekly_summary_prompt};
 use crate::ai::OllamaClient;
-use crate::constants::DEFAULT_CHAT_MODEL;
 use crate::crypto::age::{decrypt_with_passphrase, encrypt_with_passphrase};
 use crate::crypto::SessionManager;
 use crate::db::entries::get_entry_by_date;
@@ -52,9 +51,13 @@ pub fn generate_daily_summary(
     db: &Database,
     session: &mut SessionManager,
     ai_client: &OllamaClient,
+    model: &str,
     date: NaiveDate,
 ) -> AppResult<i64> {
-    info!("Generating daily summary for {}", date);
+    info!(
+        "Generating daily summary for {} using model {}",
+        date, model
+    );
 
     // Ensure session is unlocked
     let passphrase = session.get_passphrase()?;
@@ -76,7 +79,7 @@ pub fn generate_daily_summary(
 
     // Generate summary using AI
     let messages = daily_summary_prompt(&content);
-    let summary_text = ai_client.chat(DEFAULT_CHAT_MODEL, &messages)?;
+    let summary_text = ai_client.chat(model, &messages)?;
 
     info!("Generated summary ({} chars)", summary_text.len());
 
@@ -133,6 +136,7 @@ pub fn generate_daily_summary(
 /// * `db` - Database connection
 /// * `session` - Session manager for encryption/decryption
 /// * `ai_client` - Ollama client for summary generation
+/// * `model` - Model to use for summary generation
 /// * `end_date` - End date of the week (typically a Sunday or the last day)
 ///
 /// # Returns
@@ -152,9 +156,13 @@ pub fn generate_weekly_summary(
     db: &Database,
     session: &mut SessionManager,
     ai_client: &OllamaClient,
+    model: &str,
     end_date: NaiveDate,
 ) -> AppResult<i64> {
-    info!("Generating weekly summary ending on {}", end_date);
+    info!(
+        "Generating weekly summary ending on {} using model {}",
+        end_date, model
+    );
 
     // Calculate the 7-day range (inclusive)
     let start_date = end_date - Duration::days(6);
@@ -182,7 +190,7 @@ pub fn generate_weekly_summary(
             debug!("Loaded existing daily summary for {}", date);
         } else {
             // Try to auto-generate daily summary if entry exists
-            match generate_daily_summary(db, session, ai_client, date) {
+            match generate_daily_summary(db, session, ai_client, model, date) {
                 Ok(_) => {
                     // Fetch the newly generated summary
                     if let Some(summary) = get_summary(&conn, &date_str, SummaryLevel::Daily)? {
@@ -223,7 +231,7 @@ pub fn generate_weekly_summary(
 
     // Generate weekly summary using AI
     let messages = weekly_summary_prompt(&daily_summaries);
-    let summary_text = ai_client.chat(DEFAULT_CHAT_MODEL, &messages)?;
+    let summary_text = ai_client.chat(model, &messages)?;
 
     info!("Generated weekly summary ({} chars)", summary_text.len());
 
@@ -301,6 +309,7 @@ pub fn generate_monthly_summary(
     db: &Database,
     session: &mut SessionManager,
     ai_client: &OllamaClient,
+    model: &str,
     year: i32,
     month: u32,
 ) -> AppResult<i64> {
@@ -311,7 +320,10 @@ pub fn generate_monthly_summary(
         )));
     }
 
-    info!("Generating monthly summary for {}-{:02}", year, month);
+    info!(
+        "Generating monthly summary for {}-{:02} using model {}",
+        year, month, model
+    );
 
     // Calculate the month's date range
     let start_date = NaiveDate::from_ymd_opt(year, month, 1)
@@ -389,7 +401,7 @@ pub fn generate_monthly_summary(
                 "Auto-generating weekly summary for week ending {}",
                 week_end
             );
-            match generate_weekly_summary(db, session, ai_client, *week_end) {
+            match generate_weekly_summary(db, session, ai_client, model, *week_end) {
                 Ok(_) => {
                     generated_count += 1;
                 }
@@ -437,7 +449,7 @@ pub fn generate_monthly_summary(
 
     // Generate monthly summary using AI
     let messages = monthly_summary_prompt(&weekly_summaries);
-    let summary_text = ai_client.chat(DEFAULT_CHAT_MODEL, &messages)?;
+    let summary_text = ai_client.chat(model, &messages)?;
 
     info!("Generated monthly summary ({} chars)", summary_text.len());
 
@@ -497,7 +509,8 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
 
         // Just verify the function exists with correct signature
-        let _result: Result<i64, _> = generate_daily_summary(&db, &mut session, &client, date);
+        let _result: Result<i64, _> =
+            generate_daily_summary(&db, &mut session, &client, "gemma3:4b", date);
     }
 
     #[test]
@@ -515,7 +528,8 @@ mod tests {
         let end_date = NaiveDate::from_ymd_opt(2024, 1, 7).unwrap();
 
         // Just verify the function exists with correct signature
-        let _result: Result<i64, _> = generate_weekly_summary(&db, &mut session, &client, end_date);
+        let _result: Result<i64, _> =
+            generate_weekly_summary(&db, &mut session, &client, "gemma3:4b", end_date);
     }
 
     #[test]
@@ -532,6 +546,7 @@ mod tests {
         let client = OllamaClient::new("http://localhost:11434");
 
         // Just verify the function exists with correct signature
-        let _result: Result<i64, _> = generate_monthly_summary(&db, &mut session, &client, 2024, 1);
+        let _result: Result<i64, _> =
+            generate_monthly_summary(&db, &mut session, &client, "gemma3:4b", 2024, 1);
     }
 }

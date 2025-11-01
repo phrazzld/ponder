@@ -511,7 +511,13 @@ fn cmd_summarize(
         SummaryPeriod::Daily => {
             let date = date.unwrap();
             println!("Generating daily summary for {}...", date);
-            let id = ops::generate_daily_summary(&db, &mut session, &ai_client, date)?;
+            let id = ops::generate_daily_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                date,
+            )?;
             println!(
                 "✓ Daily summary for {} generated successfully (ID: {})",
                 date, id
@@ -528,7 +534,13 @@ fn cmd_summarize(
                 "Generating weekly summary for {} to {}...",
                 start_date, end_date
             );
-            let id = ops::generate_weekly_summary(&db, &mut session, &ai_client, end_date)?;
+            let id = ops::generate_weekly_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                end_date,
+            )?;
             println!(
                 "✓ Weekly summary for week ending {} generated successfully (ID: {})",
                 end_date, id
@@ -547,7 +559,14 @@ fn cmd_summarize(
             let year = year.unwrap();
             let month = month.unwrap();
             println!("Generating monthly summary for {}-{:02}...", year, month);
-            let id = ops::generate_monthly_summary(&db, &mut session, &ai_client, year, month)?;
+            let id = ops::generate_monthly_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                year,
+                month,
+            )?;
             println!(
                 "✓ Monthly summary for {}-{:02} generated successfully (ID: {})",
                 year, month, id

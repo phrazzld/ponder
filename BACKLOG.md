@@ -1,7 +1,67 @@
 # BACKLOG: Conversational Journal Assistant
 
-Last Updated: 2025-10-29
+Last Updated: 2025-10-31
 Context: Minimal conversational interface (Phase 4) implements core functionality. This backlog contains advanced features deferred until core is validated.
+
+---
+
+## Code Quality & Polish (v2.1.1)
+
+### From PR #56 Review Feedback
+
+These items were identified during code review as minor improvements but deemed non-blocking for merge.
+
+#### Extract Conversation Context Pruning Constant
+- **Location**: src/ops/converse.rs:327
+- **Issue**: Hard-coded magic number `21` for message history limit
+- **Fix**: Extract to named constant `MAX_CONVERSATION_HISTORY`
+- **Effort**: 5 minutes
+- **Value**: Code maintainability
+- **Source**: PR #56 review comments
+
+#### Extract Reflection Fallback Helper
+- **Location**: src/ops/converse.rs:180-207
+- **Issue**: Reflection fallback handling is verbose (28 lines)
+- **Fix**: Extract to `get_reflection_decision_with_fallback()` helper function
+- **Effort**: 30 minutes
+- **Value**: Code clarity and reusability
+- **Source**: PR #56 comprehensive review
+
+#### Add Week Boundary Edge Case Tests
+- **Location**: src/ops/summarize.rs:354 (week end date calculation)
+- **Issue**: Complex date logic lacks edge case coverage
+- **Fix**: Add tests for month boundaries (Jan 31 → Feb 1), year boundaries (Dec 29 → Jan 5), leap years
+- **Effort**: 1 hour
+- **Value**: Robustness and confidence in date arithmetic
+- **Source**: PR #56 comprehensive review
+
+#### Add Progress Indicators for Auto-Generation
+- **Location**: src/ops/summarize.rs:185-220 (weekly), src/ops/summarize.rs:381-408 (monthly)
+- **Issue**: Monthly summary can trigger 30+ LLM calls with no progress indication
+- **Fix**: Add progress bar (e.g., "Generating summaries... [5/12] 42%")
+- **Considerations**:
+  - User confirmation for >10 auto-generations?
+  - Batch size limits to prevent runaway generation?
+- **Effort**: 2 hours
+- **Value**: UX improvement, prevents "frozen" perception
+- **Source**: PR #56 review - identified as potential bottleneck
+
+#### Ollama Version Validation at Startup
+- **Location**: Startup validation (new function)
+- **Issue**: Assumes Ollama >= 0.5 for schema enforcement but silently degrades
+- **Fix**: Check Ollama version via API at startup, warn if < 0.5
+- **Effort**: 1 hour
+- **Value**: Better error messages, prevents silent degradation
+- **Source**: PR #56 comprehensive review
+
+#### Parallel Decryption with Rayon
+- **Location**: src/ops/ask.rs, src/ops/converse.rs, src/ops/search.rs
+- **Issue**: Entries decrypted serially (blocking)
+- **Fix**: Use Rayon for parallel decryption when 10+ entries
+- **Effort**: 4 hours
+- **Value**: 3-5x speedup on multi-core systems for large result sets
+- **Trigger**: Defer until journals have 100+ entries or users report slowness
+- **Source**: Already in BACKLOG, reinforced by PR #56 review
 
 ---
 

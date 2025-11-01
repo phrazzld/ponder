@@ -11,7 +11,9 @@ use tracing::{debug, info};
 /// Current schema version.
 ///
 /// Increment this whenever schema changes are made to support future migrations.
-pub const SCHEMA_VERSION: i32 = 1;
+/// Version 1: Initial schema with entries, embeddings, FTS
+/// Version 2: Added summaries and patterns tables
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Creates all database tables and indexes.
 ///
@@ -288,6 +290,77 @@ pub fn get_schema_version(conn: &Connection) -> AppResult<Option<i32>> {
         Err(e) if e.to_string().contains("no such table") => Ok(None),
         Err(e) => Err(DatabaseError::Sqlite(e).into()),
     }
+}
+
+/// Sets the schema version in the database.
+///
+/// Records the given version with the current timestamp.
+///
+/// # Errors
+///
+/// Returns an error if the insert fails.
+pub fn set_schema_version(conn: &Connection, version: i32) -> AppResult<()> {
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (?1)",
+        [version],
+    )
+    .map_err(DatabaseError::Sqlite)?;
+    debug!("Set schema version to {}", version);
+    Ok(())
+}
+
+/// Migrates the database schema from an older version to the current version.
+///
+/// Applies all necessary migrations incrementally.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+/// * `from_version` - Current schema version in the database
+///
+/// # Errors
+///
+/// Returns an error if any migration step fails.
+pub fn migrate_schema(conn: &Connection, from_version: i32) -> AppResult<()> {
+    info!("Starting schema migration from version {}", from_version);
+
+    // Apply migrations incrementally
+    let mut current_version = from_version;
+
+    // Migration from version 1 to version 2
+    if current_version == 1 {
+        info!("Applying migration: v1 -> v2 (add summaries and patterns tables)");
+
+        // These tables are created by create_tables() with CREATE TABLE IF NOT EXISTS,
+        // so they'll be added automatically. We just need to record the version bump.
+        // The summaries and patterns tables are already created by create_tables() above.
+
+        current_version = 2;
+        set_schema_version(conn, current_version)?;
+        info!("Migration to version 2 complete");
+    }
+
+    // Future migrations go here:
+    // if current_version == 2 {
+    //     info!("Applying migration: v2 -> v3");
+    //     // ... migration logic ...
+    //     current_version = 3;
+    //     set_schema_version(conn, current_version)?;
+    // }
+
+    if current_version != SCHEMA_VERSION {
+        return Err(DatabaseError::Custom(format!(
+            "Migration incomplete: expected version {}, got version {}",
+            SCHEMA_VERSION, current_version
+        ))
+        .into());
+    }
+
+    info!(
+        "Schema migration complete: now at version {}",
+        current_version
+    );
+    Ok(())
 }
 
 #[cfg(test)]
