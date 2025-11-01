@@ -20,6 +20,9 @@ pub const SCHEMA_VERSION: i32 = 2;
 /// This function is idempotent - it uses `CREATE TABLE IF NOT EXISTS`
 /// so it's safe to call multiple times.
 ///
+/// Note: This function only creates the schema structure (tables, indexes, constraints).
+/// Schema version tracking is managed separately by the caller (typically `Database::initialize_schema()`).
+///
 /// # Tables
 ///
 /// - `entries`: Journal entry metadata
@@ -33,6 +36,7 @@ pub const SCHEMA_VERSION: i32 = 2;
 /// - `migration_state`: Overall migration progress state
 /// - `summaries`: AI-generated summaries (daily, weekly, monthly)
 /// - `patterns`: AI-detected patterns (temporal, topic, sentiment, correlation)
+/// - `schema_version`: Schema version tracking table (structure only, version records managed by caller)
 ///
 /// # Errors
 ///
@@ -242,7 +246,7 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
     )
     .map_err(DatabaseError::Sqlite)?;
 
-    // Schema version tracking table
+    // Schema version tracking table (structure only, no version record inserted here)
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -252,19 +256,6 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
         "#,
     )
     .map_err(DatabaseError::Sqlite)?;
-
-    // Record schema version if not already recorded
-    let current_version = get_schema_version(conn)?;
-    if current_version.is_none() {
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (?)",
-            [SCHEMA_VERSION],
-        )
-        .map_err(DatabaseError::Sqlite)?;
-        info!("Initialized database schema version {}", SCHEMA_VERSION);
-    } else {
-        debug!("Schema version already recorded: {:?}", current_version);
-    }
 
     debug!("Database tables created successfully");
     Ok(())
