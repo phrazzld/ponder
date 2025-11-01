@@ -4,6 +4,7 @@
 //! journal entries with encryption, embeddings, and AI operations.
 
 use age::secrecy::SecretString;
+use ponder::ai::OllamaClient;
 use ponder::config::Config;
 use ponder::crypto::temp::read_encrypted_string;
 use ponder::crypto::SessionManager;
@@ -185,6 +186,7 @@ fn test_full_migration_workflow() {
         db_path: db_path.clone(),
         session_timeout_minutes: 60,
         ollama_url: "http://localhost:11434".to_string(),
+        ai_models: Default::default(),
     };
 
     // Create database
@@ -346,6 +348,195 @@ fn test_full_migration_workflow() {
     assert!(
         migration_state.completed_at.is_some(),
         "Migration should be marked complete"
+    );
+
+    // Cleanup
+    drop(session);
+    drop(db);
+    temp_dir.close().expect("cleanup temp dir");
+}
+
+/// Test conversational interface end-to-end pipeline.
+///
+/// This integration test verifies the complete conversational RAG workflow:
+/// 1. Create encrypted journal entries with real content
+/// 2. Generate embeddings via Ollama
+/// 3. Assemble conversation context from vector search
+/// 4. Verify semantic relevance across multiple queries
+/// 5. Test context assembly maintains quality across conversation turns
+///
+/// Note: This test focuses on the RAG pipeline integration rather than
+/// the interactive stdio loop, as the loop is straightforward I/O handling
+/// that's difficult to test without stdin mocking.
+#[test]
+#[ignore = "requires Ollama"]
+fn test_conversation_context_assembly_integration() {
+    use ponder::ai::chunking::chunk_text;
+    use ponder::constants::{DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE, DEFAULT_EMBED_MODEL};
+    use ponder::crypto::temp::encrypt_from_temp;
+    use ponder::db::embeddings::insert_embedding;
+    use ponder::db::entries::upsert_entry;
+    use ponder::ops::converse::assemble_conversation_context;
+
+    // Setup environment
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let journal_dir = temp_dir.path().join("journal");
+    fs::create_dir_all(&journal_dir).expect("create journal dir");
+
+    let db_path = temp_dir.path().join("test.db");
+    let passphrase = SecretString::new("conversation-test-passphrase".to_string());
+
+    // Create database and session
+    let db = Database::open(&db_path, &passphrase).expect("open database");
+    let mut session = SessionManager::new(60);
+    session.unlock(passphrase.clone());
+
+    // Create AI client
+    let ollama_url =
+        std::env::var("OLLAMA_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+    let ai_client = OllamaClient::new(&ollama_url);
+
+    // Create test journal entries with related content (simulating real journal)
+    let test_entries = vec![
+        (
+            "2024-01-15",
+            "# Morning Reflection\n\nI've been feeling anxious about the big presentation next week. \
+             Need to prepare my slides and practice my speaking points. The topic is technical but \
+             I want to make it accessible to everyone.",
+        ),
+        (
+            "2024-01-16",
+            "# After Work\n\nSpent the evening working on presentation slides. Making good progress. \
+             I'm starting to feel more confident about the content. Still nervous about public speaking though.",
+        ),
+        (
+            "2024-01-17",
+            "# Weekend Plans\n\nDecided to take a break from work prep. Going hiking tomorrow with friends. \
+             Need to disconnect and recharge. Weather forecast looks perfect - sunny and mild.",
+        ),
+        (
+            "2024-01-20",
+            "# Presentation Day\n\nThe presentation went incredibly well! I was nervous at first but once \
+             I got into the flow, it felt natural. Got great feedback from the team. Really proud of how \
+             it turned out.",
+        ),
+        (
+            "2024-01-21",
+            "# Reflecting on Success\n\nStill feeling good about yesterday's presentation. It's a reminder \
+             that preparation pays off, and that I'm more capable than I give myself credit for.",
+        ),
+    ];
+
+    let conn = db.get_conn().expect("get db connection");
+
+    // Create encrypted entries with embeddings
+    for (date_str, content) in test_entries {
+        let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d").expect("parse date");
+
+        // Create encrypted entry file
+        let year = date.format("%Y");
+        let month = date.format("%m");
+        let day = date.format("%d");
+        let entry_dir = journal_dir.join(format!("{}/{}", year, month));
+        fs::create_dir_all(&entry_dir).expect("create entry dir");
+        let entry_path = entry_dir.join(format!("{}.md.age", day));
+
+        // Write and encrypt
+        let temp_path = temp_dir
+            .path()
+            .join(format!("temp-{}.md", date_str.replace('-', "")));
+        fs::write(&temp_path, content).expect("write temp file");
+        encrypt_from_temp(&temp_path, &entry_path, &passphrase).expect("encrypt entry");
+
+        // Verify encryption
+        let encrypted_bytes = fs::read(&entry_path).expect("read encrypted file");
+        assert!(
+            std::str::from_utf8(&encrypted_bytes).is_err(),
+            "Entry should be encrypted (not valid UTF-8)"
+        );
+
+        // Add to database
+        let checksum = format!("checksum-{}", date_str);
+        let word_count = content.split_whitespace().count();
+        let entry_id =
+            upsert_entry(&conn, &entry_path, date, &checksum, word_count).expect("upsert entry");
+
+        // Generate and store embeddings
+        let chunks = chunk_text(content, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_OVERLAP);
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let embedding = ai_client
+                .embed_with_retry(DEFAULT_EMBED_MODEL, chunk, 3)
+                .expect("generate embedding");
+            insert_embedding(&conn, entry_id, chunk_idx, &embedding, &checksum)
+                .expect("insert embedding");
+        }
+    }
+
+    // Test 1: Query about presentation anxiety
+    let query1 = "How was I feeling about the presentation?";
+    let context1 = assemble_conversation_context(&db, &mut session, &ai_client, query1, None, 5)
+        .expect("get context");
+
+    assert!(!context1.is_empty(), "Should find relevant context");
+    assert!(
+        context1
+            .iter()
+            .any(|(_, excerpt)| excerpt.contains("anxious")
+                || excerpt.contains("nervous")
+                || excerpt.contains("presentation")),
+        "Context should include presentation-related emotional content"
+    );
+
+    // Test 2: Query about outcome
+    let query2 = "How did the presentation go?";
+    let context2 = assemble_conversation_context(&db, &mut session, &ai_client, query2, None, 5)
+        .expect("get context");
+
+    assert!(!context2.is_empty(), "Should find outcome context");
+    assert!(
+        context2
+            .iter()
+            .any(|(_, excerpt)| excerpt.contains("went well") || excerpt.contains("proud")),
+        "Context should include positive outcome information"
+    );
+
+    // Test 3: Query about unrelated topic (hiking)
+    let query3 = "Did I do any outdoor activities?";
+    let context3 = assemble_conversation_context(&db, &mut session, &ai_client, query3, None, 5)
+        .expect("get context");
+
+    assert!(!context3.is_empty(), "Should find hiking context");
+    assert!(
+        context3
+            .iter()
+            .any(|(_, excerpt)| excerpt.contains("hiking") || excerpt.contains("weather")),
+        "Context should include outdoor activity content"
+    );
+
+    // Test 4: Verify limit is respected
+    let query4 = "presentation";
+    let context4_limited =
+        assemble_conversation_context(&db, &mut session, &ai_client, query4, None, 3)
+            .expect("get context");
+    assert!(
+        context4_limited.len() <= 3,
+        "Should respect limit of 3 chunks"
+    );
+
+    // Test 5: Verify context quality - dates should be from relevant entries
+    let presentation_dates = [
+        chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+        chrono::NaiveDate::from_ymd_opt(2024, 1, 16).unwrap(),
+        chrono::NaiveDate::from_ymd_opt(2024, 1, 20).unwrap(),
+        chrono::NaiveDate::from_ymd_opt(2024, 1, 21).unwrap(),
+    ];
+
+    let has_relevant_dates = context1
+        .iter()
+        .any(|(date, _)| presentation_dates.contains(date));
+    assert!(
+        has_relevant_dates,
+        "Context should include dates from presentation-related entries"
     );
 
     // Cleanup

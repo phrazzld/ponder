@@ -66,8 +66,17 @@ pub enum PonderCommand {
     /// Generate AI reflection on a journal entry
     Reflect(ReflectArgs),
 
+    /// Generate AI summaries (daily, weekly, monthly)
+    Summarize(SummarizeArgs),
+
+    /// View past AI-generated summaries
+    Summaries(SummariesArgs),
+
     /// Semantic search over journal entries
     Search(SearchArgs),
+
+    /// Interactive conversational AI for journal exploration
+    Converse(ConverseArgs),
 
     /// Lock the encrypted session (clear passphrase from memory)
     Lock,
@@ -132,6 +141,68 @@ pub struct ReflectArgs {
     pub date: Option<String>,
 }
 
+/// Summary period granularity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummaryPeriod {
+    Daily,
+    Weekly,
+    Monthly,
+}
+
+impl std::str::FromStr for SummaryPeriod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "daily" | "day" => Ok(SummaryPeriod::Daily),
+            "weekly" | "week" => Ok(SummaryPeriod::Weekly),
+            "monthly" | "month" => Ok(SummaryPeriod::Monthly),
+            _ => Err(format!(
+                "Invalid summary period: '{}'. Valid options: daily, weekly, monthly",
+                s
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for SummaryPeriod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SummaryPeriod::Daily => write!(f, "daily"),
+            SummaryPeriod::Weekly => write!(f, "weekly"),
+            SummaryPeriod::Monthly => write!(f, "monthly"),
+        }
+    }
+}
+
+/// Arguments for the `summarize` subcommand.
+#[derive(Parser)]
+pub struct SummarizeArgs {
+    /// Summary period (daily, weekly, or monthly)
+    #[clap(value_parser = clap::value_parser!(SummaryPeriod))]
+    pub period: SummaryPeriod,
+
+    /// Date for the summary (YYYY-MM-DD or YYYYMMDD, defaults to today for daily, last Sunday for weekly, current month for monthly)
+    #[clap(short = 'd', long)]
+    pub date: Option<String>,
+}
+
+/// Arguments for the `summaries` subcommand.
+#[derive(Parser)]
+pub struct SummariesArgs {
+    /// Optional period filter (daily, weekly, or monthly)
+    #[clap(short = 'p', long, value_parser = clap::value_parser!(SummaryPeriod))]
+    pub period: Option<SummaryPeriod>,
+
+    /// Maximum number of summaries to display
+    #[clap(short = 'l', long, default_value = "10")]
+    pub limit: usize,
+
+    /// Show full summary content for a specific date (YYYY-MM-DD)
+    #[clap(short = 'd', long, conflicts_with_all = &["period", "limit"])]
+    pub date: Option<String>,
+}
+
 /// Arguments for the `search` subcommand.
 #[derive(Parser)]
 pub struct SearchArgs {
@@ -149,6 +220,14 @@ pub struct SearchArgs {
     /// Optional date range end (YYYY-MM-DD)
     #[clap(long)]
     pub to: Option<String>,
+}
+
+/// Arguments for the `converse` subcommand.
+#[derive(Parser)]
+pub struct ConverseArgs {
+    /// Hide context preview before AI responses
+    #[arg(long)]
+    pub no_context: bool,
 }
 
 /// Arguments for the `backup` subcommand.
@@ -542,6 +621,197 @@ mod tests {
                 assert!(restore_args.force);
             }
             _ => panic!("Expected Restore command"),
+        }
+    }
+
+    #[test]
+    fn test_summarize_daily() {
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "daily"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Daily);
+                assert!(summarize_args.date.is_none());
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test with date
+        let args =
+            CliArgs::parse_from(vec!["ponder", "summarize", "daily", "--date", "2024-01-15"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Daily);
+                assert_eq!(summarize_args.date, Some("2024-01-15".to_string()));
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test with short date flag
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "daily", "-d", "20240115"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Daily);
+                assert_eq!(summarize_args.date, Some("20240115".to_string()));
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+    }
+
+    #[test]
+    fn test_summarize_weekly() {
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "weekly"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Weekly);
+                assert!(summarize_args.date.is_none());
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test with date
+        let args = CliArgs::parse_from(vec![
+            "ponder",
+            "summarize",
+            "weekly",
+            "--date",
+            "2024-01-07",
+        ]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Weekly);
+                assert_eq!(summarize_args.date, Some("2024-01-07".to_string()));
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+    }
+
+    #[test]
+    fn test_summarize_monthly() {
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "monthly"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Monthly);
+                assert!(summarize_args.date.is_none());
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test with date
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "monthly", "--date", "2024-01"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Monthly);
+                assert_eq!(summarize_args.date, Some("2024-01".to_string()));
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+    }
+
+    #[test]
+    fn test_summary_period_aliases() {
+        // Test "day" alias
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "day"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Daily);
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test "week" alias
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "week"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Weekly);
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+
+        // Test "month" alias
+        let args = CliArgs::parse_from(vec!["ponder", "summarize", "month"]);
+        match args.command {
+            Some(PonderCommand::Summarize(summarize_args)) => {
+                assert_eq!(summarize_args.period, SummaryPeriod::Monthly);
+            }
+            _ => panic!("Expected Summarize command"),
+        }
+    }
+
+    #[test]
+    fn test_summaries_list_all() {
+        let args = CliArgs::parse_from(vec!["ponder", "summaries"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert!(summaries_args.period.is_none());
+                assert_eq!(summaries_args.limit, 10); // Default
+                assert!(summaries_args.date.is_none());
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+    }
+
+    #[test]
+    fn test_summaries_filter_by_period() {
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "--period", "daily"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert_eq!(summaries_args.period, Some(SummaryPeriod::Daily));
+                assert_eq!(summaries_args.limit, 10);
+                assert!(summaries_args.date.is_none());
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+
+        // Test short form
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "-p", "weekly"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert_eq!(summaries_args.period, Some(SummaryPeriod::Weekly));
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+    }
+
+    #[test]
+    fn test_summaries_with_limit() {
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "--limit", "5"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert!(summaries_args.period.is_none());
+                assert_eq!(summaries_args.limit, 5);
+                assert!(summaries_args.date.is_none());
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+
+        // Test short form
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "-l", "20"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert_eq!(summaries_args.limit, 20);
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+    }
+
+    #[test]
+    fn test_summaries_show_specific_date() {
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "--date", "2024-01-15"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert!(summaries_args.period.is_none());
+                assert_eq!(summaries_args.date, Some("2024-01-15".to_string()));
+            }
+            _ => panic!("Expected Summaries command"),
+        }
+
+        // Test short form
+        let args = CliArgs::parse_from(vec!["ponder", "summaries", "-d", "20240115"]);
+        match args.command {
+            Some(PonderCommand::Summaries(summaries_args)) => {
+                assert_eq!(summaries_args.date, Some("20240115".to_string()));
+            }
+            _ => panic!("Expected Summaries command"),
         }
     }
 }

@@ -11,12 +11,17 @@ use tracing::{debug, info};
 /// Current schema version.
 ///
 /// Increment this whenever schema changes are made to support future migrations.
-pub const SCHEMA_VERSION: i32 = 1;
+/// Version 1: Initial schema with entries, embeddings, FTS
+/// Version 2: Added summaries and patterns tables
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Creates all database tables and indexes.
 ///
 /// This function is idempotent - it uses `CREATE TABLE IF NOT EXISTS`
 /// so it's safe to call multiple times.
+///
+/// Note: This function only creates the schema structure (tables, indexes, constraints).
+/// Schema version tracking is managed separately by the caller (typically `Database::initialize_schema()`).
 ///
 /// # Tables
 ///
@@ -29,6 +34,9 @@ pub const SCHEMA_VERSION: i32 = 1;
 /// - `backup_state`: Singleton tracking latest backup state
 /// - `migration_log`: v1.0 to v2.0 migration tracking per entry
 /// - `migration_state`: Overall migration progress state
+/// - `summaries`: AI-generated summaries (daily, weekly, monthly)
+/// - `patterns`: AI-detected patterns (temporal, topic, sentiment, correlation)
+/// - `schema_version`: Schema version tracking table (structure only, version records managed by caller)
 ///
 /// # Errors
 ///
@@ -195,7 +203,50 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
     )
     .map_err(DatabaseError::Sqlite)?;
 
-    // Schema version tracking table
+    // Summaries table: AI-generated summaries at different granularities
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS summaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            level TEXT NOT NULL CHECK(level IN ('daily', 'weekly', 'monthly')),
+            summary_encrypted BLOB NOT NULL,
+            topics TEXT,
+            sentiment REAL CHECK(sentiment >= -1.0 AND sentiment <= 1.0),
+            word_count INTEGER,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(date, level)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_summaries_date ON summaries(date DESC);
+        CREATE INDEX IF NOT EXISTS idx_summaries_level ON summaries(level);
+        CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at DESC);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Patterns table: AI-detected patterns in journal entries
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS patterns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pattern_type TEXT NOT NULL CHECK(pattern_type IN ('temporal', 'topic', 'sentiment', 'correlation')),
+            description TEXT NOT NULL,
+            metadata TEXT,
+            confidence REAL CHECK(confidence >= 0.0 AND confidence <= 1.0),
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_patterns_type ON patterns(pattern_type);
+        CREATE INDEX IF NOT EXISTS idx_patterns_last_seen ON patterns(last_seen DESC);
+        CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON patterns(confidence DESC);
+        "#,
+    )
+    .map_err(DatabaseError::Sqlite)?;
+
+    // Schema version tracking table (structure only, no version record inserted here)
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS schema_version (
@@ -205,19 +256,6 @@ pub fn create_tables(conn: &Connection) -> AppResult<()> {
         "#,
     )
     .map_err(DatabaseError::Sqlite)?;
-
-    // Record schema version if not already recorded
-    let current_version = get_schema_version(conn)?;
-    if current_version.is_none() {
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (?)",
-            [SCHEMA_VERSION],
-        )
-        .map_err(DatabaseError::Sqlite)?;
-        info!("Initialized database schema version {}", SCHEMA_VERSION);
-    } else {
-        debug!("Schema version already recorded: {:?}", current_version);
-    }
 
     debug!("Database tables created successfully");
     Ok(())
@@ -243,6 +281,77 @@ pub fn get_schema_version(conn: &Connection) -> AppResult<Option<i32>> {
         Err(e) if e.to_string().contains("no such table") => Ok(None),
         Err(e) => Err(DatabaseError::Sqlite(e).into()),
     }
+}
+
+/// Sets the schema version in the database.
+///
+/// Records the given version with the current timestamp.
+///
+/// # Errors
+///
+/// Returns an error if the insert fails.
+pub fn set_schema_version(conn: &Connection, version: i32) -> AppResult<()> {
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (?1)",
+        [version],
+    )
+    .map_err(DatabaseError::Sqlite)?;
+    debug!("Set schema version to {}", version);
+    Ok(())
+}
+
+/// Migrates the database schema from an older version to the current version.
+///
+/// Applies all necessary migrations incrementally.
+///
+/// # Arguments
+///
+/// * `conn` - Database connection
+/// * `from_version` - Current schema version in the database
+///
+/// # Errors
+///
+/// Returns an error if any migration step fails.
+pub fn migrate_schema(conn: &Connection, from_version: i32) -> AppResult<()> {
+    info!("Starting schema migration from version {}", from_version);
+
+    // Apply migrations incrementally
+    let mut current_version = from_version;
+
+    // Migration from version 1 to version 2
+    if current_version == 1 {
+        info!("Applying migration: v1 -> v2 (add summaries and patterns tables)");
+
+        // These tables are created by create_tables() with CREATE TABLE IF NOT EXISTS,
+        // so they'll be added automatically. We just need to record the version bump.
+        // The summaries and patterns tables are already created by create_tables() above.
+
+        current_version = 2;
+        set_schema_version(conn, current_version)?;
+        info!("Migration to version 2 complete");
+    }
+
+    // Future migrations go here:
+    // if current_version == 2 {
+    //     info!("Applying migration: v2 -> v3");
+    //     // ... migration logic ...
+    //     current_version = 3;
+    //     set_schema_version(conn, current_version)?;
+    // }
+
+    if current_version != SCHEMA_VERSION {
+        return Err(DatabaseError::Custom(format!(
+            "Migration incomplete: expected version {}, got version {}",
+            SCHEMA_VERSION, current_version
+        ))
+        .into());
+    }
+
+    info!(
+        "Schema migration complete: now at version {}",
+        current_version
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -548,5 +657,281 @@ mod tests {
             ["20240102.md", "2024/01/01.md.age", "2024-01-02", "pending"],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_table_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify summaries table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='summaries'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_summaries_level_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid levels should succeed
+        let blob = vec![0u8; 100];
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "weekly", &blob],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "monthly", &blob],
+        )
+        .unwrap();
+
+        // Invalid level should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-02", "invalid", &blob],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_sentiment_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        let blob = vec![0u8; 100];
+
+        // Valid sentiments should succeed (-1.0 to 1.0)
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob, -1.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-02", "daily", &blob, 0.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-03", "daily", &blob, 1.0],
+        )
+        .unwrap();
+
+        // Invalid sentiment (> 1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-04", "daily", &blob, 1.5],
+        );
+        assert!(result.is_err());
+
+        // Invalid sentiment (< -1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted, sentiment) VALUES (?, ?, ?, ?)",
+            rusqlite::params!["2024-01-05", "daily", &blob, -1.5],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_summaries_unique_date_level() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        let blob = vec![0u8; 100];
+
+        // First insert should succeed
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        )
+        .unwrap();
+
+        // Duplicate date+level should fail
+        let result = conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "daily", &blob],
+        );
+        assert!(result.is_err());
+
+        // Same date but different level should succeed
+        conn.execute(
+            "INSERT INTO summaries (date, level, summary_encrypted) VALUES (?, ?, ?)",
+            rusqlite::params!["2024-01-01", "weekly", &blob],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_summaries_indexes_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify indexes exist
+        let index_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_summaries_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 3); // date, level, created_at
+    }
+
+    #[test]
+    fn test_patterns_table_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify patterns table exists
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='patterns'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_patterns_type_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid pattern types should succeed
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["temporal", "You write most on Sunday evenings", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["topic", "Top topic: work (12 entries)", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["sentiment", "Mood improved 15% this month", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["correlation", "Exercise correlates with positive mood", "2024-01-01", "2024-01-31"],
+        )
+        .unwrap();
+
+        // Invalid pattern type should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen) VALUES (?, ?, ?, ?)",
+            ["invalid", "Invalid pattern", "2024-01-01", "2024-01-31"],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_patterns_confidence_constraint() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Valid confidence values (0.0 to 1.0) should succeed
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 1", "2024-01-01", "2024-01-31", 0.0],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 2", "2024-01-01", "2024-01-31", 0.5],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 3", "2024-01-01", "2024-01-31", 1.0],
+        )
+        .unwrap();
+
+        // Invalid confidence (> 1.0) should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 4", "2024-01-01", "2024-01-31", 1.5],
+        );
+        assert!(result.is_err());
+
+        // Invalid confidence (< 0.0) should fail
+        let result = conn.execute(
+            "INSERT INTO patterns (pattern_type, description, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?)",
+            rusqlite::params!["temporal", "Pattern 5", "2024-01-01", "2024-01-31", -0.1],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_patterns_with_metadata() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Insert pattern with JSON metadata
+        conn.execute(
+            "INSERT INTO patterns (pattern_type, description, metadata, first_seen, last_seen, confidence) VALUES (?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                "temporal",
+                "Peak writing time: 9-11pm",
+                r#"{"hour_range": [21, 23], "day_of_week": "Sunday", "count": 15}"#,
+                "2024-01-01",
+                "2024-01-31",
+                0.85
+            ],
+        )
+        .unwrap();
+
+        // Retrieve and verify metadata
+        let metadata: String = conn
+            .query_row(
+                "SELECT metadata FROM patterns WHERE pattern_type = 'temporal'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        assert!(metadata.contains("hour_range"));
+        assert!(metadata.contains("day_of_week"));
+    }
+
+    #[test]
+    fn test_patterns_indexes_created() {
+        let conn = Connection::open_in_memory().unwrap();
+        create_tables(&conn).unwrap();
+
+        // Verify indexes exist
+        let index_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_patterns_%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index_count, 3); // type, last_seen, confidence
     }
 }

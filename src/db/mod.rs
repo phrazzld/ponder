@@ -9,6 +9,8 @@
 //! - `schema`: Table definitions and schema initialization
 //! - `entries`: Entry CRUD operations
 //! - `embeddings`: Vector storage and similarity search
+//! - `summaries`: Summary CRUD operations (daily, weekly, monthly)
+//! - `patterns`: Pattern CRUD operations (temporal, topic, sentiment, correlation)
 //!
 //! # Example
 //!
@@ -26,7 +28,9 @@
 
 pub mod embeddings;
 pub mod entries;
+pub mod patterns;
 pub mod schema;
+pub mod summaries;
 
 use crate::errors::AppResult;
 use age::secrecy::{ExposeSecret, SecretString};
@@ -125,14 +129,53 @@ impl Database {
     /// Initializes the database schema.
     ///
     /// Creates all necessary tables and indexes if they don't exist.
+    /// Automatically migrates older schema versions to the current version.
     /// This is idempotent and safe to call multiple times.
     ///
     /// # Errors
     ///
-    /// Returns an error if schema creation fails.
+    /// Returns an error if schema creation or migration fails.
     pub fn initialize_schema(&self) -> AppResult<()> {
         let conn = self.get_conn()?;
+
+        // Get current schema version before creating tables
+        let current_version = schema::get_schema_version(&conn)?;
+
+        // Create/ensure all tables exist (idempotent)
         schema::create_tables(&conn)?;
+
+        // Run migrations if needed
+        match current_version {
+            None => {
+                // New database, record current schema version
+                info!(
+                    "Initializing new database at schema version {}",
+                    schema::SCHEMA_VERSION
+                );
+                schema::set_schema_version(&conn, schema::SCHEMA_VERSION)?;
+            }
+            Some(version) if version < schema::SCHEMA_VERSION => {
+                // Existing database needs migration
+                info!(
+                    "Migrating database from schema version {} to {}",
+                    version,
+                    schema::SCHEMA_VERSION
+                );
+                schema::migrate_schema(&conn, version)?;
+            }
+            Some(version) if version == schema::SCHEMA_VERSION => {
+                // Already at current version
+                debug!("Schema version {} is current", version);
+            }
+            Some(version) => {
+                // Database is newer than app expects (shouldn't happen in normal usage)
+                warn!(
+                    "Database schema version {} is newer than expected {}. Proceeding with caution.",
+                    version, schema::SCHEMA_VERSION
+                );
+            }
+        }
+
         info!("Database schema initialized");
         Ok(())
     }

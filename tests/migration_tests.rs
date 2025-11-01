@@ -25,6 +25,7 @@ fn create_test_config(journal_dir: PathBuf, db_path: PathBuf) -> Config {
         db_path,
         session_timeout_minutes: 60,
         ollama_url: "http://localhost:11434".to_string(),
+        ai_models: Default::default(),
     }
 }
 

@@ -31,6 +31,14 @@ pub const ENV_VAR_PONDER_DB: &str = "PONDER_DB";
 pub const ENV_VAR_PONDER_SESSION_TIMEOUT: &str = "PONDER_SESSION_TIMEOUT";
 /// Environment variable for specifying Ollama API URL.
 pub const ENV_VAR_OLLAMA_URL: &str = "OLLAMA_URL";
+/// Environment variable for specifying the embedding model.
+pub const ENV_VAR_PONDER_EMBED_MODEL: &str = "PONDER_EMBED_MODEL";
+/// Environment variable for specifying the chat model.
+pub const ENV_VAR_PONDER_CHAT_MODEL: &str = "PONDER_CHAT_MODEL";
+/// Environment variable for specifying the reasoning model.
+pub const ENV_VAR_PONDER_REASONING_MODEL: &str = "PONDER_REASONING_MODEL";
+/// Environment variable for specifying the summary model.
+pub const ENV_VAR_PONDER_SUMMARY_MODEL: &str = "PONDER_SUMMARY_MODEL";
 /// Standard environment variable for specifying the default editor.
 pub const ENV_VAR_EDITOR: &str = "EDITOR";
 /// Standard environment variable for the user's home directory.
@@ -144,6 +152,18 @@ pub const DEFAULT_EMBED_MODEL: &str = "nomic-embed-text";
 /// gemma3:4b is a high-quality model from Google suitable for local inference.
 /// It provides excellent performance for chat and reflection tasks.
 pub const DEFAULT_CHAT_MODEL: &str = "gemma3:4b";
+
+/// Default reasoning model for deep analysis and pattern detection.
+///
+/// deepseek-r1:8b is optimized for complex reasoning tasks and analytical thinking.
+/// It excels at finding patterns and generating insights from structured data.
+pub const DEFAULT_REASONING_MODEL: &str = "deepseek-r1:8b";
+
+/// Default summary model for progressive summarization.
+///
+/// phi4:3.8b from Microsoft is optimized for summarization with a large context window (128K).
+/// It provides excellent quality-to-speed ratio for generating hierarchical summaries.
+pub const DEFAULT_SUMMARY_MODEL: &str = "phi4:3.8b";
 
 /// Default chunk size in words for text chunking.
 ///

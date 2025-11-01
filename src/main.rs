@@ -41,9 +41,9 @@ Environment variables:
 - `OLLAMA_URL`: Ollama API URL (default: http://127.0.0.1:11434)
 */
 
-use chrono::Local;
+use chrono::{Datelike, Local};
 use clap::Parser;
-use ponder::cli::{CliArgs, EditArgs, PonderCommand};
+use ponder::cli::{CliArgs, ConverseArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
 use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
 use ponder::crypto::SessionManager;
@@ -52,7 +52,7 @@ use ponder::errors::{AppError, AppResult, DatabaseError};
 use ponder::journal_core::DateSpecifier;
 use ponder::journal_io;
 use ponder::ops;
-use ponder::setup::ensure_model_available;
+use ponder::setup::{ensure_model_available, ModelType};
 use ponder::OllamaClient;
 use tracing::{debug, info, info_span, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -114,7 +114,12 @@ fn run_application(
         Some(PonderCommand::Reflect(reflect_args)) => {
             cmd_reflect(&config, reflect_args, current_date)
         }
+        Some(PonderCommand::Summarize(summarize_args)) => {
+            cmd_summarize(&config, summarize_args, current_date)
+        }
+        Some(PonderCommand::Summaries(summaries_args)) => cmd_summaries(&config, summaries_args),
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
+        Some(PonderCommand::Converse(converse_args)) => cmd_converse(&config, &converse_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
@@ -195,20 +200,98 @@ fn open_database_with_retry(config: &Config, session: &mut SessionManager) -> Ap
     unreachable!("Loop should always return or error before reaching here")
 }
 
-/// Ensures the embedding model is available, offering to install if missing.
+/// Truncates text to max length with ellipsis if needed.
+fn truncate_with_ellipsis(text: &str, max_len: usize) -> String {
+    if text.len() <= max_len {
+        text.to_string()
+    } else {
+        // Find a good break point (space) before max_len
+        let truncated = &text[..max_len];
+        let last_space = truncated.rfind(' ').unwrap_or(max_len);
+        format!("{}...", truncated[..last_space].trim())
+    }
+}
+
+/// Parses flexible date formats for summary viewing.
 ///
-/// This checks if the embedding model is installed and prompts the user
-/// to install it if not found.
-///
-/// # Arguments
-///
-/// * `client` - Ollama client instance
-///
-/// # Returns
-///
-/// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
+/// Supports:
+/// - YYYY-MM-DD (full date)
+/// - YYYY-MM (monthly, converts to YYYY-MM-01)
+fn parse_flexible_date(date_str: &str) -> AppResult<String> {
+    use chrono::NaiveDate;
+
+    // Try full date format first
+    if NaiveDate::parse_from_str(date_str, "%Y-%m-%d").is_ok() {
+        return Ok(date_str.to_string());
+    }
+
+    // Try monthly format (YYYY-MM) - convert to YYYY-MM-01
+    if date_str.len() == 7 && date_str.chars().nth(4) == Some('-') {
+        let full_date = format!("{}-01", date_str);
+        if NaiveDate::parse_from_str(&full_date, "%Y-%m-%d").is_ok() {
+            return Ok(full_date);
+        }
+    }
+
+    Err(AppError::Journal(format!(
+        "Invalid date format: '{}'. Use YYYY-MM-DD or YYYY-MM",
+        date_str
+    )))
+}
+
+/// Displays a full summary with formatted output.
+fn display_summary(
+    db: &Database,
+    session: &mut SessionManager,
+    date_str: &str,
+    level: ponder::db::summaries::SummaryLevel,
+) -> AppResult<()> {
+    use ponder::crypto::age::decrypt_with_passphrase;
+    use ponder::db::summaries::{format_summary_date, get_summary};
+
+    let conn = db.get_conn()?;
+    let summary = get_summary(&conn, date_str, level)?
+        .ok_or_else(|| AppError::Journal("Failed to fetch generated summary".to_string()))?;
+
+    let passphrase = session.get_passphrase()?;
+    let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+    let content = String::from_utf8(decrypted)
+        .map_err(|e| AppError::Journal(format!("Invalid UTF-8 in summary: {}", e)))?;
+
+    // Display with nice formatting
+    println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    println!(
+        "{} {} Summary: {}",
+        level.icon(),
+        level.as_str().to_uppercase(),
+        format_summary_date(date_str, level)
+    );
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    println!("{}\n", content);
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    // Metadata
+    if let Some(sentiment) = summary.sentiment {
+        print!("Sentiment: {:.2}", sentiment);
+    }
+    if let Some(word_count) = summary.word_count {
+        print!("  |  {} words", word_count);
+    }
+    println!();
+    if let Some(topics) = &summary.topics {
+        if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+            if !topics_vec.is_empty() {
+                println!("Topics: {}", topics_vec.join(", "));
+            }
+        }
+    }
+    println!("Saved with ID: {}\n", summary.id);
+
+    Ok(())
+}
+
 fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
-    ensure_model_available(client, DEFAULT_EMBED_MODEL, "Embedding")
+    ensure_model_available(client, DEFAULT_EMBED_MODEL, ModelType::Embed, "Embedding")
 }
 
 /// Ensures the chat model is available, offering to install if missing.
@@ -224,7 +307,7 @@ fn ensure_embedding_available(client: &OllamaClient) -> AppResult<()> {
 ///
 /// Returns `Ok(())` if model is available, `Err` if unavailable and declined.
 fn ensure_chat_available(client: &OllamaClient) -> AppResult<()> {
-    ensure_model_available(client, DEFAULT_CHAT_MODEL, "Chat")
+    ensure_model_available(client, DEFAULT_CHAT_MODEL, ModelType::Chat, "Chat")
 }
 
 /// Edit command: Edit journal entries with encryption and embedding.
@@ -358,6 +441,309 @@ fn cmd_reflect(
     Ok(())
 }
 
+/// Summarize command: Generate AI-powered summaries (daily, weekly, monthly).
+fn cmd_summarize(
+    config: &Config,
+    summarize_args: ponder::cli::SummarizeArgs,
+    current_date: chrono::NaiveDate,
+) -> AppResult<()> {
+    use ponder::cli::SummaryPeriod;
+    use ponder::db::summaries::SummaryLevel;
+
+    info!("Command: summarize");
+
+    // Parse date based on period
+    let (date, year, month) = match summarize_args.period {
+        SummaryPeriod::Daily => {
+            let date = if let Some(date_str) = summarize_args.date {
+                DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?
+            } else {
+                current_date
+            };
+            (Some(date), None, None)
+        }
+        SummaryPeriod::Weekly => {
+            let end_date = if let Some(date_str) = summarize_args.date {
+                DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?
+            } else {
+                // Default to last Sunday
+                let days_since_sunday = current_date.weekday().num_days_from_sunday();
+                current_date - chrono::Duration::days(days_since_sunday as i64)
+            };
+            (Some(end_date), None, None)
+        }
+        SummaryPeriod::Monthly => {
+            let (year, month) = if let Some(date_str) = summarize_args.date {
+                let date = DateSpecifier::from_cli_args(false, false, Some(&date_str))
+                    .map_err(|e| AppError::Journal(format!("Invalid date format: {}", e)))?
+                    .resolve_dates(current_date)
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AppError::Journal("Failed to resolve date".to_string()))?;
+                (date.year(), date.month())
+            } else {
+                (current_date.year(), current_date.month())
+            };
+            (None, Some(year), Some(month))
+        }
+    };
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure chat model is available
+    ensure_chat_available(&ai_client)?;
+
+    // Generate summary based on period
+    let _summary_id = match summarize_args.period {
+        SummaryPeriod::Daily => {
+            let date = date.unwrap();
+            println!("Generating daily summary for {}...", date);
+            let id = ops::generate_daily_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                date,
+            )?;
+            println!(
+                "✓ Daily summary for {} generated successfully (ID: {})",
+                date, id
+            );
+
+            // Display the full summary immediately
+            display_summary(&db, &mut session, &date.to_string(), SummaryLevel::Daily)?;
+            id
+        }
+        SummaryPeriod::Weekly => {
+            let end_date = date.unwrap();
+            let start_date = end_date - chrono::Duration::days(6);
+            println!(
+                "Generating weekly summary for {} to {}...",
+                start_date, end_date
+            );
+            let id = ops::generate_weekly_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                end_date,
+            )?;
+            println!(
+                "✓ Weekly summary for week ending {} generated successfully (ID: {})",
+                end_date, id
+            );
+
+            // Display the full summary immediately
+            display_summary(
+                &db,
+                &mut session,
+                &end_date.to_string(),
+                SummaryLevel::Weekly,
+            )?;
+            id
+        }
+        SummaryPeriod::Monthly => {
+            let year = year.unwrap();
+            let month = month.unwrap();
+            println!("Generating monthly summary for {}-{:02}...", year, month);
+            let id = ops::generate_monthly_summary(
+                &db,
+                &mut session,
+                &ai_client,
+                &config.ai_models.summary_model,
+                year,
+                month,
+            )?;
+            println!(
+                "✓ Monthly summary for {}-{:02} generated successfully (ID: {})",
+                year, month, id
+            );
+
+            // Display the full summary immediately
+            let date_str = format!("{}-{:02}-01", year, month);
+            display_summary(&db, &mut session, &date_str, SummaryLevel::Monthly)?;
+            id
+        }
+    };
+
+    Ok(())
+}
+
+/// Summaries command: Browse and view past AI-generated summaries.
+fn cmd_summaries(config: &Config, summaries_args: ponder::cli::SummariesArgs) -> AppResult<()> {
+    use ponder::cli::SummaryPeriod;
+    use ponder::crypto::age::decrypt_with_passphrase;
+    use ponder::db::summaries::{get_summary, list_summaries, SummaryLevel};
+
+    info!("Command: summaries");
+
+    // Initialize session and database
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+
+    // Check if showing a specific summary or listing summaries
+    if let Some(date_str) = summaries_args.date {
+        // Parse flexible date format (YYYY-MM-DD or YYYY-MM)
+        let parsed_date = parse_flexible_date(&date_str)?;
+
+        // Show specific summary - need to determine level
+        // Try each level until we find a match
+        let conn = db.get_conn()?;
+        let passphrase = session.get_passphrase()?;
+
+        let mut found = false;
+        for level in [
+            SummaryLevel::Daily,
+            SummaryLevel::Weekly,
+            SummaryLevel::Monthly,
+        ] {
+            if let Some(summary) = get_summary(&conn, &parsed_date, level)? {
+                // Decrypt summary content
+                let decrypted = decrypt_with_passphrase(&summary.summary_encrypted, passphrase)?;
+                let content = String::from_utf8(decrypted).map_err(|e| {
+                    AppError::Journal(format!("Invalid UTF-8 in summary content: {}", e))
+                })?;
+
+                // Display summary
+                println!(
+                    "\n{} Summary for {}",
+                    level.as_str().to_uppercase(),
+                    summary.date
+                );
+                println!("Created: {}", summary.created_at);
+                if let Some(word_count) = summary.word_count {
+                    println!("Word count: {}", word_count);
+                }
+                if let Some(sentiment) = summary.sentiment {
+                    println!("Sentiment: {:.2}", sentiment);
+                }
+                if let Some(topics) = &summary.topics {
+                    if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+                        if !topics_vec.is_empty() {
+                            println!("Topics: {}", topics_vec.join(", "));
+                        }
+                    }
+                }
+                println!("\n{}\n", content);
+
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            println!("No summary found for date: {}", date_str);
+        }
+    } else {
+        // List summaries
+        let conn = db.get_conn()?;
+        let summaries = if let Some(period) = summaries_args.period {
+            let level = match period {
+                SummaryPeriod::Daily => SummaryLevel::Daily,
+                SummaryPeriod::Weekly => SummaryLevel::Weekly,
+                SummaryPeriod::Monthly => SummaryLevel::Monthly,
+            };
+            list_summaries(&conn, level, summaries_args.limit)?
+        } else {
+            // Use smart hierarchical query by default
+            use ponder::db::summaries::get_recent_summaries_hierarchical;
+            get_recent_summaries_hierarchical(&conn, 1, 3, 10)?
+        };
+
+        if summaries.is_empty() {
+            println!("No summaries found.");
+        } else {
+            // Group summaries by level for hierarchical display
+            use std::collections::HashMap;
+            let mut grouped: HashMap<SummaryLevel, Vec<_>> = HashMap::new();
+            for summary in summaries {
+                grouped
+                    .entry(summary.level)
+                    .or_insert_with(Vec::new)
+                    .push(summary);
+            }
+
+            println!(
+                "\nFound {} summaries:\n",
+                grouped.values().map(|v| v.len()).sum::<usize>()
+            );
+
+            // Get passphrase for decrypting previews
+            let passphrase = session.get_passphrase()?;
+
+            // Display in hierarchical order: Monthly → Weekly → Daily
+            for level in [
+                SummaryLevel::Monthly,
+                SummaryLevel::Weekly,
+                SummaryLevel::Daily,
+            ] {
+                if let Some(summaries) = grouped.get(&level) {
+                    println!(
+                        "{} {} ({})",
+                        level.icon(),
+                        level.label_plural(),
+                        summaries.len()
+                    );
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    for summary in summaries {
+                        println!(
+                            "{}",
+                            ponder::db::summaries::format_summary_date(&summary.date, level)
+                        );
+                        if let Some(word_count) = summary.word_count {
+                            print!("  Word count: {}", word_count);
+                        }
+                        if let Some(sentiment) = summary.sentiment {
+                            print!("  Sentiment: {:.2}", sentiment);
+                        }
+                        println!();
+                        if let Some(topics) = &summary.topics {
+                            if let Ok(topics_vec) = serde_json::from_str::<Vec<String>>(topics) {
+                                if !topics_vec.is_empty() {
+                                    println!("  Topics: {}", topics_vec.join(", "));
+                                }
+                            }
+                        }
+
+                        // Decrypt and show content preview
+                        if let Ok(decrypted) =
+                            decrypt_with_passphrase(&summary.summary_encrypted, passphrase)
+                        {
+                            if let Ok(content) = String::from_utf8(decrypted) {
+                                let preview = truncate_with_ellipsis(&content, 150);
+                                println!("  Preview: {}", preview);
+                            }
+                        }
+
+                        println!("  Created: {}", summary.created_at);
+                        println!();
+                    }
+                }
+            }
+
+            // Footer with helpful hints
+            println!("Filter by level: --period {{monthly|weekly|daily}}");
+            println!("Show full summary: --date YYYY-MM-DD");
+        }
+    }
+
+    Ok(())
+}
+
 /// Search command: Semantic search over journal entries.
 fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResult<()> {
     info!("Command: search");
@@ -395,6 +781,26 @@ fn cmd_search(config: &Config, search_args: ponder::cli::SearchArgs) -> AppResul
             println!("---\n");
         }
     }
+
+    Ok(())
+}
+
+/// Converse command: Interactive conversational AI for journal exploration.
+fn cmd_converse(config: &Config, converse_args: &ConverseArgs) -> AppResult<()> {
+    info!("Command: converse");
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure models are available (embedding for context search, chat for conversation)
+    ensure_embedding_available(&ai_client)?;
+    ensure_chat_available(&ai_client)?;
+
+    // Start conversation with context visibility (inverted from --no-context flag)
+    let show_context = !converse_args.no_context;
+    ops::start_conversation(&db, &mut session, &ai_client, config, show_context)?;
 
     Ok(())
 }

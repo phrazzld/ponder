@@ -134,7 +134,88 @@ main.rs
 
       cmd_lock:
         └─> SessionManager::lock() (clear passphrase)
+
+      cmd_converse (conversational interface - v2.1):
+        ├─> SessionManager + Database + OllamaClient
+        └─> ops::start_conversation()
+              ├─> Interactive loop: read user input from stdin
+              ├─> For each question:
+              │   ├─> assemble_conversation_context() (RAG pipeline)
+              │   │   ├─> ai_client.embed(question)
+              │   │   ├─> db::embeddings::search_similar_chunks()
+              │   │   ├─> decrypt matching entries
+              │   │   └─> return (date, excerpt) pairs
+              │   ├─> Build prompt with CoT system message + history + context
+              │   ├─> ai_client.chat() (non-streaming for MVP)
+              │   └─> Add question + response to in-memory history
+              └─> Exit on "quit", "exit", or empty input
 ```
+
+### Conversational Operations (v2.1)
+
+**Philosophy**: Modern LLMs (2025) excel at natural language reasoning with rich context.
+Instead of building 2016-style sentiment classifiers and statistical pattern detectors,
+Ponder v2.1 provides a conversational interface where users explore their journal through
+natural dialogue.
+
+**High-Level Flow**:
+1. User runs `ponder converse` to start interactive chat
+2. Each question triggers RAG context assembly from encrypted journal
+3. AI responds using Chain-of-Thought reasoning with specific entry citations
+4. Conversation history maintained in-memory for multi-turn continuity
+5. User can quit anytime with "quit", "exit", or empty input
+
+**Example Interaction**:
+```
+$ ponder converse
+
+🤖 Ponder Conversational Assistant
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ask me anything about your journal entries!
+I'll think through your questions step-by-step and cite specific entries.
+
+You: Do you notice any emotional patterns in my recent entries?
+
+🤖 Assistant: Let me think through this step-by-step...
+
+First, I'm noticing a recurring theme of presentation anxiety in your entries
+from January 15-16. You mentioned feeling "anxious" and "nervous" about an
+upcoming technical presentation.
+
+Second, I see a clear emotional arc: the anxiety transformed into confidence
+after the presentation on January 20. You wrote "it felt natural" and noted
+feeling "really proud."
+
+Third, this suggests a pattern of anticipatory anxiety that resolves positively
+through preparation and action. The January 21 entry shows you recognizing this
+pattern yourself.
+
+However, I should note this is based on a limited window. A longer timeframe
+would show whether this is a consistent pattern.
+
+Would you like to explore how you typically handle anxiety-inducing situations?
+```
+
+**Extends Existing RAG**:
+- Reuses `db::embeddings::search_similar_chunks()` for vector search
+- Reuses `crypto::age::decrypt_with_passphrase()` for entry decryption
+- Reuses `ai::chunking::chunk_text()` for chunk extraction
+- New: `assemble_conversation_context()` orchestrates these into (date, excerpt) pairs
+- New: Chain-of-Thought system prompt encourages reasoning visibility
+
+**Implementation Details**:
+- **No new tables**: Uses existing `embeddings` table for vector search
+- **No wrapper modules**: Direct calls to Ollama API via existing `ai::OllamaClient`
+- **Streaming**: Non-streaming for MVP (can add later via Ollama native `stream=true`)
+- **Context window**: Maintains last 20 messages + system prompt (auto-pruned)
+- **Security**: Session timeout still applies (default 30min)
+
+**Design Rationale** (per ultrathink analysis):
+- Avoids shallow wrapper modules (streaming.rs, context.rs, memory.rs)
+- Avoids redundant storage (conversation_memory table duplicates embeddings)
+- Single deep module (ops/converse.rs) with simple public interface
+- Information hiding: All RAG complexity hidden behind `start_conversation()`
+- Extends 80% of existing infrastructure vs rebuilding from scratch
 
 ### Key Design Decisions (v2.0)
 
