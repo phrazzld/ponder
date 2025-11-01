@@ -546,7 +546,7 @@ mod tests {
     /// not a bug in our code. The test still runs in the standard test suite.
     #[test]
     #[serial]
-    #[cfg_attr(coverage, ignore)]
+    #[cfg_attr(tarpaulin, ignore)]
     fn test_load_with_custom_dir() {
         setup();
 
