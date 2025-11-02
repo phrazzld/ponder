@@ -690,7 +690,19 @@ Your report:"#,
         content: prompt,
     }];
 
+    // Create spinner for synthesis phase (single operation, unknown duration)
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{msg} {spinner}")
+            .expect("Invalid spinner template"),
+    );
+    spinner.set_message("Phase 3: Synthesizing comprehensive report...");
+    spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+
     let report = ai_client.chat_with_retry(DEFAULT_CHAT_MODEL, &messages, 3)?;
+
+    spinner.finish_with_message("✓ Phase 3: Synthesis complete");
 
     Ok(report)
 }
