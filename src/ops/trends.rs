@@ -43,6 +43,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
@@ -355,6 +357,23 @@ pub fn analyze_trends(
     // Ensure session is unlocked
     let _passphrase = session.get_passphrase()?;
 
+    // Setup interrupt handler
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let interrupted_clone = Arc::clone(&interrupted);
+
+    // Spawn signal handler thread
+    std::thread::spawn(move || {
+        use signal_hook::consts::SIGINT;
+        use signal_hook::iterator::Signals;
+
+        let mut signals = Signals::new(&[SIGINT]).expect("Failed to create signal handler");
+        for _sig in signals.forever() {
+            println!("\n⚠️  Interrupt received. Saving progress...");
+            interrupted_clone.store(true, Ordering::Relaxed);
+            break;
+        }
+    });
+
     // Check for existing checkpoint
     let mut checkpoint = load_checkpoint(query)?;
 
@@ -417,6 +436,7 @@ pub fn analyze_trends(
         session,
         &mut checkpoint,
         total_entries,
+        &interrupted,
     )?;
 
     // Merge with checkpoint's relevant IDs if resuming
@@ -509,6 +529,7 @@ pub fn analyze_trends(
             ai_client,
             session,
             &mut checkpoint,
+            &interrupted,
         )?;
         insights.extend(new_insights);
     }
@@ -658,6 +679,7 @@ fn discover_relevant_entries(
     session: &mut SessionManager,
     checkpoint: &mut Option<TrendsCheckpoint>,
     total_entries: usize,
+    interrupted: &Arc<AtomicBool>,
 ) -> AppResult<Vec<i64>> {
     let passphrase = session.get_passphrase()?;
     let mut relevant_ids = Vec::new();
@@ -666,6 +688,17 @@ fn discover_relevant_entries(
     let progress = PhaseProgress::new(entries.len(), "Phase 1: Checking relevance");
 
     for (idx, entry) in entries.iter().enumerate() {
+        // Check for interruption
+        if interrupted.load(Ordering::Relaxed) {
+            // Save checkpoint before exiting
+            if let Some(ref cp) = checkpoint {
+                save_checkpoint(cp)?;
+                debug!("Checkpoint saved after interruption");
+            }
+            progress.finish();
+            return Err(AppError::Interrupted);
+        }
+
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
@@ -826,6 +859,7 @@ fn extract_insights(
     ai_client: &OllamaClient,
     session: &mut SessionManager,
     checkpoint: &mut Option<TrendsCheckpoint>,
+    interrupted: &Arc<AtomicBool>,
 ) -> AppResult<Vec<EntryInsight>> {
     let passphrase = session.get_passphrase()?;
     let mut insights = Vec::new();
@@ -834,6 +868,17 @@ fn extract_insights(
     let progress = PhaseProgress::new(entries.len(), "Phase 2: Extracting insights");
 
     for (idx, entry) in entries.iter().enumerate() {
+        // Check for interruption
+        if interrupted.load(Ordering::Relaxed) {
+            // Save checkpoint before exiting
+            if let Some(ref cp) = checkpoint {
+                save_checkpoint(cp)?;
+                debug!("Checkpoint saved after interruption");
+            }
+            progress.finish();
+            return Err(AppError::Interrupted);
+        }
+
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
