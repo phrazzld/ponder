@@ -403,6 +403,11 @@ pub fn analyze_trends(
 
     info!("Found {} user-created entries to analyze", total_entries);
 
+    // Estimate time and inform user
+    let estimated_minutes = (total_entries as f64 * 1.5) / 60.0;
+    println!("⏱️  Estimated time: {:.1} minutes", estimated_minutes);
+    println!("🔐 Session will be automatically extended\n");
+
     // Phase 1: Discover relevant entries
     info!("Phase 1: Checking relevance of each entry...");
     let mut relevant_entry_ids = discover_relevant_entries(
