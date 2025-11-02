@@ -348,14 +348,32 @@ pub fn analyze_trends(
     // Ensure session is unlocked
     let _passphrase = session.get_passphrase()?;
 
+    // Check for existing checkpoint
+    let mut checkpoint = load_checkpoint(query)?;
+
+    if let Some(ref cp) = checkpoint {
+        println!("\n📂 Resuming from previous run:");
+        println!(
+            "   {} entries completed ({:.1}% of {})",
+            cp.processed_entry_ids.len(),
+            (cp.processed_entry_ids.len() as f64 / cp.total_entries as f64) * 100.0,
+            cp.total_entries
+        );
+        println!(
+            "   Phase: {}",
+            if cp.phase == CheckpointPhase::Discovery {
+                "Discovery (checking relevance)"
+            } else {
+                "Extraction (extracting insights)"
+            }
+        );
+        println!();
+    }
+
     // Phase 0: Filter user entries
     info!("Filtering user-created entries...");
-    let user_entries = filter_user_entries(db)?;
+    let mut user_entries = filter_user_entries(db)?;
     let total_entries = user_entries.len();
-    info!(
-        "Found {} user-created entries to analyze",
-        total_entries
-    );
 
     if total_entries == 0 {
         return Err(AppError::Journal(
@@ -363,9 +381,44 @@ pub fn analyze_trends(
         ));
     }
 
+    // If resuming Discovery phase, filter out already-processed entries
+    if let Some(ref cp) = checkpoint {
+        if cp.phase == CheckpointPhase::Discovery {
+            let original_count = user_entries.len();
+            user_entries.retain(|e| !cp.processed_entry_ids.contains(&e.id));
+            info!(
+                "Resuming Discovery: {} entries remaining ({} already processed)",
+                user_entries.len(),
+                original_count - user_entries.len()
+            );
+        }
+    }
+
+    info!(
+        "Found {} user-created entries to analyze",
+        total_entries
+    );
+
     // Phase 1: Discover relevant entries
     info!("Phase 1: Checking relevance of each entry...");
-    let relevant_entry_ids = discover_relevant_entries(&user_entries, query, ai_client, session)?;
+    let mut relevant_entry_ids = discover_relevant_entries(&user_entries, query, ai_client, session)?;
+
+    // Merge with checkpoint's relevant IDs if resuming
+    if let Some(ref cp) = checkpoint {
+        if cp.phase == CheckpointPhase::Discovery {
+            // Combine new discoveries with previously found relevant entries
+            for id in &cp.relevant_entry_ids {
+                if !relevant_entry_ids.contains(id) {
+                    relevant_entry_ids.push(*id);
+                }
+            }
+            info!(
+                "Merged {} previously discovered relevant entries",
+                cp.relevant_entry_ids.len()
+            );
+        }
+    }
+
     let relevant_count = relevant_entry_ids.len();
     info!(
         "Found {}/{} entries relevant to query",
@@ -380,8 +433,9 @@ pub fn analyze_trends(
         )));
     }
 
-    // Get full entry objects for relevant IDs
-    let relevant_entries: Vec<&Entry> = user_entries
+    // Get full entry objects for relevant IDs (need to query all user_entries, not filtered ones)
+    let all_user_entries = filter_user_entries(db)?;
+    let relevant_entries: Vec<&Entry> = all_user_entries
         .iter()
         .filter(|e| relevant_entry_ids.contains(&e.id))
         .collect();
