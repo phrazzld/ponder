@@ -348,16 +348,10 @@ fn discover_relevant_entries(
     let passphrase = session.get_passphrase()?;
     let mut relevant_ids = Vec::new();
 
-    for (idx, entry) in entries.iter().enumerate() {
-        // Progress indicator
-        if (idx + 1) % 10 == 0 || idx == 0 {
-            info!(
-                "Checking relevance... {}/{} entries processed",
-                idx + 1,
-                entries.len()
-            );
-        }
+    // Initialize progress bar for Phase 1
+    let progress = PhaseProgress::new(entries.len(), "Phase 1: Checking relevance");
 
+    for entry in entries.iter() {
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
@@ -370,8 +364,12 @@ fn discover_relevant_entries(
             debug!("Entry {} ({}) is relevant", entry.id, entry.date);
             relevant_ids.push(entry.id);
         }
+
+        // Update progress after each entry
+        progress.inc();
     }
 
+    progress.finish();
     Ok(relevant_ids)
 }
 
@@ -477,16 +475,10 @@ fn extract_insights(
     let passphrase = session.get_passphrase()?;
     let mut insights = Vec::new();
 
-    for (idx, entry) in entries.iter().enumerate() {
-        // Progress indicator
-        if (idx + 1) % 5 == 0 || idx == 0 {
-            info!(
-                "Extracting insights... {}/{} entries processed",
-                idx + 1,
-                entries.len()
-            );
-        }
+    // Initialize progress bar for Phase 2
+    let progress = PhaseProgress::new(entries.len(), "Phase 2: Extracting insights");
 
+    for entry in entries.iter() {
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
@@ -495,8 +487,12 @@ fn extract_insights(
         // Extract insight with LLM
         let insight = extract_single_insight(&content, query, &entry.date, ai_client)?;
         insights.push(insight);
+
+        // Update progress after each entry
+        progress.inc();
     }
 
+    progress.finish();
     Ok(insights)
 }
 
