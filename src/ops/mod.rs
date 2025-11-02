@@ -16,6 +16,7 @@ pub mod reflect;
 pub mod reindex;
 pub mod search;
 pub mod summarize;
+pub mod trends;
 
 // Re-export commonly used functions
 pub use ask::ask_question;
@@ -34,3 +35,4 @@ pub use reflect::reflect_on_entry;
 pub use reindex::{reindex_entries, ReindexReport};
 pub use search::search_entries;
 pub use summarize::{generate_daily_summary, generate_monthly_summary, generate_weekly_summary};
+pub use trends::{analyze_trends, TrendReport};

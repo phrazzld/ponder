@@ -46,7 +46,7 @@ use clap::Parser;
 use ponder::cli::{CliArgs, ConverseArgs, EditArgs, PonderCommand};
 use ponder::config::Config;
 use ponder::constants::{self, DEFAULT_CHAT_MODEL, DEFAULT_EMBED_MODEL};
-use ponder::crypto::SessionManager;
+use ponder::crypto::{SessionExtender, SessionManager};
 use ponder::db::Database;
 use ponder::errors::{AppError, AppResult, DatabaseError};
 use ponder::journal_core::DateSpecifier;
@@ -54,6 +54,7 @@ use ponder::journal_io;
 use ponder::ops;
 use ponder::setup::{ensure_model_available, ModelType};
 use ponder::OllamaClient;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, info, info_span, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use uuid::Uuid;
@@ -120,6 +121,7 @@ fn run_application(
         Some(PonderCommand::Summaries(summaries_args)) => cmd_summaries(&config, summaries_args),
         Some(PonderCommand::Search(search_args)) => cmd_search(&config, search_args),
         Some(PonderCommand::Converse(converse_args)) => cmd_converse(&config, &converse_args),
+        Some(PonderCommand::Trends(trends_args)) => cmd_trends(&config, trends_args),
         Some(PonderCommand::Lock) => cmd_lock(&config),
         Some(PonderCommand::Backup(backup_args)) => cmd_backup(&config, backup_args),
         Some(PonderCommand::Restore(restore_args)) => cmd_restore(&config, restore_args),
@@ -1105,6 +1107,66 @@ fn cmd_status(config: &Config) -> AppResult<()> {
     if total_entries > embedded {
         println!("⚠️  Run 'ponder reindex' to generate missing embeddings");
     }
+
+    Ok(())
+}
+
+/// Trends command: Comprehensive trend analysis across all journal entries.
+fn cmd_trends(config: &Config, trends_args: ponder::cli::TrendsArgs) -> AppResult<()> {
+    info!("Command: trends");
+
+    // Initialize session, database, and AI client
+    let mut session = SessionManager::new(config.session_timeout_minutes);
+    let db = open_database_with_retry(config, &mut session)?;
+    let ai_client = OllamaClient::new(&config.ollama_url);
+
+    // Ensure embedding model is available (for potential use, though we're not using semantic search)
+    ensure_embedding_available(&ai_client)?;
+    ensure_chat_available(&ai_client)?;
+
+    println!("\n🔍 Analyzing Trends: {}\n", trends_args.query);
+    println!("This may take several minutes for large journals...\n");
+
+    // Create SessionExtender to prevent timeout during long analysis
+    let session_arc = Arc::new(Mutex::new(session));
+    let mut extender = SessionExtender::new(Arc::clone(&session_arc));
+    extender.start();
+
+    // Run comprehensive trend analysis
+    let report = {
+        let mut session_guard = session_arc.lock().unwrap();
+        ops::analyze_trends(
+            &db,
+            &mut session_guard,
+            &ai_client,
+            &trends_args.query,
+            trends_args.output,
+        )
+    }?;
+
+    // Stop extender (also happens automatically on drop, but explicit is clearer)
+    extender.stop();
+
+    // Display results
+    println!("\n✅ Trend Analysis Complete!");
+    println!();
+    println!("📊 Statistics:");
+    println!("  Total entries analyzed: {}", report.total_entries);
+    println!("  Relevant entries found: {}", report.relevant_entries);
+    println!(
+        "  Relevance rate: {:.1}%",
+        if report.total_entries > 0 {
+            (report.relevant_entries as f64 / report.total_entries as f64) * 100.0
+        } else {
+            0.0
+        }
+    );
+    println!();
+    println!("📄 Report saved to:");
+    println!("  {}", report.path.display());
+    println!();
+    println!("To view the report, decrypt it with:");
+    println!("  ponder decrypt {}", report.path.display());
 
     Ok(())
 }

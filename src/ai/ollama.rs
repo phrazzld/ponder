@@ -264,6 +264,65 @@ impl OllamaClient {
         }
     }
 
+    /// Sends a chat request with retry logic for transient failures.
+    ///
+    /// Automatically retries on HTTP 500 errors with exponential backoff.
+    /// Similar to `embed_with_retry()` but for chat operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `model` - Name of the chat model (e.g., "gemma3:4b")
+    /// * `messages` - Conversation messages
+    /// * `max_retries` - Maximum number of retry attempts
+    ///
+    /// # Returns
+    ///
+    /// Returns the chat response text.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - All retry attempts exhausted
+    /// - Non-retryable error occurs (e.g., 404 Model Not Found)
+    /// - Ollama API is offline
+    pub fn chat_with_retry(
+        &self,
+        model: &str,
+        messages: &[Message],
+        max_retries: u32,
+    ) -> AppResult<String> {
+        let mut attempt = 0;
+
+        loop {
+            match self.chat(model, messages) {
+                Ok(response) => return Ok(response),
+                Err(e) => {
+                    // Check if error is retryable (HTTP 500/503)
+                    let error_msg = format!("{}", e);
+                    let is_retryable =
+                        error_msg.contains("HTTP 500") || error_msg.contains("HTTP 503");
+
+                    if !is_retryable || attempt >= max_retries {
+                        // Non-retryable error or exhausted retries
+                        return Err(e);
+                    }
+
+                    attempt += 1;
+                    let backoff_ms = 100 * 2_u64.pow(attempt);
+
+                    debug!(
+                        "Ollama HTTP error on attempt {}/{}, retrying after {}ms",
+                        attempt,
+                        max_retries + 1,
+                        backoff_ms
+                    );
+
+                    std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                }
+            }
+        }
+    }
+
     /// Generates an embedding for the given text.
     ///
     /// # Arguments

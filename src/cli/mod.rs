@@ -95,6 +95,9 @@ pub enum PonderCommand {
 
     /// Show journal database health and statistics
     Status,
+
+    /// Analyze trends across all journal entries
+    Trends(TrendsArgs),
 }
 
 /// Arguments for the `edit` subcommand.
@@ -258,6 +261,17 @@ pub struct CleanupV1Args {
     /// Skip confirmation prompt (dangerous - deletes files)
     #[clap(short = 'y', long)]
     pub yes: bool,
+}
+
+/// Arguments for the `trends` subcommand.
+#[derive(Parser)]
+pub struct TrendsArgs {
+    /// Natural language query describing the trend to analyze (e.g., "productivity patterns", "mood over time")
+    pub query: String,
+
+    /// Optional custom output path for the report (defaults to reports/trends/trends-{timestamp}.md.age)
+    #[clap(short = 'o', long)]
+    pub output: Option<std::path::PathBuf>,
 }
 
 impl fmt::Debug for CliArgs {
@@ -812,6 +826,56 @@ mod tests {
                 assert_eq!(summaries_args.date, Some("20240115".to_string()));
             }
             _ => panic!("Expected Summaries command"),
+        }
+    }
+
+    #[test]
+    fn test_trends_command() {
+        let args = CliArgs::parse_from(vec!["ponder", "trends", "productivity patterns"]);
+        match args.command {
+            Some(PonderCommand::Trends(trends_args)) => {
+                assert_eq!(trends_args.query, "productivity patterns");
+                assert!(trends_args.output.is_none());
+            }
+            _ => panic!("Expected Trends command"),
+        }
+
+        // Test with custom output
+        let args = CliArgs::parse_from(vec![
+            "ponder",
+            "trends",
+            "mood over time",
+            "--output",
+            "/tmp/my-report.md.age",
+        ]);
+        match args.command {
+            Some(PonderCommand::Trends(trends_args)) => {
+                assert_eq!(trends_args.query, "mood over time");
+                assert_eq!(
+                    trends_args.output,
+                    Some(std::path::PathBuf::from("/tmp/my-report.md.age"))
+                );
+            }
+            _ => panic!("Expected Trends command"),
+        }
+
+        // Test short form for output
+        let args = CliArgs::parse_from(vec![
+            "ponder",
+            "trends",
+            "anxiety triggers",
+            "-o",
+            "custom.md.age",
+        ]);
+        match args.command {
+            Some(PonderCommand::Trends(trends_args)) => {
+                assert_eq!(trends_args.query, "anxiety triggers");
+                assert_eq!(
+                    trends_args.output,
+                    Some(std::path::PathBuf::from("custom.md.age"))
+                );
+            }
+            _ => panic!("Expected Trends command"),
         }
     }
 }

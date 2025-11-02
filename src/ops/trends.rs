@@ -137,7 +137,9 @@ impl PhaseProgress {
         // Set style with smooth animation and comprehensive metrics
         bar.set_style(
             ProgressStyle::default_bar()
-                .template("{msg}\n[{bar:40.cyan/blue}] {pos}/{len} | {elapsed} | {per_sec} | ETA: {eta}")
+                .template(
+                    "{msg}\n[{bar:40.cyan/blue}] {pos}/{len} | {elapsed} | {per_sec} | ETA: {eta}",
+                )
                 .expect("Invalid progress bar template")
                 .progress_chars("█▓▒░"),
         );
@@ -182,9 +184,8 @@ impl PhaseProgress {
 ///
 /// Returns an error if the cache directory cannot be determined or created.
 fn get_checkpoint_path() -> AppResult<PathBuf> {
-    let cache_dir = dirs::cache_dir().ok_or_else(|| {
-        AppError::Journal("Could not determine cache directory".to_string())
-    })?;
+    let cache_dir = dirs::cache_dir()
+        .ok_or_else(|| AppError::Journal("Could not determine cache directory".to_string()))?;
 
     let ponder_cache = cache_dir.join("ponder");
     fs::create_dir_all(&ponder_cache)?;
@@ -272,9 +273,15 @@ fn load_checkpoint(query: &str) -> AppResult<Option<TrendsCheckpoint>> {
         return Ok(None);
     }
 
-    debug!("Loaded checkpoint: {} phase, {} entries processed",
-           if checkpoint.phase == CheckpointPhase::Discovery { "Discovery" } else { "Extraction" },
-           checkpoint.processed_entry_ids.len());
+    debug!(
+        "Loaded checkpoint: {} phase, {} entries processed",
+        if checkpoint.phase == CheckpointPhase::Discovery {
+            "Discovery"
+        } else {
+            "Extraction"
+        },
+        checkpoint.processed_entry_ids.len()
+    );
 
     Ok(Some(checkpoint))
 }
@@ -394,10 +401,7 @@ pub fn analyze_trends(
         }
     }
 
-    info!(
-        "Found {} user-created entries to analyze",
-        total_entries
-    );
+    info!("Found {} user-created entries to analyze", total_entries);
 
     // Phase 1: Discover relevant entries
     info!("Phase 1: Checking relevance of each entry...");
@@ -478,8 +482,7 @@ pub fn analyze_trends(
     };
 
     // Filter relevant_entries to skip those already extracted
-    let already_extracted_dates: HashSet<NaiveDate> =
-        insights.iter().map(|i| i.date).collect();
+    let already_extracted_dates: HashSet<NaiveDate> = insights.iter().map(|i| i.date).collect();
     let entries_to_extract: Vec<&Entry> = relevant_entries
         .into_iter()
         .filter(|e| !already_extracted_dates.contains(&e.date))
@@ -495,7 +498,13 @@ pub fn analyze_trends(
             }
         }
 
-        let new_insights = extract_insights(&entries_to_extract, query, ai_client, session, &mut checkpoint)?;
+        let new_insights = extract_insights(
+            &entries_to_extract,
+            query,
+            ai_client,
+            session,
+            &mut checkpoint,
+        )?;
         insights.extend(new_insights);
     }
 
@@ -518,7 +527,10 @@ pub fn analyze_trends(
         db,
     )?;
 
-    info!("Trend analysis complete! Report saved to: {:?}", report_path);
+    info!(
+        "Trend analysis complete! Report saved to: {:?}",
+        report_path
+    );
 
     // Get the report ID from the database (it was just inserted by persist_report)
     let report_id = get_latest_report_id(db)?;
@@ -572,14 +584,15 @@ fn filter_user_entries(db: &Database) -> AppResult<Vec<Entry>> {
             Ok(Entry {
                 id: row.get(0)?,
                 path: PathBuf::from(row.get::<_, String>(1)?),
-                date: NaiveDate::parse_from_str(&row.get::<_, String>(2)?, "%Y-%m-%d")
-                    .map_err(|e| {
+                date: NaiveDate::parse_from_str(&row.get::<_, String>(2)?, "%Y-%m-%d").map_err(
+                    |e| {
                         rusqlite::Error::FromSqlConversionFailure(
                             2,
                             rusqlite::types::Type::Text,
                             Box::new(e),
                         )
-                    })?,
+                    },
+                )?,
                 checksum: row.get(3)?,
                 word_count: row.get::<_, i64>(4)? as usize,
                 updated_at: row.get(5)?,
@@ -991,10 +1004,7 @@ fn synthesize_report(
     // Build context from insights
     let mut context = String::new();
     for insight in limited_insights {
-        context.push_str(&format!(
-            "\n[{}]\n",
-            insight.date.format("%Y-%m-%d")
-        ));
+        context.push_str(&format!("\n[{}]\n", insight.date.format("%Y-%m-%d")));
         for excerpt in &insight.excerpts {
             context.push_str(&format!("- \"{}\"\n", excerpt));
         }
@@ -1002,7 +1012,11 @@ fn synthesize_report(
     }
 
     let note = if insights.len() > MAX_INSIGHTS {
-        format!("Note: Analyzing top {} most relevant entries out of {} total.", MAX_INSIGHTS, insights.len())
+        format!(
+            "Note: Analyzing top {} most relevant entries out of {} total.",
+            MAX_INSIGHTS,
+            insights.len()
+        )
     } else {
         String::new()
     };
@@ -1112,7 +1126,10 @@ fn persist_report(
             .collect::<String>()
             .replace(' ', "-")
             .to_lowercase();
-        PathBuf::from(format!("reports/trends/trends-{}-{}.md.age", timestamp, slug))
+        PathBuf::from(format!(
+            "reports/trends/trends-{}-{}.md.age",
+            timestamp, slug
+        ))
     };
 
     // Ensure parent directory exists

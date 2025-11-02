@@ -496,3 +496,202 @@ Items graduate from backlog → TODO.md when:
 1. User demand is clear (multiple requests or high upvotes)
 2. Core functionality is validated and stable
 3. Enhancement builds on proven usage patterns
+
+---
+
+# BACKLOG: Comprehensive Trend Analysis
+
+Last Updated: 2025-11-01
+Context: Robustness features (Phase 1) implemented for reliable long-running operations. This backlog contains performance and UX enhancements deferred until core is validated with real 1000+ entry journals.
+
+---
+
+## Performance Optimizations (Phase 2) - Estimated 2 hours
+
+**Goal**: Reduce 1000-entry analysis from 30-40 minutes to 8-15 minutes through parallel processing.
+
+**Value**: Significantly better UX for large journals. 2-4x speedup makes trend analysis practical for daily use.
+
+### Parallel Phase 1 (Discovery)
+- Use Rayon to check relevance concurrently across CPU cores
+- **Challenge**: SessionManager must become thread-safe (wrap in `Arc<Mutex<SessionManager>>`)
+- **Challenge**: OllamaClient concurrent requests (already handles via reqwest)
+- **Challenge**: Progress bar updates from multiple threads (indicatif supports this)
+- **Estimated speedup**: 2-4x depending on core count (8 cores → ~8-12 min, 4 cores → ~12-18 min)
+- **Effort**: 1 hour
+
+### Parallel Phase 2 (Extraction)
+- Same challenges as Phase 1
+- Checkpoint saving must remain sequential (collect results, then batch checkpoint)
+- **Effort**: 45 minutes
+
+### Batched Checkpoint I/O
+- **Current**: Save every 100 entries (100-200 writes per run)
+- **Improvement**: Buffer in memory, flush every 500 entries or 5 minutes
+- **Trade-off**: Potentially lose more progress on crash (5 min vs 2 min), but faster overall
+- **Effort**: 30 minutes
+
+**Decision Point**: Only implement if sequential (30-40 min) is too slow after user testing. Parallel adds complexity.
+
+---
+
+## UX Improvements (Phase 3) - Estimated 1 hour
+
+**Goal**: Show insights as discovered, allow early exit with partial results.
+
+**Value**: User sees value immediately, can stop if satisfied with partial analysis.
+
+### Streaming Insights to Terminal
+- Print insights immediately during Phase 2: `📅 2024-05-15: "Quote" → Insight: Pattern detected`
+- **Benefit**: User feels progress, sees interesting patterns emerge
+- **Effort**: 20 minutes
+
+### Partial Report Generation
+- If interrupted during Phase 2, generate report from insights collected so far
+- Mark report as "Partial Analysis (342/1000 entries processed)"
+- Still valuable: 34% sample may reveal major patterns
+- **Challenge**: Report quality with <50 insights (current synthesis limit)
+- **Effort**: 30 minutes
+
+### Real-Time Statistics Dashboard
+- Show during analysis: Total processed, relevance rate, top themes emerging
+- Update every 50-100 entries
+- **Benefit**: User understands what's being found as it runs
+- **Effort**: 10 minutes
+
+**Dependencies**: Requires Phase 1 (robustness) to be stable first.
+
+---
+
+## Nice-to-Have Improvements
+
+### Relevance Caching - Estimated 3 hours
+
+**Description**: Cache Phase 1 relevance decisions in database to speed up similar queries.
+
+**Implementation**:
+```sql
+CREATE TABLE relevance_cache (
+    entry_id INTEGER,
+    query_hash TEXT,  -- Hash of normalized query
+    is_relevant BOOLEAN,
+    confidence REAL,
+    cached_at TIMESTAMP
+);
+```
+
+**Benefit**:
+- Similar queries reuse cached decisions (e.g., "work stress" vs "work anxiety")
+- Only re-analyze new entries since last run
+- Potentially 5-10x speedup for repeat queries
+
+**Trade-offs**:
+- Cache invalidation complexity (when to refresh?)
+- Storage overhead (cache grows with entries × unique queries)
+- Stale results if old entries' relevance changes
+
+**Recommendation**: Nice-to-have, not critical. User rarely runs identical queries.
+
+---
+
+### Multi-Model Support - Estimated 2 hours
+
+**Description**: Allow user to choose LLM model for different phases.
+
+**Example**:
+```bash
+ponder trends "anxiety" --discovery-model gemma3:4b --synthesis-model llama3.1:8b
+```
+
+**Benefit**:
+- Fast model for Phase 1 (relevance is binary, simple task)
+- Powerful model for Phase 3 (synthesis needs nuance)
+- Cost/time optimization
+
+**Implementation**:
+- Add `--discovery-model` and `--synthesis-model` CLI flags
+- Pass to respective functions instead of `DEFAULT_CHAT_MODEL`
+- Validate models exist before starting
+
+**Trade-off**: More CLI complexity. May confuse users with too many options.
+
+---
+
+### Distributed Processing - Estimated 8+ hours
+
+**Description**: Split analysis across multiple machines (e.g., cloud batch job).
+
+**Use Case**: Journals with 10,000+ entries (hours of sequential processing).
+
+**Architecture**:
+- Coordinator: Divides entries into chunks
+- Workers: Each processes N entries independently
+- Aggregator: Merges results, generates report
+
+**Complexity**: High
+- Requires coordination service (Redis, database)
+- Network serialization of encrypted entries
+- Security: Passphrase distribution to workers
+- Cost: Cloud compute fees
+
+**Recommendation**: Only if users actually have 10k+ entry journals. Unlikely in practice.
+
+---
+
+## Technical Debt Opportunities
+
+### SessionManager Thread Safety - Current limitation
+
+**Issue**: SessionManager uses internal state not designed for concurrent access.
+
+**Impact**: Blocks parallel processing implementation.
+
+**Fix**: Wrap in `Arc<Mutex<SessionManager>>` or refactor internals to use `RwLock`.
+
+**Effort**: 1 hour
+
+**Benefit**: Enables Phase 2 performance improvements.
+
+**When**: Before implementing parallel processing.
+
+---
+
+### Checkpoint Schema Versioning - Missing resilience
+
+**Issue**: Checkpoint format will change over time. Currently no versioning.
+
+**Risk**: Future code changes break old checkpoints, user loses progress.
+
+**Fix**: Add `schema_version: u32` to `TrendsCheckpoint` struct.
+
+**Migration strategy**:
+- Read old checkpoints, detect missing `schema_version`
+- Migrate or discard gracefully
+- Warn user: "Old checkpoint format detected, starting fresh"
+
+**Effort**: 30 minutes
+
+**When**: Before releasing to users (prevents future pain).
+
+---
+
+### Entry Filtering Logic Duplication
+
+**Issue**: Path filtering logic (`!path_str.contains("/reports/")`) may appear in multiple operations.
+
+**Locations**:
+- `src/ops/trends.rs:filter_user_entries()`
+- Potentially other future operations
+
+**Fix**: Extract to `src/db/entries.rs`:
+```rust
+pub fn get_user_entries(conn: &Connection) -> AppResult<Vec<Entry>> {
+    // Single source of truth for "user entry" definition
+}
+```
+
+**Effort**: 20 minutes
+
+**Benefit**: DRY principle, easier to update filtering logic.
+
+**When**: After Phase 1 is stable and tested, if duplication emerges.
