@@ -5,6 +5,7 @@
 
 use crate::errors::{AppResult, CryptoError};
 use age::secrecy::SecretString;
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
@@ -294,6 +295,116 @@ impl SessionManager {
 impl Drop for SessionManager {
     fn drop(&mut self) {
         self.lock();
+    }
+}
+
+/// Automatic session extension for long-running operations.
+///
+/// Spawns a background thread that periodically refreshes the session to prevent
+/// timeout during operations that take longer than the configured session timeout.
+///
+/// # Example
+///
+/// ```no_run
+/// use ponder::crypto::{SessionManager, SessionExtender};
+/// use std::sync::{Arc, Mutex};
+///
+/// let session = Arc::new(Mutex::new(SessionManager::new(30)));
+/// let mut extender = SessionExtender::new(session.clone());
+/// extender.start();
+///
+/// // Long operation here - session stays alive
+/// // ...
+///
+/// extender.stop(); // Or drop automatically via RAII
+/// ```
+pub struct SessionExtender {
+    session: Arc<Mutex<SessionManager>>,
+    stop_signal: Arc<AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl SessionExtender {
+    /// Creates a new session extender.
+    ///
+    /// Does not start the background thread until `start()` is called.
+    pub fn new(session: Arc<Mutex<SessionManager>>) -> Self {
+        Self {
+            session,
+            stop_signal: Arc::new(AtomicBool::new(false)),
+            handle: None,
+        }
+    }
+
+    /// Starts the background refresh thread.
+    ///
+    /// The thread wakes every 5 minutes and calls `get_passphrase()` to refresh
+    /// the session timeout. Continues until `stop()` is called or the extender is dropped.
+    pub fn start(&mut self) {
+        if self.handle.is_some() {
+            debug!("SessionExtender already running");
+            return;
+        }
+
+        let session = Arc::clone(&self.session);
+        let stop_signal = Arc::clone(&self.stop_signal);
+
+        let handle = std::thread::spawn(move || {
+            debug!("SessionExtender background thread started");
+
+            while !stop_signal.load(std::sync::atomic::Ordering::Relaxed) {
+                // Sleep for 5 minutes
+                std::thread::sleep(Duration::from_secs(5 * 60));
+
+                // Check stop signal after sleep
+                if stop_signal.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+
+                // Refresh session by accessing passphrase
+                if let Ok(mut session) = session.lock() {
+                    match session.get_passphrase() {
+                        Ok(_) => {
+                            debug!("SessionExtender refreshed session");
+                        }
+                        Err(_) => {
+                            debug!("SessionExtender: session locked, stopping");
+                            break;
+                        }
+                    }
+                }
+            }
+
+            debug!("SessionExtender background thread stopped");
+        });
+
+        self.handle = Some(handle);
+        info!("SessionExtender started - session will auto-refresh every 5 minutes");
+    }
+
+    /// Stops the background refresh thread.
+    ///
+    /// Signals the thread to stop and waits for it to finish.
+    pub fn stop(&mut self) {
+        if self.handle.is_none() {
+            return;
+        }
+
+        // Signal thread to stop
+        self.stop_signal
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+
+        // Wait for thread to finish
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+            debug!("SessionExtender stopped");
+        }
+    }
+}
+
+impl Drop for SessionExtender {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 

@@ -38,7 +38,7 @@ pub use self::age::{
     decrypt_file_streaming, decrypt_with_passphrase, encrypt_file_streaming,
     encrypt_with_passphrase,
 };
-pub use self::session::SessionManager;
+pub use self::session::{SessionExtender, SessionManager};
 pub use self::temp::{
     decrypt_to_temp, encrypt_from_temp, get_secure_temp_dir, read_encrypted_string,
 };
