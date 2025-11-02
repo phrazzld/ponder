@@ -523,6 +523,10 @@ pub fn analyze_trends(
     // Get the report ID from the database (it was just inserted by persist_report)
     let report_id = get_latest_report_id(db)?;
 
+    // Delete checkpoint on successful completion
+    delete_checkpoint()?;
+    debug!("Checkpoint deleted after successful completion");
+
     Ok(TrendReport {
         path: report_path,
         query: query.to_string(),
