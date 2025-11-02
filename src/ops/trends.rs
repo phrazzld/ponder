@@ -39,6 +39,8 @@ use crate::db::Database;
 use crate::errors::{AppError, AppResult};
 use chrono::NaiveDate;
 use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -65,6 +67,48 @@ struct EntryInsight {
     /// Date of the entry
     date: NaiveDate,
     /// Relevant excerpt(s) from the entry
+    excerpts: Vec<String>,
+    /// Summary of the insight
+    summary: String,
+}
+
+/// Checkpoint for resumable trend analysis operations.
+///
+/// Allows long-running trend analysis to be interrupted and resumed.
+/// Stored as JSON in platform cache directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TrendsCheckpoint {
+    /// Original query for trend analysis
+    query: String,
+    /// ISO 8601 timestamp when analysis started
+    started_at: String,
+    /// Current phase of analysis
+    phase: CheckpointPhase,
+    /// Total number of entries being analyzed
+    total_entries: usize,
+    /// Entry IDs that have been processed (relevance checked)
+    processed_entry_ids: HashSet<i64>,
+    /// Entry IDs deemed relevant to the query
+    relevant_entry_ids: Vec<i64>,
+    /// Insights extracted from relevant entries
+    extracted_insights: Vec<SerializableInsight>,
+}
+
+/// Phase of trend analysis for checkpointing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+enum CheckpointPhase {
+    /// Phase 1: Checking entry relevance
+    Discovery,
+    /// Phase 2: Extracting insights from relevant entries
+    Extraction,
+}
+
+/// Serializable version of EntryInsight (NaiveDate → String).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SerializableInsight {
+    /// Date in YYYY-MM-DD format
+    date: String,
+    /// Relevant excerpts from the entry
     excerpts: Vec<String>,
     /// Summary of the insight
     summary: String,
