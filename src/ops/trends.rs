@@ -401,7 +401,14 @@ pub fn analyze_trends(
 
     // Phase 1: Discover relevant entries
     info!("Phase 1: Checking relevance of each entry...");
-    let mut relevant_entry_ids = discover_relevant_entries(&user_entries, query, ai_client, session)?;
+    let mut relevant_entry_ids = discover_relevant_entries(
+        &user_entries,
+        query,
+        ai_client,
+        session,
+        &mut checkpoint,
+        total_entries,
+    )?;
 
     // Merge with checkpoint's relevant IDs if resuming
     if let Some(ref cp) = checkpoint {
@@ -555,6 +562,7 @@ fn filter_user_entries(db: &Database) -> AppResult<Vec<Entry>> {
 /// "Does this entry contain information relevant to the query?"
 ///
 /// This phase filters down the entry set to only those worth deep analysis.
+/// Saves checkpoint every 100 entries to enable resumption.
 ///
 /// # Arguments
 ///
@@ -562,6 +570,8 @@ fn filter_user_entries(db: &Database) -> AppResult<Vec<Entry>> {
 /// * `query` - User's trend query
 /// * `ai_client` - Ollama client for LLM calls
 /// * `session` - Session manager for decryption
+/// * `checkpoint` - Optional checkpoint to update with progress
+/// * `total_entries` - Total number of entries in the full dataset (for checkpoint)
 ///
 /// # Returns
 ///
@@ -575,6 +585,8 @@ fn discover_relevant_entries(
     query: &str,
     ai_client: &OllamaClient,
     session: &mut SessionManager,
+    checkpoint: &mut Option<TrendsCheckpoint>,
+    total_entries: usize,
 ) -> AppResult<Vec<i64>> {
     let passphrase = session.get_passphrase()?;
     let mut relevant_ids = Vec::new();
@@ -582,7 +594,7 @@ fn discover_relevant_entries(
     // Initialize progress bar for Phase 1
     let progress = PhaseProgress::new(entries.len(), "Phase 1: Checking relevance");
 
-    for entry in entries.iter() {
+    for (idx, entry) in entries.iter().enumerate() {
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
@@ -598,6 +610,43 @@ fn discover_relevant_entries(
 
         // Update progress after each entry
         progress.inc();
+
+        // Update checkpoint every 100 entries
+        if let Some(ref mut cp) = checkpoint {
+            cp.processed_entry_ids.insert(entry.id);
+            if is_relevant {
+                cp.relevant_entry_ids.push(entry.id);
+            }
+
+            if (idx + 1) % 100 == 0 {
+                save_checkpoint(cp)?;
+                debug!("Checkpoint saved at {} entries processed", idx + 1);
+            }
+        } else {
+            // First run - create checkpoint after first entry
+            if idx == 0 {
+                let mut new_checkpoint = TrendsCheckpoint {
+                    query: query.to_string(),
+                    started_at: chrono::Local::now().to_rfc3339(),
+                    phase: CheckpointPhase::Discovery,
+                    total_entries,
+                    processed_entry_ids: HashSet::new(),
+                    relevant_entry_ids: Vec::new(),
+                    extracted_insights: Vec::new(),
+                };
+                new_checkpoint.processed_entry_ids.insert(entry.id);
+                if is_relevant {
+                    new_checkpoint.relevant_entry_ids.push(entry.id);
+                }
+                *checkpoint = Some(new_checkpoint);
+            }
+        }
+    }
+
+    // Final checkpoint save
+    if let Some(ref cp) = checkpoint {
+        save_checkpoint(cp)?;
+        debug!("Final Discovery checkpoint saved");
     }
 
     progress.finish();
