@@ -42,6 +42,7 @@ tokio-stream = { version = "0.1", features = ["io-util"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 futures = "0.3"
 indicatif = { version = "0.17", features = ["rayon"] }
+signal-hook = "0.3"  # Signal handling for graceful interruption
 
 # Backup/Archive dependencies (Phase 7)
 tar = "0.4"        # Cross-platform tar archive creation
