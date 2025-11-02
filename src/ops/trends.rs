@@ -169,6 +169,139 @@ impl PhaseProgress {
     }
 }
 
+/// Returns the path to the checkpoint file for trend analysis.
+///
+/// Uses platform-appropriate cache directory (e.g., ~/.cache/ponder on Linux,
+/// ~/Library/Caches/ponder on macOS).
+///
+/// # Returns
+///
+/// Returns the checkpoint file path, creating parent directory if needed.
+///
+/// # Errors
+///
+/// Returns an error if the cache directory cannot be determined or created.
+fn get_checkpoint_path() -> AppResult<PathBuf> {
+    let cache_dir = dirs::cache_dir().ok_or_else(|| {
+        AppError::Journal("Could not determine cache directory".to_string())
+    })?;
+
+    let ponder_cache = cache_dir.join("ponder");
+    fs::create_dir_all(&ponder_cache)?;
+
+    Ok(ponder_cache.join("trends-checkpoint.json"))
+}
+
+/// Saves a checkpoint to disk with atomic writes.
+///
+/// Writes to a temporary file first, then renames to ensure atomicity.
+/// This prevents corrupted checkpoints if the process is killed mid-write.
+///
+/// # Arguments
+///
+/// * `checkpoint` - The checkpoint to save
+///
+/// # Errors
+///
+/// Returns an error if serialization or file operations fail.
+fn save_checkpoint(checkpoint: &TrendsCheckpoint) -> AppResult<()> {
+    let checkpoint_path = get_checkpoint_path()?;
+    let temp_path = checkpoint_path.with_extension("json.tmp");
+
+    // Serialize to pretty JSON for human readability
+    let json = serde_json::to_string_pretty(checkpoint)
+        .map_err(|e| AppError::Journal(format!("Failed to serialize checkpoint: {}", e)))?;
+
+    // Write to temp file
+    fs::write(&temp_path, json)?;
+
+    // Atomic rename
+    fs::rename(&temp_path, &checkpoint_path)?;
+
+    debug!("Checkpoint saved to {:?}", checkpoint_path);
+    Ok(())
+}
+
+/// Loads a checkpoint from disk, validating it matches the query.
+///
+/// Returns `None` if:
+/// - No checkpoint file exists
+/// - Checkpoint file is corrupted (invalid JSON)
+/// - Checkpoint query doesn't match the provided query
+///
+/// # Arguments
+///
+/// * `query` - The trend analysis query to match against
+///
+/// # Returns
+///
+/// Returns `Some(checkpoint)` if valid checkpoint exists, `None` otherwise.
+///
+/// # Errors
+///
+/// Returns an error only for unexpected I/O failures (not for missing/invalid checkpoints).
+fn load_checkpoint(query: &str) -> AppResult<Option<TrendsCheckpoint>> {
+    let checkpoint_path = get_checkpoint_path()?;
+
+    // No checkpoint file = None (not an error)
+    if !checkpoint_path.exists() {
+        return Ok(None);
+    }
+
+    // Read and parse checkpoint
+    let json = match fs::read_to_string(&checkpoint_path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+
+    let checkpoint: TrendsCheckpoint = match serde_json::from_str(&json) {
+        Ok(cp) => cp,
+        Err(e) => {
+            warn!("Corrupted checkpoint file, ignoring: {}", e);
+            return Ok(None);
+        }
+    };
+
+    // Validate query matches
+    if checkpoint.query != query {
+        debug!(
+            "Checkpoint query mismatch ('{}' != '{}'), ignoring",
+            checkpoint.query, query
+        );
+        return Ok(None);
+    }
+
+    debug!("Loaded checkpoint: {} phase, {} entries processed",
+           if checkpoint.phase == CheckpointPhase::Discovery { "Discovery" } else { "Extraction" },
+           checkpoint.processed_entry_ids.len());
+
+    Ok(Some(checkpoint))
+}
+
+/// Deletes the checkpoint file if it exists.
+///
+/// Ignores errors if the file doesn't exist (already deleted is success).
+///
+/// # Errors
+///
+/// Returns an error only for unexpected I/O failures.
+fn delete_checkpoint() -> AppResult<()> {
+    let checkpoint_path = get_checkpoint_path()?;
+
+    match fs::remove_file(&checkpoint_path) {
+        Ok(_) => {
+            debug!("Checkpoint deleted");
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Already deleted = success
+            Ok(())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Analyzes trends across all user journal entries.
 ///
 /// This is the main entry point for comprehensive trend analysis. It orchestrates
