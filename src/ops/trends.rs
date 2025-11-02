@@ -495,7 +495,7 @@ pub fn analyze_trends(
             }
         }
 
-        let new_insights = extract_insights(&entries_to_extract, query, ai_client, session)?;
+        let new_insights = extract_insights(&entries_to_extract, query, ai_client, session, &mut checkpoint)?;
         insights.extend(new_insights);
     }
 
@@ -781,12 +781,15 @@ Your response:"#,
 /// - Specific excerpts/quotes related to the query
 /// - A summary of the insight
 ///
+/// Saves checkpoint every 50 entries to enable resumption.
+///
 /// # Arguments
 ///
 /// * `entries` - Relevant entries to analyze
 /// * `query` - User's trend query
 /// * `ai_client` - Ollama client
 /// * `session` - Session manager for decryption
+/// * `checkpoint` - Optional checkpoint to update with progress
 ///
 /// # Returns
 ///
@@ -800,6 +803,7 @@ fn extract_insights(
     query: &str,
     ai_client: &OllamaClient,
     session: &mut SessionManager,
+    checkpoint: &mut Option<TrendsCheckpoint>,
 ) -> AppResult<Vec<EntryInsight>> {
     let passphrase = session.get_passphrase()?;
     let mut insights = Vec::new();
@@ -807,7 +811,7 @@ fn extract_insights(
     // Initialize progress bar for Phase 2
     let progress = PhaseProgress::new(entries.len(), "Phase 2: Extracting insights");
 
-    for entry in entries.iter() {
+    for (idx, entry) in entries.iter().enumerate() {
         // Decrypt entry
         let temp_path = decrypt_to_temp(&entry.path, passphrase)?;
         let content = fs::read_to_string(&temp_path)?;
@@ -815,10 +819,32 @@ fn extract_insights(
 
         // Extract insight with LLM
         let insight = extract_single_insight(&content, query, &entry.date, ai_client)?;
-        insights.push(insight);
+        insights.push(insight.clone());
 
         // Update progress after each entry
         progress.inc();
+
+        // Update checkpoint every 50 entries
+        if let Some(ref mut cp) = checkpoint {
+            // Convert EntryInsight → SerializableInsight
+            let serializable_insight = SerializableInsight {
+                date: insight.date.format("%Y-%m-%d").to_string(),
+                excerpts: insight.excerpts.clone(),
+                summary: insight.summary.clone(),
+            };
+            cp.extracted_insights.push(serializable_insight);
+
+            if (idx + 1) % 50 == 0 {
+                save_checkpoint(cp)?;
+                debug!("Checkpoint saved at {} insights extracted", idx + 1);
+            }
+        }
+    }
+
+    // Final checkpoint save
+    if let Some(ref cp) = checkpoint {
+        save_checkpoint(cp)?;
+        debug!("Final Extraction checkpoint saved");
     }
 
     progress.finish();
