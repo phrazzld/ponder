@@ -388,6 +388,13 @@ pub enum AppError {
     /// information about what went wrong with Ollama API interactions.
     #[error("AI error: {0}")]
     AI(#[from] AIError),
+
+    /// Operation was interrupted by the user (e.g., Ctrl+C).
+    ///
+    /// This is not a failure - it indicates intentional cancellation.
+    /// The operation should save its progress and exit gracefully with status 0.
+    #[error("Operation interrupted by user")]
+    Interrupted,
 }
 
 /// A type alias for `Result<T, AppError>` to simplify function signatures.
