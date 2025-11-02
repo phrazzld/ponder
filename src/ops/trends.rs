@@ -449,8 +449,57 @@ pub fn analyze_trends(
 
     // Phase 2: Extract insights from relevant entries
     info!("Phase 2: Extracting insights from relevant entries...");
-    let insights = extract_insights(&relevant_entries, query, ai_client, session)?;
-    info!("Extracted {} insights", insights.len());
+
+    // Check if resuming from Extraction phase
+    let mut insights = if let Some(ref cp) = checkpoint {
+        if cp.phase == CheckpointPhase::Extraction {
+            // Convert SerializableInsight → EntryInsight
+            let loaded_insights: Vec<EntryInsight> = cp
+                .extracted_insights
+                .iter()
+                .map(|si| EntryInsight {
+                    date: NaiveDate::parse_from_str(&si.date, "%Y-%m-%d")
+                        .expect("Invalid date in checkpoint"),
+                    excerpts: si.excerpts.clone(),
+                    summary: si.summary.clone(),
+                })
+                .collect();
+
+            info!(
+                "Resuming Extraction: {} insights already extracted",
+                loaded_insights.len()
+            );
+            loaded_insights
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    // Filter relevant_entries to skip those already extracted
+    let already_extracted_dates: HashSet<NaiveDate> =
+        insights.iter().map(|i| i.date).collect();
+    let entries_to_extract: Vec<&Entry> = relevant_entries
+        .into_iter()
+        .filter(|e| !already_extracted_dates.contains(&e.date))
+        .collect();
+
+    if !entries_to_extract.is_empty() {
+        // Update checkpoint to Extraction phase if in Discovery
+        if let Some(ref mut cp) = checkpoint {
+            if cp.phase == CheckpointPhase::Discovery {
+                cp.phase = CheckpointPhase::Extraction;
+                save_checkpoint(cp)?;
+                info!("Checkpoint updated to Extraction phase");
+            }
+        }
+
+        let new_insights = extract_insights(&entries_to_extract, query, ai_client, session)?;
+        insights.extend(new_insights);
+    }
+
+    info!("Extracted {} insights total", insights.len());
 
     // Phase 3: Synthesize comprehensive report
     info!("Phase 3: Synthesizing comprehensive report...");
