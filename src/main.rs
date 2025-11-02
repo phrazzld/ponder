@@ -1142,10 +1142,21 @@ fn cmd_trends(config: &Config, trends_args: ponder::cli::TrendsArgs) -> AppResul
             &trends_args.query,
             trends_args.output,
         )
-    }?;
+    };
 
     // Stop extender (also happens automatically on drop, but explicit is clearer)
     extender.stop();
+
+    // Handle interruption gracefully
+    let report = match report {
+        Ok(r) => r,
+        Err(AppError::Interrupted) => {
+            println!("\n📍 Progress saved successfully.");
+            println!("Run the same command again to resume from where you left off.\n");
+            return Ok(()); // Exit with status 0, not an error
+        }
+        Err(e) => return Err(e),
+    };
 
     // Display results
     println!("\n✅ Trend Analysis Complete!");
