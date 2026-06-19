@@ -610,6 +610,25 @@ pip install pre-commit
 pre-commit install
 ```
 
+### CI Gate
+
+The host-agnostic repository gate is:
+
+```bash
+./scripts/ci.sh
+```
+
+It runs `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+`cargo build --verbose`, and the full test suite with `PONDER_TEST_PASSPHRASE`
+set for noninteractive CI. GitHub Actions delegates to this same script.
+
+Coverage and performance reports are explicit modes:
+
+```bash
+./scripts/ci.sh coverage
+./scripts/ci.sh bench
+```
+
 ### Code Formatting and Linting
 
 We use automated tools to ensure consistent code style:
